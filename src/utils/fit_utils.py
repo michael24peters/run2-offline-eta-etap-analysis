@@ -264,7 +264,8 @@ def run_fit(cost, initial_values, limits, fixed=None):
     for param in (fixed or []): m.fixed[param] = True
     # Give MIGRAD a call budget. MIGRAD stops early and reports valid=False 
     # even though it was sitting at the minimum. A second migrad pass recovers cases the first misses.
-    m.migrad(ncall=100000)
-    if not m.valid: m.migrad(ncall=100000)
-    m.hesse()
+    m.migrad(ncall=100000)  # Find the minimum
+    m.hesse()  # Compute uncertainties from the Hessian at the minimum
     return m
+
+

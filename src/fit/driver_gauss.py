@@ -32,14 +32,14 @@ import cut_utils
 from fit_gauss import fit_gauss
 from plot_gauss import plot_gauss
 
-# --- Selection ---------------------------------------------------------------
+# --- Configuration ------------------------------------------------------------
 # Edit these to change what gets fit. Adding a cut is one line in the block
 # further down; adding a branch to cut on means listing it here too.
 
-MASS_BRANCH     = 'tag_dtf_m'      # the quantity being fit
-METRIC_BRANCH   = 'tag_dtf_chi2'   # ranks candidates within an event
-DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']   # per-daughter, need regrouping
-PNN_MU_MIN      = 0.95             # every muon daughter must exceed this
+MASS_BRANCH     = 'tag_dtf_m'  # the quantity being fit
+METRIC_BRANCH   = 'tag_dtf_chi2'  # ranks candidates within an event
+DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']  # per-daughter, need regrouping
+PNN_MU_MIN      = 0.95  # every muon daughter must exceed this
 
 BRANCHES = ([MASS_BRANCH, METRIC_BRANCH, 'prt_idx_mom']
             + DAUGHTER_FIELDS + cut_utils.TOS_TRIGGERS)
@@ -72,12 +72,12 @@ parser.add_argument('--mean-init', type=float, default=547.9, help='Initial mean
 parser.add_argument('--sigma-init', type=float, default=10.0, help='Initial sigma [MeV]')
 args = parser.parse_args()
 
-# --- Read --------------------------------------------------------------------
+# Read the ROOT file.
 tree = cut_utils.read_branches(args.infile, BRANCHES, entry_stop=args.max_events)
 tree = cut_utils.drop_malformed(tree, DAUGHTER_FIELDS, cut_utils.TOS_TRIGGERS,
                                 tag_ref=MASS_BRANCH)
 
-# --- Select ------------------------------------------------------------------
+# --- Selection ----------------------------------------------------------------
 # selection_mask returns a per-candidate boolean mask shaped like MASS_BRANCH.
 # Note we never index the whole tree with it -- that would silently truncate
 # the prt_* fields. Either cut can be switched off for selection studies.
@@ -86,7 +86,7 @@ pnn_mu_min = args.pnn_mu_min
 keep = cut_utils.selection_mask(tree, use_tos=use_tos, pnn_mu_min=pnn_mu_min,
                                 tag_ref=MASS_BRANCH)
 
-# --- Reduce to one candidate per event ---------------------------------------
+# Reduce to one candidate per event
 # local_index records where each surviving candidate sat in the original event,
 # so the winner can be used to look up any other branch for that same candidate.
 orig_idx = ak.local_index(tree[MASS_BRANCH], axis=1)[keep]

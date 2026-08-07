@@ -61,6 +61,7 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
         c0     = 0.0,
         c1     = 0.0,
     )
+    # TODO: switch from limits to nuisance parameters
     limits = dict(
         mean   = (xmin, xmax),   # peak must sit inside the fit window
         sigma  = (1.0, 50.0),    # sigma > 0; upper bound ~ window width / 3
@@ -73,8 +74,7 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
         c1     = (-1.4, 1.4),    #   [xmin, xmax] and its norm (1 - c1/3) > 0
     )
 
-    # Run fit: MIGRAD to minimise, then HESSE for symmetric errors (run_fit
-    # retries MIGRAD once if the first pass reports invalid).
+    # Run fit: MIGRAD to minimise, then HESSE for symmetric errors.
     m = fit_utils.run_fit(cost, init, limits)
     p, e = m.values, m.errors
 
