@@ -93,22 +93,11 @@ keep = cut_utils.selection_mask(tree, use_tos=use_tos, pnn_mu_min=pnn_mu_min,
                                 tag_ref=MASS_BRANCH)
 
 # --- Reduce to one candidate per event ---------------------------------------
-# local_index records where each surviving candidate sat in the original event,
-# so the winner can be used to look up any other branch for that same candidate.
-orig_idx = ak.local_index(tree[MASS_BRANCH], axis=1)[keep]
-metric   = tree[METRIC_BRANCH][keep]
-
-# Events left with no surviving candidate must go before the argmin, otherwise
-# they become None and turn into silently masked numpy entries.
-survived = ak.num(metric) > 0
-tree, orig_idx, metric = tree[survived], orig_idx[survived], metric[survived]
-
-best = orig_idx[cut_utils.find_best_candidates(metric, method='min')]
-# drop_none strips the option ("maybe missing") type that argmin introduces.
-# It removes nothing here -- empty events already went above -- but without it
-# ak.to_numpy returns a MaskedArray, and np.histogram silently *counts* masked
-# entries rather than erroring on them.
-masses = ak.to_numpy(ak.drop_none(ak.flatten(tree[MASS_BRANCH][best])))  # <- awkward → numpy
+# `keep` goes in as the eligibility mask, so each event keeps the best candidate
+# that actually survived the cuts; the result is a mask on the same candidate
+# axis, ready to index any per-candidate branch.
+best = cut_utils.best_candidate_mask(tree[METRIC_BRANCH], keep, method='min')
+masses = ak.to_numpy(ak.flatten(tree[MASS_BRANCH][best]))  # <- awkward → numpy
 
 applied = ', '.join((['TOS'] if use_tos else [])
                     + ([f'pnn_mu>{pnn_mu_min}'] if pnn_mu_min is not None else [])) or 'none'

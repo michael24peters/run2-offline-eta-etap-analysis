@@ -26,7 +26,7 @@ parser.add_argument('input',
 parser.add_argument('output', nargs='?', default='mass_plot.png',
                     help='Output PNG file (default: mass_plot.png)')
 # Flag to only plot "best" candidate (one candidate per event),
-# using cut_utils.find_best_candidates() to select the best candidate.
+# using cut_utils.best_candidate_mask() to select the best candidate.
 parser.add_argument('--best', action='store_true', default=False,
                     help='Only plot best candidate per event (default: False)')
 # Flag to plot full mass range (400-1200 MeV) instead of zoomed-in range 
@@ -78,20 +78,15 @@ keep = cut_utils.selection_mask(tree, use_tos=args.tos, pnn_mu_min=args.pnn_mu_m
 applied = ', '.join((['TOS'] if args.tos else [])
                     + ([f'pnn_mu>{args.pnn_mu_min}'] if args.pnn_mu_min is not None else []))
 mass = tree['tag_dtf_m'][keep]
-metric = tree['tag_dtf_chi2'][keep]
 print(f'Selection [{applied or "none"}]: '
       f'{int(ak.sum(ak.num(mass)))} / {n_all_candidates} candidates pass')
 
 if args.best:
-    # Select the best candidate for each event, by lowest tag_dtf_chi2.
-    # Events with no surviving candidate are dropped first: argmin on an empty
-    # list yields None, which would become a masked entry in the histogram.
-    has_candidate = ak.num(mass) > 0
-    mass, metric = mass[has_candidate], metric[has_candidate]
-    best = cut_utils.find_best_candidates(metric, method='min')
-    # drop_none strips the option type argmin introduces; without it ak.to_numpy
-    # returns a MaskedArray, which np.histogram would silently miscount.
-    tag_m = ak.to_numpy(ak.drop_none(ak.flatten(mass[best])))
+    # Select the best candidate for each event, by lowest tag_dtf_chi2. `keep` is
+    # the eligibility mask, so each event keeps the best candidate that survived
+    # the selection; events with none left simply contribute nothing.
+    best = cut_utils.best_candidate_mask(tree['tag_dtf_chi2'], keep, method='min')
+    tag_m = ak.to_numpy(ak.flatten(tree['tag_dtf_m'][best]))
 # Flatten to every surviving candidate
 else: tag_m = ak.to_numpy(ak.flatten(mass))
 

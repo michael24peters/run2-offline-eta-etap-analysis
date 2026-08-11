@@ -39,15 +39,12 @@ tree = cut_utils.read_branches(args.input, ['tag_dtf_m', 'tag_dtf_chi2'])
 # All candidates, flattened
 tag_m_all = ak.to_numpy(ak.flatten(tree['tag_dtf_m']))
 
-# Best candidate per event (lowest tag_dtf_chi2). Events with no candidates are
-# dropped first: argmin on an empty list yields None, which would become a
-# masked entry in the histogram.
-has_candidate = ak.num(tree['tag_dtf_m']) > 0
-mass, metric = tree['tag_dtf_m'][has_candidate], tree['tag_dtf_chi2'][has_candidate]
-# drop_none strips the option type argmin introduces; without it ak.to_numpy
-# returns a MaskedArray, which np.histogram would silently miscount.
-best = cut_utils.find_best_candidates(metric, method='min')
-tag_m_best = ak.to_numpy(ak.drop_none(ak.flatten(mass[best])))
+# Best candidate per event (lowest tag_dtf_chi2). This script applies no cuts --
+# it exists to compare "all candidates" against "best candidate" -- so every
+# candidate is eligible to win. Events with no candidates contribute nothing.
+eligible = ak.ones_like(tree['tag_dtf_m'], dtype=bool)
+best = cut_utils.best_candidate_mask(tree['tag_dtf_chi2'], eligible, method='min')
+tag_m_best = ak.to_numpy(ak.flatten(tree['tag_dtf_m'][best]))
 
 print(f"{'─' * 48}")
 print(f'Candidates plotted (all):  {len(tag_m_all)}')

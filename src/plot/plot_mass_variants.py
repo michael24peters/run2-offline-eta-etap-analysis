@@ -55,16 +55,11 @@ tree = cut_utils.drop_malformed(tree, DAUGHTER_FIELDS, cut_utils.TOS_TRIGGERS)
 samples = []
 for label, use_tos, pnn_mu_min, colour in VARIANTS:
     keep = cut_utils.selection_mask(tree, use_tos=use_tos, pnn_mu_min=pnn_mu_min)
-    mass, metric = tree['tag_dtf_m'][keep], tree['tag_dtf_chi2'][keep]
-    # Events with no surviving candidate go before the argmin: on an empty list
-    # it yields None, which would become a masked entry in the histogram.
-    survived = ak.num(mass) > 0
-    mass, metric = mass[survived], metric[survived]
-    best = cut_utils.find_best_candidates(metric, method='min')
-    # drop_none strips the option type argmin introduces; without it ak.to_numpy
-    # returns a MaskedArray, which np.histogram would silently miscount.
+    # `keep` is the eligibility mask, so each event keeps the best candidate that
+    # survived THIS variant's selection; events with none left contribute nothing.
+    best = cut_utils.best_candidate_mask(tree['tag_dtf_chi2'], keep, method='min')
     samples.append((label, colour,
-                    ak.to_numpy(ak.drop_none(ak.flatten(mass[best])))))
+                    ak.to_numpy(ak.flatten(tree['tag_dtf_m'][best]))))
 
 print(f"{'─' * 56}")
 for label, _, values in samples:
