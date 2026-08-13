@@ -25,11 +25,17 @@ DAUGHTER_BRANCHES = ['prt_pid', 'prt_pnn_mu']   # per-daughter, need regrouping
 MC_BRANCHES     = ['mc_pid']       # per-generator-particle
 INDEX_BRANCHES  = ['prt_idx_mom', 'prt_idx_gen', 'mc_idx_mom']  # link levels
 PNN_MU_MIN      = 0.95             # every muon daughter must exceed this
+MUON_PID        = 13               # |pid| the pnn_mu cut applies to
+
+# Trigger lines are a property of the ntuple, not of cut_utils, so they live in
+# the script that knows which ntuple it is reading.
+TOS_TRIGGERS = ['tag_l0_tos0', 'tag_l0_tos1', 'tag_hlt1_tos0',
+                'tag_hlt1_tos1', 'tag_hlt2_tos0', 'tag_hlt2_tos1']
 
 # dict.fromkeys() de-duplicates while keeping order; uproot chokes on repeats.
 BRANCHES = list(dict.fromkeys(
     [MASS_BRANCH, METRIC_BRANCH] + DAUGHTER_BRANCHES + MC_BRANCHES
-    + INDEX_BRANCHES + cut_utils.TOS_TRIGGERS))
+    + INDEX_BRANCHES + TOS_TRIGGERS))
 
 
 def pick_events(tree, n=3, tag_ref=MASS_BRANCH):
@@ -53,19 +59,20 @@ tree = cut_utils.read_branches(INPUT_FILE, BRANCHES, entry_stop=MAX_EVENTS)
 
 # drop_malformed()
 print(f'--- drop_malformed() ---')
-# `prt_idx_gen` is a per-daughter branch too, and it does NOT always agree with
-# prt_idx_mom on how many daughters an event has. Leaving it out of
-# daughter_fields lets a ragged event through and reduce() blows up later.
-new_tree = cut_utils.drop_malformed(tree,
-                                    DAUGHTER_BRANCHES + ['prt_idx_gen'],
-                                    cut_utils.TOS_TRIGGERS,
-                                    tag_ref=MASS_BRANCH)
+# The field lists are derived from the branch prefixes, so every prt_* branch in
+# the tree is checked as a daughter field and every tag_* branch as a candidate
+# field. That matters: prt_idx_gen does NOT always agree with prt_idx_mom on how
+# many daughters an event has, and forgetting to list it used to let a ragged
+# event through and blow up inside reduce() much later.
+new_tree, drop_report = cut_utils.drop_malformed(tree, tag_ref=MASS_BRANCH)
+for key, val in drop_report.items():
+    print(f'[TEST] {key}: {val}')
 # Check difference between tree and new_tree
 print(f'[TEST] Original events: {len(tree)}, kept events: {len(new_tree)}')
 # Compare matching key arrays and see whether they are the same. Note the
 # per-EVENT count is what changes here; the per-candidate totals are the
 # interesting number, so print both.
-for name in [MASS_BRANCH, METRIC_BRANCH] + cut_utils.TOS_TRIGGERS:
+for name in [MASS_BRANCH, METRIC_BRANCH] + TOS_TRIGGERS:
     if name in tree.fields and name in new_tree.fields:
         n_old = int(ak.sum(ak.num(tree[name])))
         n_new = int(ak.sum(ak.num(new_tree[name])))
@@ -74,18 +81,18 @@ for name in [MASS_BRANCH, METRIC_BRANCH] + cut_utils.TOS_TRIGGERS:
     else:
         print(f'[TEST] Branch: {name} not found in one of the trees.')
 
-# _align_candidates()
-print(f'--- _align_candidates() ---')
+# align()
+print(f'--- align() ---')
 tree = new_tree  # Use the cleaned tree for further tests
 preview = pick_events(tree)  # events were dropped, so the indices moved
 n_tag = ak.num(tree[MASS_BRANCH])
 n_tag_np = ak.to_numpy(n_tag)   # candidates per event, for picking preview events
 # Aligning the mass branch against itself is a no-op, so align a TOS trigger
 # instead -- that is the branch that is actually allowed to come back empty.
-probe = cut_utils.TOS_TRIGGERS[-1]
-aligned = cut_utils._align_candidates(tree, probe, tag_ref=MASS_BRANCH)
+probe = TOS_TRIGGERS[-1]
+aligned = cut_utils.align(tree, probe, tag_ref=MASS_BRANCH)
 absent = ak.to_numpy(ak.num(tree[probe]) != n_tag)
-print(f'[TEST] _align_candidates({probe}): events={len(aligned)}, '
+print(f'[TEST] align({probe}): events={len(aligned)}, '
       f'candidates={int(ak.sum(ak.num(aligned)))} '
       f'(tag has {int(ak.sum(n_tag))}), events missing the branch={int(absent.sum())}')
 # An event that is MISSING the branch is the whole point of this function, so
@@ -121,13 +128,20 @@ for i in preview:
 
 # Candidate cuts
 print(f'--- cuts ---')
-tos = cut_utils.tos_mask(tree, tag_ref=MASS_BRANCH)
-pnn = cut_utils.pnn_mask(tree, threshold=PNN_MU_MIN, tag_ref=MASS_BRANCH)
+tos, tos_report = cut_utils.tos_mask(tree, TOS_TRIGGERS, tag_ref=MASS_BRANCH)
+for key, val in tos_report.items():
+    print(f'[TEST] {key}: {val}')
+# A PID cut needs no dedicated helper: it is a comparison on a daughter branch,
+# reduced onto the candidate. "passes OR isn't a muon" is what makes a candidate
+# with no muon daughters pass rather than fail.
+muon_ok = (tree['prt_pnn_mu'] > PNN_MU_MIN) | (abs(tree['prt_pid']) != MUON_PID)
+pnn = cut_utils.reduce(tree, muon_ok, INDEX_BRANCHES[0], how='all',
+                       target_ref=MASS_BRANCH)
 # Combine cuts with plain `&` and `|` operators
 selected = tos & pnn
-best = cut_utils.best_candidate_mask(tree[METRIC_BRANCH], selected, method='min')
+best = cut_utils.best_candidate_mask(tree, METRIC_BRANCH, selected, method='min')
 n_cand = int(ak.sum(n_tag))
-masks = [('tos_mask', tos), ('pnn_mask', pnn),
+masks = [('tos', tos), ('pnn_mu', pnn),
          ('tos & pnn', selected), ('best_candidate', best)]
 for label, mask in masks:
     print(f'[TEST] {label:15s}: {int(ak.sum(mask)):6d} / {n_cand} candidates '
@@ -177,8 +191,10 @@ print(f'[TEST]   - matched gen pids: '
 # Generator level daughter to generator level candidate
 print(f'--- gen level daughter -> gen level candidate ---')
 # mc_idx_mom is -1 for a particle with no mother in the record. Left alone that
-# -1 indexes backwards into the previous event, so mask it off first.
-has_mother = tree[INDEX_BRANCHES[2]] >= 0
+# -1 indexes backwards into the previous event, silently, so AND in valid().
+has_mother = cut_utils.valid(tree, INDEX_BRANCHES[2])
+print(f'[TEST] valid(mc_idx_mom): {int(ak.sum(~has_mother))} motherless of '
+      f'{int(ak.sum(ak.num(has_mother)))} gen particles')
 gen_candidates = cut_utils.reduce(tree, gen_daughters & has_mother,
                                   INDEX_BRANCHES[2], how='any',
                                   target_ref=MC_BRANCHES[0])
@@ -256,5 +272,17 @@ back_candidates = cut_utils.reduce(tree, back_daughters, INDEX_BRANCHES[0],
 n_diff = int(ak.sum(back_candidates != best))
 print(f'[TEST] daughter -> candidate: {n_diff} mismatched candidates '
       f'({int(ak.sum(back_candidates))} vs {int(ak.sum(best))} selected)')
+
+# values() -- the awkward/numpy boundary, and the last step of the pipeline.
+print(f'--- values() ---')
+masses = cut_utils.values(tree, MASS_BRANCH, best)
+print(f'[TEST] values({MASS_BRANCH}, best): {type(masses).__name__} '
+      f'{masses.dtype}, shape {masses.shape}')
+print(f'[TEST]   - range [{masses.min():.2f}, {masses.max():.2f}], '
+      f'first 5: {[round(x, 1) for x in masses[:5].tolist()]}')
+# One value per event that kept a best candidate, and a plain ndarray (not a
+# MaskedArray) so it can go straight into a histogram or a fit.
+assert len(masses) == int(ak.sum(best)), 'values() lost or invented entries'
+assert masses.__class__ is np.ndarray, 'values() did not return a plain ndarray'
 
 print('[TEST] done.')
