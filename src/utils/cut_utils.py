@@ -1,60 +1,73 @@
 """
 cut_utils.py
 
-Utilities for cutting and selecting events in the analysis pipeline.
+Read a ROOT ntuple, build per-candidate selection masks, and move those masks
+between the collections the file stores.
 
-The structure of the ntuple is assumed to look similar to this, though the names
-can be different:
+The ntuple keeps several collections per event. They have different lengths and
+are stored flat, one list per event, with no nesting:
 
-    tag_dtf_m    = [1080.5, 551.5, 1022.0]     3 candidates
-    prt_pnn_mu   = [0.42, 0.947, -100,         9 daughters, one flat list
-                    0.42, 0.947, -100,         (all candidates run together)
-                    0.42, 0.947, -100]
-    prt_idx_mom  = [0,0,0, 1,1,1, 2,2,2]       parent candidate of each daughter
+    tag_dtf_m    = [1080.5, 551.5, 1022.0]     3 candidates      (tag_*)
+    prt_pnn_mu   = [0.42, 0.94, 0.42,          6 daughters, all candidates
+                    0.95, 0.31, 0.88]          run together      (prt_*)
+    prt_idx_mom  = [0, 0, 1, 1, 2, 2]          parent candidate of each daughter
+    mc_pid       = [221.0, -13.0, 13.0]        3 generator particles (mc_*)
 
-These cuts are always at the candidate level, so they return a boolean mask
-shaped like the tag reference branch (usually `tag_dtf_m`). The mask be composed
-with a plain `&` to combine multiple cuts. The method `to_daughter_mask()` can
-be used to apply the candidate-level mask to the daughter level.
+Everything here is a mask, and every mask is shaped like the collection it
+belongs to. Masks on the same collection compose with plain `&` and `|`. There
+is deliberately no cut-specific helper beyond `tos_mask` -- a PID cut, a
+kinematic cut and a multiplicity cut are all just comparisons on a branch,
+moved to the level you want with `follow` / `reduce`:
 
-TODO: Need similar to_daughter_mask() for generator particles.
+    # every muon daughter of the candidate has pnn_mu > 0.95
+    muon_ok = (tree['prt_pnn_mu'] > 0.95) | (abs(tree['prt_pid']) != 13)
+    pnn = reduce(tree, muon_ok, 'prt_idx_mom', how='all')
 
-The goal is to have a single, consistent way to apply cuts and selections which
-can then be applied to any branch at any level easily. This traversal is done
-with the index branches, which link the collections together. There are three
-index branches:
+    # every daughter has pT > 500 MeV
+    fast = reduce(tree, kinematics.pt(tree['prt_px'], tree['prt_py']) > 500,
+                  'prt_idx_mom', how='all')
 
-1. Candidate -> daughter: prt_idx_mom - links each daughter to its mother
-   particle.
-2. Candidate -> generator particle: prt_idx_gen - links each daughter to its
-   generator particle (candidate).
-3. Generator particle -> generator mother: mc_idx_mom - links each generator
-   daughter to its mother generator particle.
+    # candidate has exactly one photon daughter
+    one_gamma = reduce(tree, tree['prt_pid'] == 22, 'prt_idx_mom', how='sum') == 1
 
-    follow(tree, values, idx_branch)   coarse -> fine  (one target -> many)
-    reduce(tree, values, idx_branch)   fine -> coarse  (many -> one, so it
-                                                        takes an aggregation)
+    keep = tos & pnn & fast & one_gamma
+
+Crossing between collections is done with the index branches that link them:
+
+    prt_idx_mom : daughter       -> candidate      (prt_* -> tag_*)
+    prt_idx_gen : daughter       -> gen particle   (prt_* -> mc_*)
+    mc_idx_mom  : gen particle   -> gen mother     (mc_* -> mc_*)
+
+    follow(tree, array, idx_branch)   coarse -> fine  (one source -> many)
+    reduce(tree, array, idx_branch)   fine -> coarse  (many -> one, so it
+                                                       takes an aggregation)
+    valid(tree, idx_branch)           mask of entries whose index points
+                                      somewhere; AND it in before traversing an
+                                      index branch that can point nowhere
+
+There is no direct candidate -> gen candidate link: go candidate -> daughter ->
+gen daughter -> gen candidate. MC generator particles are one flat collection
+per event, not split into tags and daughters like the reco side.
+
+NOTE: `mc_idx_mom` is -1 for a particle with no mother. Neither `follow` nor
+`reduce` guards that, and -1 silently indexes backwards into the previous event,
+so AND in `valid(tree, 'mc_idx_mom')` before traversing it.
+
+The typical pipeline:
+
+    tree, report = drop_malformed(read_branches(infile, BRANCHES))
+    tos, _       = tos_mask(tree, TRIGGERS)
+    keep         = tos & reduce(tree, muon_ok, 'prt_idx_mom', how='all')
+    best         = best_candidate_mask(tree, 'tag_dtf_chi2', keep)
+    masses       = values(tree, 'tag_dtf_m', best)   # flat numpy, ready to fit
+
+Nothing here prints. Functions that gather diagnostics return them alongside
+their result, so the caller decides what to log and what to write to JSON.
 """
-
-import copy
-import sys
 
 import awkward as ak
 import numpy as np
-
-# Diagnostics accumulated as a run progresses
-_REPORT = {}
-
-
-def report():
-    """Diagnostics collected, for writing to JSON (or printing to stderr)."""
-    return copy.deepcopy(_REPORT)
-
-
-# Trigger-on-signal branches OR'd together by `tos_mask`
-# TODO: 20260807 tag_hlt1_tos2 for next anaprod
-TOS_TRIGGERS = ['tag_l0_tos0', 'tag_l0_tos1', 'tag_hlt1_tos0',
-                'tag_hlt1_tos1', 'tag_hlt2_tos0', 'tag_hlt2_tos1']
+import collections
 
 
 def read_branches(root_path, branches, tree='tree', entry_stop=None):
@@ -67,49 +80,70 @@ def read_branches(root_path, branches, tree='tree', entry_stop=None):
         return f[tree].arrays(list(branches), library='ak', entry_stop=entry_stop)
 
 
-def drop_malformed(tree, daughter_fields=(), candidate_fields=(),
-                   tag_ref='tag_dtf_m', idx_branch='prt_idx_mom'):
+def _prefix(branch):
+    """Collection a branch belongs to: 'prt_idx_mom' -> 'prt_'.
+
+    The ntuple names every branch after its collection (tag_, prt_, mc_, pvr_,
+    mcpvr_, evt_), which is what lets drop_malformed work out for itself which
+    branches live at which level.
+    """
+    return branch.split('_')[0] + '_'
+
+
+def drop_malformed(tree, tag_ref='tag_dtf_m', idx_branch='prt_idx_mom',
+                   daughter_fields=None, candidate_fields=None):
     """
     Drop events that cannot be interpreted, which include:
 
       - events with no candidates
             tag_dtf_m = []  0 candidates
             -> drop this event
-      - events whose `daughter_fields` are inconsistent with idx_branch
+      - events whose daughter fields are inconsistent with idx_branch
             tag_dtf_m = [1080.5, 551.5]          2 candidates
             prt_idx_mom = [0,0,0, 1,1,1, 2,2,2]  3 candidates, mismatch
             -> drop this event
-      - events where daughter branch and idx_branch lengths do not match
+      - events where a daughter branch and idx_branch lengths do not match
             prt_idx_mom = [0,0,0, 1,1,1]  2 candidates, 6 daughters
             prt_pnn_mu = [0.42, 0.947]    2 daughters, mismatch
             -> drop this event
-      - events where a `candidate_fields` branch holds a partial number of
-        entries
+      - events where a candidate field holds a partial number of entries
             tag_dtf_m = [1080.5, 551.5, 1022.0]  3 candidates
             tag_hlt2_tos0 = [1.0, 0.0, 1.0]      ok, one per candidate
             tag_hlt2_tos0 = []                   ok, line not evaluated
-            -> will fill with specified value ( default:-1.0) for each candidate
-               value
+            -> align() will fill this in later
             tag_hlt2_tos0 = [1.0, 0.0]           bad, only 2 of 3 candidates
             -> drop this event; can't be sure which candidate value is missing
-            
+
     These should never happen, but this is a just-in-case filter to ensure
     everything that happens later can assume a well-formed tree.
+
+    By default EVERY branch in the tree sharing idx_branch's prefix is checked as
+    a daughter field, and every branch sharing tag_ref's prefix as a candidate
+    field. That is the point: forgetting to list a branch here is how a ragged
+    event survives to blow up inside reduce() much later. Pass the lists
+    explicitly only to check less than everything.
 
     Arguments:
     ----------
     tree             : awkward array, the event tree
-    daughter_fields  : list of str, the per-daughter branches to check
-    candidate_fields : list of str, the per-candidate branches to check
-    tag_ref          : str, the branch to use as the reference for candidate 
-                       structure
-    idx_branch       : str, the branch to use as the reference for daughter
-                       indices
+    tag_ref          : str, the branch defining the candidate level
+    idx_branch       : str, the branch defining the daughter level
+    daughter_fields  : list of str, or None to use every `idx_branch`-prefixed
+                       branch in the tree
+    candidate_fields : list of str, or None to use every `tag_ref`-prefixed
+                       branch in the tree
 
     Returns:
     --------
-    tree : awkward array, the filtered event tree
+    (tree, report) : the filtered event tree, and a dict of what was dropped
     """
+    if daughter_fields is None:
+        daughter_fields = [f for f in tree.fields
+                           if f.startswith(_prefix(idx_branch))]
+    if candidate_fields is None:
+        candidate_fields = [f for f in tree.fields
+                            if f.startswith(_prefix(tag_ref))]
+
     # Initial number of events
     n_before = len(tree)
     # Initial number of candidates
@@ -141,8 +175,8 @@ def drop_malformed(tree, daughter_fields=(), candidate_fields=(),
     keep = (has_candidates & idx_in_range & matched_daughter_lengths
             & whole_candidate_fields)
     n_kept = int(ak.sum(keep))
-    # Write report for JSON output
-    _REPORT['events'] = {
+
+    report = {
         'read': n_before,
         'kept': n_kept,
         'dropped_total': n_before - n_kept,
@@ -151,14 +185,13 @@ def drop_malformed(tree, daughter_fields=(), candidate_fields=(),
         'dropped_daughter_length_mismatch': int(ak.sum(has_candidates & ~matched_daughter_lengths)),
         'dropped_partial_candidate_branch': int(ak.sum(has_candidates & ~whole_candidate_fields)),
         'partial_by_branch': {f: n for f, n in partial_by_field.items() if n},
+        'daughter_fields_checked': list(daughter_fields),
+        'candidate_fields_checked': list(candidate_fields),
     }
-    # Print summary
-    for entry in _REPORT['events']:
-        print(f'[INFO] {entry}: {_REPORT["events"][entry]}')
-    return tree[keep]
+    return tree[keep], report
 
 
-def _align_candidates(tree, field, tag_ref='tag_dtf_m', fill_value=-1.0):
+def align(tree, field, tag_ref='tag_dtf_m', fill_value=-1.0):
     """
     Expand a per-candidate branch to exactly one value per candidate, filling
     with `fill_value` for events where the branch is absent (stored as an empty
@@ -183,72 +216,37 @@ def _align_candidates(tree, field, tag_ref='tag_dtf_m', fill_value=-1.0):
 
     # Fill with `fill_value`, one per candidate, e.g.,
     # [-1.0, -1.0, -1.0, -1.0, -1.0, -1.0]
-    values = np.full(int(ak.sum(n_tag)), fill_value)
+    out = np.full(int(ak.sum(n_tag)), fill_value)
     # Overwrite the candidates whose event had a value. If they did not have a
     # value, they remain `fill_value`. In our running example, since the second
     # event had a False, the second event's candidate is left as -1.0, e.g.,
     # [6.42, 0.947, 1.822, -1.0, 0.42, 2.947].
-    values[present_per_candidate] = ak.to_numpy(ak.flatten(tree[field]))
+    out[present_per_candidate] = ak.to_numpy(ak.flatten(tree[field]))
     # Unflatten back to the original event structure, e.g.,
     # [[6.42, 0.947, 1.822], [-1.0], [0.42, 2.947]]
-    return ak.unflatten(values, n_tag)
+    return ak.unflatten(out, n_tag)
 
 
-def _group_daughters(tree, field, tag_ref='tag_dtf_m', idx_branch='prt_idx_mom'):
-    """
-    Changes current [event][daughter] structure from ROOT file into jagged
-    [event][candidate][daughter].
-
-    NOTE: This is not currently used, but it is a useful reference for if you
-    ever want to set up this jagged structure in the future and work with that.
-
-    Note this assumes each candidate's daughters are stored contiguously and in
-    order (it counts runs of equal prt_idx_mom); reduce() does not.
-    """
-    # Array of number of candidates per event, e.g., n_tag = [3, 1, 2] for three
-    # events with 3, 1, and 2 candidates.
-    n_tag = ak.num(tree[tag_ref])
-    if len(tree) == 0: return tree[field]
-
-    # Candidates in all preceding events, e.g., offset = [0, 3, 4] for
-    # n_tag = [3, 1, 2].
-    offset = np.concatenate([[0], np.cumsum(ak.to_numpy(n_tag))[:-1]])
-    # e.g., idx_branch = [0,0,0, 1,1,1, 2,2,2], [0,0,0], [1,1,1] for
-    # n_tag = [3, 1, 2]; adding the offset makes each candidate unique per
-    # event, e.g., tree[idx_branch] + offset = [0,0,0, 1,1,1, 2,2,2], [3,3,3],
-    # [4,4,4, 5,5,5]. run_lengths then counts consecutive entries, which in this
-    # case tells us the number of daughters per candidate, e.g.,
-    # counts = [3,3,3, 3, 3,3].
-    counts = ak.run_lengths(ak.flatten(tree[idx_branch] + offset))
-
-    # ak.flatten(tree[field]) is a single list of all the daughters in the
-    # event, then ak.unflatten() groups them by candidate, e.g., 
-    # [d0,d1,d2], [d3,d4,d5], [d6,d7,d8], [d9,d10,d11], [d12,d13,d14], 
-    # [d15,d16,d17].
-    per_candidate = ak.unflatten(ak.flatten(tree[field]), counts)
-    # Then we unflatten the candidates back to the original event structure,
-    # e.g., [[d0,d1,d2], [d3,d4,d5], [d6,d7,d8]], [[d9,d10,d11]], 
-    # [[d12,d13,d14], [d15,d16,d17]].
-    # Now when we want to access a daughter from a candidate in an event, we can
-    # index like tree[field][event][candidate][daughter].
-    return ak.unflatten(per_candidate, n_tag)
-
-
-def tos_mask(tree, triggers=TOS_TRIGGERS, tag_ref='tag_dtf_m'):
+def tos_mask(tree, triggers, tag_ref='tag_dtf_m'):
     """
     Per-candidate mask: True where the candidate is TOS for at least one of the
     specified triggers.
+
+    The only cut-specific helper here, because an absent trigger line is a real
+    quirk of the ntuple rather than a comparison: a line that was never
+    evaluated is stored as an empty list, and must read as "did not fire"
+    without knocking the mask out of candidate shape.
 
     Arguments:
     ----------
     tree     : awkward array, the event tree
     triggers : list of str, the trigger branches to OR together
-    tag_ref  : str, the branch defining the candidate level structure to reduce
+    tag_ref  : str, the branch defining the candidate level
 
     Returns:
     --------
-    mask : np.ndarray, boolean array of shape (n_candidates,) where True
-           indicates that the candidate is TOS for at least one trigger.
+    (mask, report) : per-candidate boolean mask, and a dict recording which
+                     lines were actually available to drive the OR
     """
     n_tag = ak.num(tree[tag_ref])
     n_events = len(tree)
@@ -263,15 +261,14 @@ def tos_mask(tree, triggers=TOS_TRIGGERS, tag_ref='tag_dtf_m'):
             not_evaluated[trigger] = n_absent
             if n_absent == n_events: ignored.append(trigger)
         # Makes sure the trigger branch has one entry per candidate, filling
-        # absent 
-        fired = _align_candidates(tree, trigger, tag_ref) > 0.5
+        # absent lines with -1.0, which reads as not fired.
+        fired = align(tree, trigger, tag_ref) > 0.5
         # Updates mask to True when a trigger has fired. Updates each trigger
         # for mask in place so the final mask is True where any trigger has
         # fired.
         mask = fired if mask is None else (mask | fired)
 
-    # Write report for JSON output
-    _REPORT['triggers'] = {
+    report = {
         'requested': list(triggers),
         # Lines fully available everywhere; these are the ones actually driving
         # the OR in every event.
@@ -281,71 +278,22 @@ def tos_mask(tree, triggers=TOS_TRIGGERS, tag_ref='tag_dtf_m'):
         # Absent in every event, so contributing nothing to the selection
         'ignored': ignored,
     }
-    # Write report to stderr
-    print(f"[INFO] TOS triggers requested: "
-          f"{_REPORT['triggers']['requested']}", file=sys.stderr)
-    print(f"[INFO] TOS triggers always evaluated: "
-          f"{_REPORT['triggers']['always_evaluated']}", file=sys.stderr)
-    if not_evaluated:
-        print(f"[INFO] TOS triggers not evaluated in some events: "
-              f"{_REPORT['triggers']['not_evaluated_in_events']}",
-              file=sys.stderr)
-    if ignored:
-        print(f"[INFO] TOS triggers ignored (absent in all events): {ignored}",
-              file=sys.stderr)
-    return mask
+    return mask, report
 
 
-def pnn_mask(tree, threshold=0.95, abspid=13, pnn_field='prt_pnn_mu',
-             pid_field='prt_pid', cut='min', tag_ref='tag_dtf_m'):
-    """
-    Per-candidate mask: True where every daughter of the specified pid has 
-    pnn > threshold. If a single daughter of the specified pid fails, the
-    candidate mask is False.
-
-    Only daughters selected as the specified pid are considered. For example, a
-    pnn_mu cut is only applied to muons, and a candidate with no muons passes
-    the cut. The `cut` argument can be 'min' or 'max' to require every daughter
-    to exceed or be below the threshold, respectively.
-
-    Arguments:
-    ----------
-    threshold : float, the pnn cut value
-    abspid    : int, the absolute pid of the daughter to cut on (default 13 for muons)
-    pnn_field : str, the name of the pnn branch (default 'prt_pnn_mu')
-    pid_field : str, the name of the pid branch (default 'prt_pid')
-    cut       : str, the type of cut to apply ('min' or 'max', default 'min')
-    tag_ref   : str, the branch defining the candidate level to reduce onto
-
-    Returns:
-    --------
-    mask : np.ndarray, boolean array of shape (n_candidates,) where True
-           indicates that the candidate passes the pnn cut.
-    """
-    pid, pnn = tree[pid_field], tree[pnn_field]   # stay at daughter level
-    if cut == 'min': passes = pnn > threshold
-    elif cut == 'max': passes = pnn < threshold
-    else: raise ValueError(f"Invalid cut {cut!r}. Must be 'min' or 'max'.")
-
-    # A daughter of some other pid isn't subject to this cut, so it can never
-    # fail it. Folding that in as "passes OR isn't of this pid" turns the cut
-    # into a plain all-reduction, and is what makes a candidate with no daughters
-    # of `abspid` pass (an empty segment reduces to the identity, True).
-    return reduce(tree, passes | (abs(pid) != abspid), 'prt_idx_mom',
-                  how='all', target_ref=tag_ref)
-
-
-def best_candidate_mask(metrics, eligible, method='min', target=None):
+def best_candidate_mask(tree, metric_branch, eligible, method='min', target=None):
     """
     Per-candidate mask, True only for each event's single best candidate.
 
-    metrics  : per-candidate array to rank on (e.g. tag_dtf_chi2), shaped like
-               the tag branch -- the FULL candidate axis, not a pre-filtered one
-    eligible : per-candidate mask of the candidates allowed to compete, i.e. the
-               output of selection_mask() and friends
-    method   : 'min' / 'max' -- smallest / largest metric wins
-               'closest'     -- metric nearest `target` wins
-    target   : required for method='closest'
+    tree          : awkward array, the event tree
+    metric_branch : str, per-candidate branch to rank on (e.g. 'tag_dtf_chi2'),
+                    shaped like the tag branch -- the FULL candidate axis, not a
+                    pre-filtered one
+    eligible      : per-candidate mask of the candidates allowed to compete, i.e.
+                    the combined cuts
+    method        : 'min' / 'max' -- smallest / largest metric wins
+                    'closest'     -- metric nearest `target` wins
+    target        : required for method='closest'
 
     `eligible` is required, because we want to find the best SURVIVING
     candidate. If the best candidate is independently selected and then ANDed
@@ -361,86 +309,178 @@ def best_candidate_mask(metrics, eligible, method='min', target=None):
     To reach the daughter branches of the winning candidates, pass this mask to
     follow(tree, mask, 'prt_idx_mom').
     """
+    # Get metrics from the tree.
+    metrics = tree[metric_branch]
     # Reduce every method to "smallest score wins", so there is one argmin below.
-    if method == 'min':
+    if method == 'min':  # default
         score = metrics
     elif method == 'max':
-        score = -metrics                    # argmin of the negated metric
+        score = -metrics  # argmin of the negated metric
     elif method == 'closest':
         if target is None:
             raise ValueError("method='closest' requires a target value")
         score = abs(metrics - target)
     else:
-        raise ValueError(f"Invalid method {method!r}. Must be 'min', 'max', or 'closest'.")
+        raise ValueError(f"Invalid method {method!r}. Must be 'min', 'max', or "
+                         f"'closest'.")
+
+    # -------------------------------------------------------------------------
+    # Example:
+    #     score    = [[0.42, 0.95, 1.82], [7.0, 2.0], [4.0, 9.0], []]
+    #     eligible = [[T,    F,    T   ], [F,   F  ], [T,   T  ], []]
+    #                  event 0             event 1     event 2    event 3
+    #                  normal (mixed)      NONE pass   all pass   no candidates
+    # -------------------------------------------------------------------------
 
     # Push ineligible candidates out of the running before the argmin, so the
     # winner is the best candidate that actually survived the cuts.
+    #     score -> [[0.42, inf, 1.82], [inf, inf], [4.0, 9.0], []]
     score = ak.where(eligible, score, np.inf)
+
+    # argmin(axis=1) asks each event separately "which position in YOUR list
+    # holds the smallest score?". keepdims=True keeps the result nested 
+    # one-per-event as [[0]] rather than flattening to [0].
+    #     idx -> [[0], [0], [0], [None]]
+    #             ^     ^          ^
+    #             |     |          event 3 has nothing to pick, so None.
+    #             |     event 1 is ALL inf -- argmin returns 0, but we still
+    #             |     want to exclide ineligible events, so we make sure to
+    #             |     include `& eligible` in the return below.
+    #             event 0: 0.42 < 1.82, so candidate 0 wins.
     idx = ak.argmin(score, axis=1, keepdims=True)
-    # An event with no candidates gives None here; fill_none(-1) makes it match
-    # nothing rather than silently selecting candidate 0.
+
+    # local_index(axis=1) numbers each candidate by its position within its own
+    # event -- essentially an index of its indices.
+    #     ak.local_index(metrics, axis=1) -> [[0, 1, 2], [0, 1], [0, 1], []]
+    #
+    # fill_none(idx, -1) turns event 3's None into -1, which no position can
+    # equal.
+    #     fill_none(idx, -1) -> [[0], [0], [0], [-1]]
+    #
+    # Comapring the two looks like:
+    #     [[0], [0], [0], [-1]] == [[0, 1, 2], [0, 1], [0, 1], []]
+    #
+    # The two sides do not have the same shape, but awkward broadcasts them to
+    # the same shape, so the comparison is done by event. The broadcasted
+    # comparison looks like:
+    #     [[0, 0, 0], [0, 0], [0, 0], [-1, -1, -1]] == [[0, 1, 2], [0, 1], [0, 1], []]
+    # 
+    # The result is True at exactly one position per event, where the
+    # candidate's local index matches the event's winning index. The result
+    # looks like:
+    #    [[T, F, F], [T, F], [T, F], []]
+    #                 ^
+    #                 event 1's phantom winner, an ineligible candidate
+    #
+    # We get rid of this ineligible candidate with the final `& eligible`:
+    #    return [[T, F, F], [F, F], [T, F], []]
     return (ak.local_index(metrics, axis=1) == ak.fill_none(idx, -1)) & eligible
 
 
-# --- Crossing between collections --------------------------------------------
-#
-# The ROOT file stores several collections per event -- candidates (tag_*), reco
-# daughters (prt_*), and in MC also generator particles (mc_*) and vertices
-# (pvr_*/mcpvr_*). They have different lengths and are connected by index
-# branches:
-#
-#   prt_idx_mom : daughter -> candidate (prt_* -> tag_*)
-#   prt_idx_gen : daughter -> gen particle (prt_* -> mc_*)
-#   mc_idx_mom  : gen particle -> gen mother (mc_* -> mc_*)
-#
-# Note that there is no direct way to go from candidate -> gen candidate. You
-# have to go candidate -> daughter -> gen daughters -> gen candidate. This is
-# because MC generator particles are stored in a single collection per event,
-# not split into tags (candidates) and particles (daughters) like the reco side.
-# 
-# To go from one level to another, we follow the index branches. The operations
-# are:
-# 
-#   1. Candidate level mask to the daughter level mask
-#   2. Daughter level mask to generator daughter level mask
-#   3. Candidate level mask to generator candidate-level mask (composite)
-#   ---
-#   4. Daughter level mask to the candidate level mask
-#   5. Generator daughter level mask to daughter level mask
-#   6. Generator level candidate mask to candidate level mask (composite)
-#   7. Generator daughter level mask to generator candidate level mask
-#
-# These processes should be deterministic, so each conversion should be
-# exactly invertible. follow() goes along the index branch, and reduce() goes
-# against it. Composite conversion are done by chaining the two functions
-# together.
-
-def follow(tree, values, idx_branch):
+def values(tree, branch, mask):
     """
-    Coarse -> fine. Re-index `values` down to the level of `idx_branch`.
+    `branch` under `mask`, as a flat numpy array -- the awkward/numpy boundary.
 
-    `values` must be indexed by whatever `idx_branch` points INTO, and the result
+    This is the last step of a selection: everything upstream is jagged and
+    per-event, everything downstream (histograms, fits, plots) is a flat array
+    of numbers.
+
+        masses = values(tree, 'tag_dtf_m', best)   # one mass per surviving event
+
+    `mask` must be shaped like `branch`, which is what a mask from this module
+    always is.
+
+    Example:
+        tag_dtf_m = [[1080.5, 551.5, 1022.0], [1050.0]]
+        best      = [[False, True, False], [True]]
+        values(...) = [551.5, 1050.0]
+    
+    Example:
+        branch = [[True, False, False], [True]]
+        mask = [[False, True, False], [True]]
+        values(...) = [False, True]   
+    """
+    return ak.to_numpy(ak.flatten(tree[branch][mask]))
+
+
+# --- Crossing between collections --------------------------------------------
+
+def follow(tree, array, idx_branch):
+    """
+    Coarse -> fine. Re-index `array` down to the level of `idx_branch`.
+
+    `array` must be indexed by whatever `idx_branch` points INTO, and the result
     comes back at the level of `idx_branch` itself.
 
-    Example: follow(tree, tag_dtf_m, 'prt_idx_mom') takes the per-candidate
-    tag_dtf_m and returns a per-daughter array. I/O might look something like
-    this:
+    Example: 2 events:
 
-    tag_dtf_m = [1080.5, 551.5, 1022.0]     3 candidates
-    prt_idx_mom = [0,0,0, 1,1,1, 2,2,2]       9 daughters
-    follow(tree, tag_dtf_m, 'prt_idx_mom') = [1080.5, 1080.5, 1080.5, 551.5, 
-                                              551.5, 551.5, 1022.0, 1022.0, 
-                                              1022.0]
-    
-    follow() can also be used on mask to propagate the selection down to the
-    finer level. For example, I/O might look like this:
+        tag_dtf_m   = [[10.0, 20.0], [30.0]]     3 candidates -- what we have
+        prt_idx_mom = [[0, 0, 1, 1], [0, 0]]     6 indices / daughters -- target
 
-    mask = [True, False, True]  3 candidates
-    prt_idx_mom = [0,0,0, 1,1,1, 2,2,2]  9 daughters
-    follow(tree, mask, 'prt_idx_mom') = [True, True, True, False, False, False,
-                                         True, True, True]
+        follow(tree, tag_dtf_m, 'prt_idx_mom')
+            = [[10.0, 10.0, 20.0, 20.0], [30.0, 30.0]]
+
+    Read prt_idx_mom as "daughter 0 belongs to candidate 0, daughter 1 belongs
+    to candidate 0, daughter 2 belongs to candidate 1, ...". Because both sides
+    are jagged with the same number of events, awkward applies it event by
+    event, so event 1's index 0 picks event 1's candidate, not event 0's.
+
+        event 0:  take [10.0, 20.0] at [0, 0, 1, 1] -> [10.0, 10.0, 20.0, 20.0]
+        event 1:  take [30.0]       at [0, 0]       -> [30.0, 30.0]
+
+    The same call propagates a MASK down a level, which is the usual use:
+
+        mask        = [[True, False], [True]]
+        prt_idx_mom = [[0, 0, 1, 1], [0, 0]]
+        follow(...) = [[True, True, False, False], [True, True]]
+
+    i.e. the daughters of only the surviving (True) candidates are kept.
+
+    NOTE: a negative index (mc_idx_mom uses -1 for "no mother") is NOT caught
+    here -- numpy-style it silently wraps to the last entry. AND in
+    valid(tree, idx_branch) to handle those.
     """
-    return values[ak.values_astype(tree[idx_branch], np.int64)]
+    # The index branch is stored as float64 (everything in the ntuple is), and
+    # awkward will not index with floats, so cast to int first. This does not
+    # round or clamp -- 2.0 becomes 2, and -1.0 becomes -1.
+    #     tree['prt_idx_mom'] = [[0.0, 0.0, 1.0, 1.0], [0.0, 0.0]]
+    #                        -> [[0,   0,   1,   1  ], [0,   0  ]]
+    idx = ak.values_astype(tree[idx_branch], np.int64)
+
+    # `array[idx]` where both sides are jagged with the same number of events is
+    # a per-event take: event k's indices are applied to event k's values, so an
+    # index never reaches across an event boundary.
+    #     event 0:  take [10.0, 20.0] at [0, 0, 1, 1] -> [10.0, 10.0, 20.0, 20.0]
+    #     event 1:  take [30.0]       at [0, 0]       -> [30.0, 30.0]
+    # The result has the shape of `idx`, i.e. one entry per daughter.
+    return array[idx]
+
+
+def valid(tree, idx_branch):
+    """
+    Mask of source entries that point to something. Index branches with no mother or
+    no matching MC particle get a value of `-1`. A `-1` is a valid index to numpy
+    (it means the last entry), so it is never caught as an error -- follow() reads
+    the wrong particle, and reduce() writes into the previous event. Mask it off
+    with this instead.
+
+
+    An example demonstrating the need for this function:
+
+        mc_idx_mom       [[-1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]]
+        follow(mc_pid)   [[13.0, 221.0, 221.0], [13.0, 221.0, 221.0]]
+                           ^^^^ the eta's "mother" came back as a mu-
+
+    Example:
+
+        mc_idx_mom = [[-1.0, 0.0, 0.0], [-1.0, 0.0, 0.0, -1.0]]
+        valid(...) = [[F,    T,   T  ], [F,    T,   T,   F   ]]
+                       ^                 ^               ^
+                       the eta           the eta         a muon produced
+                       (no mother)                       outside the decay
+    """
+
+    return tree[idx_branch] >= 0
 
 
 # Value each aggregation returns for a target entry that nothing points at, e.g.
@@ -450,71 +490,253 @@ _REDUCE_IDENTITY = {'all': True, 'any': False, 'sum': 0.0,
                     'min': np.inf, 'max': -np.inf}
 
 
-def reduce(tree, values, idx_branch, how='all', target_ref='tag_dtf_m'):
+def reduce(tree, array, idx_branch, how='all', target_ref='tag_dtf_m'):
     """
-    Fine -> coarse. Aggregate `values` from the level of `idx_branch` onto the
+    Fine -> coarse. Aggregate `array` from the level of `idx_branch` onto the
     level `idx_branch` points into.
 
-    The inverse of follow(). Many source entries map to one target entry, so an
-    aggregation is required rather than optional:
+    This is essentially the inverse of follow(), except in going from many to
+    one, an aggregation method must be specified.
 
-        how='all' / 'any'  : bool over the segment   (values must be boolean)
-        how='sum'          : sum over the segment    (bools sum to a count)
+        how='all' / 'any'  : bool over the segment
+        how='sum'          : sum over the segment
         how='min' / 'max'  : extremum over the segment
 
-    values     : array at the source level, same jagged shape as `idx_branch`
+    array      : at the source level, same jagged shape as `idx_branch`
     target_ref : any branch whose per-event length defines the TARGET collection.
-                 'tag_dtf_m' for daughters -> candidates; for daughters -> gen
-                 particles (idx_branch='prt_idx_gen') pass an mc_* branch.
 
-    Aggregation is done flat, over a global target id built from the index branch
-    plus a per-event offset.
+    Example 1: Every muon daughter of the candidate that passes the PID cut
 
-        # every muon daughter of the candidate passes the PID cut
-        reduce(tree, (pnn > 0.95) | (abs(pid) != 13), 'prt_idx_mom', how='all')
-        # candidate has exactly one photon daughter
-        reduce(tree, pid == 22, 'prt_idx_mom', how='sum') == 1
+        tree['prt_pid'] = [[-13.0, 13.0, -13.0, 13.0], [-13.0, 13.0, 211.0, 22.0]]
+        tree['prt_pnn_mu'] = [[0.99, 0.96, 0.42, 0.05], [0.88, 0.91, 0.95, 0.01]]
+        array = (tree['prt_pnn_mu'] > 0.95) & (abs(tree['prt_pid']) == 13)
+            = [[T, T, F, F], [F, F, T, F]] & [[T, T, T, T], [T, T, F, F]] =
+                                   = [[T, T, F, F], [F, F,  F,  F]]
+        idx_branch = 'prt_idx_mom' = [[0, 0, 1, 1], [0, 0, -1, -1]]
+        reduce(tree, array, 'prt_idx_mom', how='all') 
+            = [[T, F], [F]]
+    
+    Example 2: Candidate has exactly one photon daughter
+        tree['prt_pid'] = [[-13.0, 13.0, -13.0, 22.0], [-13.0, 13.0, 211.0, 22.0, 22.0]]
+        array = (tree['prt_pid'] == 22)  = [[F, F,  F, T], [F, F,  F,  T,  T]]
+        idx_branch = 'prt_idx_mom'       = [[0, 0, -1, 0], [0, 0, -1, -1, 0]]
+        reduce(tree, array, 'prt_idx_mom', how='sum', target_ref='prt_pid') = [[1, 0], [1]] == 1
+            = [[T, F], [T]]
+
+    Example 3: Number of daughters per generator candidate
+        tree['mc_pid'] = [[221.0, -13.0, 13.0], [221.0, -13.0, 13.0, 211.0, 22.0]]
+        array = ak.ones_like(tree['mc_pid'], dtype=bool) = [[T, T, T], [T, T, T, T, T]]
+        idx_branch = 'mc_idx_mom' = [[-1.0, 0.0, 0.0], [-1.0, 0.0, 0.0, -1.0, -1.0]]
+        reduce(tree, array, 'mc_idx_mom', how='sum', target_ref='mc_pid') = [[2], [2]]
+
+    Note that for all of these example, it is assumed the negative indices are
+    masked off with valid(tree, idx_branch) before reducing. Otherwise, the
+    negative would get counted as a daughter of the last candidate, which
+    confuses the result. In example 3, the sum of the daughters of the eta is 2,
+    but the negative indices if counted would make the second event's eta have
+    4 daughters instead of 2.
+
+    NOTE: as in follow(), a negative index is not caught -- it wraps into the
+    previous event's segment. AND in valid(tree, 'mc_idx_mom') before reducing
+    along mc_idx_mom. This must be handled by the caller.
     """
     if how not in _REDUCE_IDENTITY:
         raise ValueError(f"Invalid how {how!r}. Must be one of "
                          f"{sorted(_REDUCE_IDENTITY)}.")
 
-    n_target = ak.num(tree[target_ref])
-    n_source = ak.num(tree[idx_branch])
-    # Running total of target entries, so every candidate in the file gets a
-    # unique id and the whole thing reduces in one flat pass.
+    # -------------------------------------------------------------------------
+    # Example: 2 events, reducing daughters onto candidates with how='all':
+    #
+    #     tag_dtf_m   = [[10.0, 20.0], [30.0]]  3 candidates -- target structure
+    #     prt_idx_mom = [[0, 0, 1, 1], [0, 0]]  6 daughters  -- source indices
+    #     array       = [[T, T, F, T], [T, F]]  source values to reduce
+    #
+    # Wanted: one bool per CANDIDATE -- [[True, False], [False]]. Candidate 0 of
+    # event 0 has daughters [T, T] so it passes; candidate 1 has [F, T] so it
+    # fails; event 1's only candidate has [T, F] so it fails, i.e., True only if
+    # all daughters are True.
+    # -------------------------------------------------------------------------
+
+    n_target = ak.num(tree[target_ref])   # candidates per event -> [2, 1]
+    n_source = ak.num(tree[idx_branch])   # daughters  per event -> [4, 2]
+
+    # --- Step 1 ---
+    # Lay the events' candidates end to end and record the starting offsets:
+    #     cumsum([2, 1])            = [2, 3]
+    #     concatenate([0], ...)     = [0, 2, 3] <- starts
+    # Read it as: event 0's candidates occupy global ids 0-1, event 1's occupy
+    # global id 2, and the file holds starts[-1] = 3 candidates in total.
     starts = np.concatenate([[0], np.cumsum(ak.to_numpy(n_target))])
-    n_total = int(starts[-1])
+    n_total = int(starts[-1])  # -> 3 (in the example above)
+    # Return empty array of correct shape if there are no candidates
     if n_total == 0: return ak.unflatten(np.empty(0, dtype=bool), n_target)
 
-    # Local index -> global id, by adding the event's own starting offset.
-    ids = (ak.to_numpy(ak.flatten(ak.values_astype(tree[idx_branch], np.int64)))
-           + np.repeat(starts[:-1], ak.to_numpy(n_source)))
-    vals = ak.to_numpy(ak.flatten(values))
+    # --- Step 2 ---
+    # Rewrite each daughter's LOCAL index as a GLOBAL id. A daughter's stored
+    # index is local to its own event ("candidate 0 of MY event"). Adding that
+    # event's starting offset makes it globally unique.
+    #     flatten(prt_idx_mom)          = [0, 0, 1, 1, 0, 0]   local
+    #     repeat(starts[:-1], n_source) = [0, 0, 0, 0, 2, 2]   each event's offset,
+    #                                                          repeated once per
+    #                                                          daughter it owns
+    #     ids                           = [0, 0, 1, 1, 2, 2]   global
+    local = ak.to_numpy(ak.flatten(ak.values_astype(tree[idx_branch], np.int64)))
 
+    # Some index branches can point nowhere: mc_idx_mom = -1 for a particle with
+    # no mother. Those entries must be dropped BEFORE the offset is added,
+    # because afterwards a -1 is indistinguishable from a real id. Take a second
+    # example, 2 events of 3 generator particles each:
+    #
+    #     mc_idx_mom = [[-1, 0, 0], [-1, 0, 0]]
+    #     flattened  = [-1, 0, 0, -1, 0, 0]
+    #     offsets    = [ 0, 0, 0,  3, 3, 3]
+    #     naive ids  = [-1, 0, 0,  2, 3, 3]
+    #                    ^          ^
+    #                    |          event 1's -1 became 2 -- a REAL id, pointing
+    #                    |          at event 0's third particle. Event 1's result
+    #                    |          gets written into event 0, silently.
+    #                    rejected outright by np.bincount below
+    #
+    # Filtering on the LOCAL index catches both, since only -1 is negative there:
+    #     points_somewhere = [F, T, T, F, T, T]
+    #     ids              = [0, 0, 3, 3]
+    #
+    # This is why no caller needs to AND in valid() before reducing: a motherless
+    # particle simply never enters the aggregation. (follow() is different -- its
+    # output must keep the shape of the index branch, so it has no entry to drop
+    # and the caller does still need valid() there.)
+    #
+    # Mask for non-negative local indices.
+    points_somewhere = local >= 0
+    ids = (local + np.repeat(starts[:-1], ak.to_numpy(n_source)))[points_somewhere]
+    vals = ak.to_numpy(ak.flatten(array))[points_somewhere]   # -> [T, T, F, T, T, F]
+
+    # --- Step 3 ---
+    # Now `ids` and `vals` are two plain numpy arrays of the same length, lined
+    # up daughter by daughter:
+    #
+    #     daughter #   0  1  2  3  4  5
+    #     ids        [ 0, 0, 1, 1, 2, 2 ]   which candidate
+    #     vals       [ T, T, F, T, T, F ]   did it pass?
+    #
+    # np.bincount(x, minlength=n) counts how many times each value 0..n-1 appears
+    # in x. So bincount over a subset of `ids` counts, per candidate, how many of
+    # its daughters were in that subset. Picking the subset picks the question.
     if how == 'all':
-        # No failing source entry anywhere in the segment.
+        # "every daughter passed" is the same as "no daughter failed", so count
+        # the FAILING daughters per candidate and require zero.
+        #
+        # ~vals inverts the pass flags -- these are the failures:
+        #     vals   = [T, T, F, T, T, F]
+        #     ~vals  = [F, F, T, F, F, T]
+        #
+        # ids[~vals] is BOOLEAN MASK indexing; it keeps the entries of `ids` 
+        # whose mask entry is True, and discards the rest.
+        #
+        #     position:  0     1     2     3     4     5
+        #     ids:       0     0     1     1     2     2
+        #     ~vals:     F     F     T     F     F     T
+        #                skip  skip  KEEP  skip  skip  KEEP
+        #                            |                 |
+        #                            v                 v
+        #     ids[~vals] =         [ 1,                2 ]
+        #
+        # Read this as "a daughter of candidate 1 failed, and a daughter of
+        # candidate 2 failed". It is a list of complaints, one per failing
+        # daughter, labelled by which candidate the complaint is against. The
+        # same candidate appears once per failing daughter, so bincount tallies
+        # the complaints:
+        #     np.bincount([1, 2], minlength=3) = [0, 1, 1]
+        #                                         ^  ^  ^
+        #                                         |  |  candidate 2: 1 complaint
+        #                                         |  candidate 1: 1 complaint
+        #                                         candidate 0: no complaints
+        #     == 0                             = [True, False, False]
+        #
+        # A candidate that nothing points at collects no complaints, so it comes
+        # back True -- the identity of an empty all(). That is deliberate (it is
+        # what lets a candidate with no muons pass a muon cut) but it is a trap
+        # when propagating a selection upward: use how='any' there, whose
+        # identity is False.
         out = np.bincount(ids[~vals], minlength=n_total) == 0
     elif how == 'any':
+        # Mirror image: count the PASSING daughters per candidate, require >= 1.
+        #     ids[vals] = [0, 0, 1, 2]   (positions 0, 1, 3, 4 survive the mask)
+        #     bincount  = [2, 1, 1]
+        #     > 0       = [True, True, True]
         out = np.bincount(ids[vals], minlength=n_total) > 0
     elif how == 'sum':
+        # `weights` adds vals[k] to bucket ids[k] instead of adding 1, so booleans
+        # come out as a count and floats as a total.
+        #     -> [2.0, 1.0, 1.0]
         out = np.bincount(ids, weights=vals.astype(float), minlength=n_total)
     else:
+        # min / max: start every candidate at the identity (+inf / -inf) and let
+        # each daughter pull its own candidate's entry toward the extreme.
+        # ufunc.at is the unbuffered version, so repeated ids accumulate instead
+        # of the last write winning.
         ufunc = np.minimum if how == 'min' else np.maximum
         out = np.full(n_total, _REDUCE_IDENTITY[how], dtype=float)
         ufunc.at(out, ids, vals)
 
+    # --- Step 4: back to the per-event structure -----------------------------
+    # `out` is flat, one entry per candidate in the file, in the same global-id
+    # order the ids were built from. Cutting it back up with the same n_target
+    # restores the jagged shape the caller expects, so the result composes with
+    # `&` against any other per-candidate mask.
+    #     unflatten([True, False, False], [2, 1]) = [[True, False], [False]]
     return ak.unflatten(out, n_target)
 
+def decay_mask(tree, mother_pid, daughter_pids, idx_branch='mc_idx_mom',
+               pid_branch='mc_pid', target_ref='mc_pid'):
+    """
+    Per generator mother mask: True for each particle with mother_pid whose
+    daughters are exactly the specified daughter_pids (could be in any order but
+    has the exact same multiplicity).
 
-def transverse_momentum(px, py):
-    """pT = sqrt(px^2 + py^2), elementwise over any-shaped px/py fields."""
-    return np.sqrt(px**2 + py**2)
+    Works for any decay by changing one list:
 
-def invariant_mass2(px1, py1, pz1, e1, px2, py2, pz2, e2):
-    """Compute M^2 of the sum of two 4-vectors."""
-    e  = e1  + e2
-    px = px1 + px2
-    py = py1 + py2
-    pz = pz1 + pz2
-    return e**2 - px**2 - py**2 - pz**2
+        decay_mask(tree, 221, [-13, 13])            eta -> mu mu
+        decay_mask(tree, 221, [-13, 13, 22])        eta -> mu mu gamma
+        decay_mask(tree, 221, [-13, -13, 13, 13])   eta -> 4mu
+        decay_mask(tree, 221, [-13, 13, -11, 11])   eta -> mu mu e e
+    
+    We ask counting questions to deduce the decay, rather than trying to match
+    the daughters and resulting in combinatorial problems.
+
+    Start with a simple example:
+
+        mc_pid     = [[221, -13, 13, 22]]
+        mc_idx_mom = [[ -1,   0,  0,  0]]
+
+        reduce(pid == -13, how='sum') -> [[1, 0, 0, 0]]   one mu+ daughter
+        reduce(pid ==  13, how='sum') -> [[1, 0, 0, 0]]   one mu- daughter
+        reduce(pid ==  22, how='sum') -> [[1, 0, 0, 0]]   one gamma daughter
+        reduce(ones,       how='sum') -> [[3, 0, 0, 0]]   three daughters total
+
+    This tells us everything we need to know: a mother has exactly one mu+, one
+    mu-, and one gamma, and no other daughters.
+    """
+    # Get the mother particles
+    mothers = tree[pid_branch] == mother_pid
+
+    # Get the daughters of those mothers, and check that each mother has the
+    # right number of daughters and the right PIDs.
+    # Get daughters
+    n_all = reduce(tree, ak.ones_like(tree[pid_branch], dtype=bool), idx_branch,
+                   how='sum', target_ref=target_ref)
+    # Check that each mother has the correct number of daughters
+    ok = mothers & (n_all == len(daughter_pids))
+
+    # Now check PIDs using a Counter, which turns [-13, 13, -13, 13] into
+    # {13: 2, -13: 2}.
+    # code == PID
+    # want == number of each PID
+    # mc_pid                       [[221,-13,13], [221,-13,-13,13], [221,-13,13,22]]
+    # decay_mask(221,[-13,13])     [[T,  F,  F ], [F,  F,  F,  F ], [F,  F,  F, F ]]
+    # decay_mask(221,[-13,13,22])  [[F,  F,  F ], [F,  F,  F,  F ], [T,  F,  F, F ]]
+    # decay_mask(221,[-13,-13,13]) [[F,  F,  F ], [T,  F,  F,  F ], [F,  F,  F, F ]]
+    for code, want in collections.Counter(daughter_pids).items():
+        ok = ok & (reduce(tree, tree[pid_branch] == code, idx_branch, how='sum',
+                          target_ref=target_ref) == want)
+    return ok
