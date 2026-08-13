@@ -181,13 +181,11 @@ def dcb_cdf(x, mean, sigma, alphaL, nL, alphaR, nR, xmin, xmax):
 
 def make_gauss_cost(counts, bin_edges, xmin, xmax):
     """ExtendedBinnedNLL cost for Gaussian signal + 2nd-order Chebyshev
-    background. Free parameters: mean, sigma, n_sig, c0, c1.
+    background. Free parameters: mean, sigma, n_sig, n_bkg, c0, c1.
     """
     from iminuit.cost import ExtendedBinnedNLL
-    n_cand = float(np.sum(counts))
 
-    def scaled_cdf(xe, mean, sigma, n_sig, c0, c1):
-        n_bkg = n_cand - n_sig  # n_bkg is not a free parameter
+    def scaled_cdf(xe, mean, sigma, n_sig, n_bkg, c0, c1):
         return (
             gauss_cdf(xe, mean, sigma, xmin, xmax) * n_sig
             + cheb_cdf(xe, xmin, xmax, c0, c1) * n_bkg
@@ -199,13 +197,11 @@ def make_gauss_cost(counts, bin_edges, xmin, xmax):
 def make_dcb_cost(counts, bin_edges, xmin, xmax):
     """
     ExtendedBinnedNLL cost for DCB signal + 2nd-order Chebyshev background.
-    Free parameters: mean, sigma, alphaL, nL, alphaR, nR, n_sig, c0, c1.
+    Free parameters: mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1.
     """
     from iminuit.cost import ExtendedBinnedNLL
-    n_cand = float(np.sum(counts))
 
-    def scaled_cdf(xe, mean, sigma, alphaL, nL, alphaR, nR, n_sig, c0, c1):
-        n_bkg = n_cand - n_sig  # n_bkg is not a free parameter
+    def scaled_cdf(xe, mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1):
         return (
             dcb_cdf(xe, mean, sigma, alphaL, nL, alphaR, nR, xmin, xmax) * n_sig
             + cheb_cdf(xe, xmin, xmax, c0, c1) * n_bkg
@@ -217,14 +213,11 @@ def make_dcb_cost(counts, bin_edges, xmin, xmax):
 def make_dcb_sym_cost(counts, bin_edges, xmin, xmax):
     """
     ExtendedBinnedNLL cost for symmetric DCB (α_R ≡ α_L, n_R ≡ n_L) + Chebyshev.
-    Free parameters: mean, sigma, alpha, n, n_sig, c0, c1  (7 vs 9).
-    n_bkg = n_cand - n_sig (n_cand = sum(counts), fixed).
+    Free parameters: mean, sigma, alpha, n, n_sig, n_bkg, c0, c1  (8 vs 10).
     """
     from iminuit.cost import ExtendedBinnedNLL
-    n_cand = float(np.sum(counts))
 
-    def scaled_cdf(xe, mean, sigma, alpha, n, n_sig, c0, c1):
-        n_bkg = n_cand - n_sig  # n_bkg is not a free parameter
+    def scaled_cdf(xe, mean, sigma, alpha, n, n_sig, n_bkg, c0, c1):
         return (
             dcb_cdf(xe, mean, sigma, alpha, n, alpha, n, xmin, xmax) * n_sig
             + cheb_cdf(xe, xmin, xmax, c0, c1) * n_bkg
@@ -267,5 +260,3 @@ def run_fit(cost, initial_values, limits, fixed=None):
     m.migrad(ncall=100000)  # Find the minimum
     m.hesse()  # Compute uncertainties from the Hessian at the minimum
     return m
-
-
