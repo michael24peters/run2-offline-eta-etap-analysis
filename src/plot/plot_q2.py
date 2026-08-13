@@ -8,23 +8,21 @@ Usage:
 """
 
 import argparse
+import os
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import uproot
+# Ensure utils/kinematics.py is importable
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                '..', 'utils'))
+from kinematics import invariant_mass2
 
 def parse_args():
 
     parser = argparse.ArgumentParser(description='Plot q2 from ROOT tree.')
     parser.add_argument('input', help='Input ROOT file')
     return parser.parse_args()
-
-def invariant_mass2(px1, py1, pz1, e1, px2, py2, pz2, e2):
-    """Compute M^2 of the sum of two 4-vectors."""
-    e  = e1  + e2
-    px = px1 + px2
-    py = py1 + py2
-    pz = pz1 + pz2
-    return e**2 - px**2 - py**2 - pz**2
 
 args = parse_args()
 

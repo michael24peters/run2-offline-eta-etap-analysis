@@ -42,9 +42,16 @@ MASS_BRANCH     = 'tag_dtf_m'      # the quantity being fit
 METRIC_BRANCH   = 'tag_dtf_chi2'   # ranks candidates within an event
 DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']   # per-daughter, need regrouping
 PNN_MU_MIN      = 0.4              # every muon daughter must exceed this
+MUON_PID        = 13               # |pid| the pnn_mu cut applies to
+
+# Trigger-on-signal lines OR'd together by the TOS cut. These are a property of
+# this ntuple, not of the framework, so they live here rather than in cut_utils.
+# TODO: 20260807 tag_hlt1_tos2 for next anaprod
+TOS_TRIGGERS = ['tag_l0_tos0', 'tag_l0_tos1', 'tag_hlt1_tos0',
+                'tag_hlt1_tos1', 'tag_hlt2_tos0', 'tag_hlt2_tos1']
 
 BRANCHES = ([MASS_BRANCH, METRIC_BRANCH, 'prt_idx_mom']
-            + DAUGHTER_FIELDS + cut_utils.TOS_TRIGGERS)
+            + DAUGHTER_FIELDS + TOS_TRIGGERS)
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(
@@ -71,7 +78,7 @@ parser.add_argument('--xmin', type=float, default=480.0, help='Lower mass bound 
 parser.add_argument('--xmax', type=float, default=620.0, help='Upper mass bound [MeV]')
 parser.add_argument('--nbins', type=int, default=80, help='Number of histogram bins')
 parser.add_argument('--mean-init', type=float, default=547.9, help='Initial mean [MeV]')
-parser.add_argument('--sigma-init', type=float, default=10.0, help='Initial sigma [MeV]')
+parser.add_argument('--sigma-init', type=float, default=5.0, help='Initial sigma [MeV]')
 parser.add_argument('--alphaL-init', type=float, default=1.5, help='Initial left tail α_L')
 parser.add_argument('--nL-init', type=float, default=2.0, help='Initial left tail n_L')
 parser.add_argument('--alphaR-init', type=float, default=1.5, help='Initial right tail α_R')
@@ -80,24 +87,47 @@ args = parser.parse_args()
 
 # --- Read --------------------------------------------------------------------
 tree = cut_utils.read_branches(args.infile, BRANCHES, entry_stop=args.max_events)
-tree = cut_utils.drop_malformed(tree, DAUGHTER_FIELDS, cut_utils.TOS_TRIGGERS,
-                                tag_ref=MASS_BRANCH)
+tree, drop_report = cut_utils.drop_malformed(tree, tag_ref=MASS_BRANCH)
 
 # --- Select ------------------------------------------------------------------
-# selection_mask returns a per-candidate boolean mask shaped like MASS_BRANCH.
-# Note we never index the whole tree with it -- that would silently truncate
-# the prt_* fields. Either cut can be switched off for selection studies.
+# Every cut is a per-candidate boolean mask shaped like MASS_BRANCH, so they
+# combine with a plain `&` and adding one is a single line.
 use_tos = not args.no_tos
 pnn_mu_min = args.pnn_mu_min
-keep = cut_utils.selection_mask(tree, use_tos=use_tos, pnn_mu_min=pnn_mu_min,
-                                tag_ref=MASS_BRANCH)
+
+keep = ak.ones_like(tree[MASS_BRANCH], dtype=bool)
+tos_report = None
+if use_tos:
+    tos, tos_report = cut_utils.tos_mask(tree, TOS_TRIGGERS, tag_ref=MASS_BRANCH)
+    keep = keep & tos
+if pnn_mu_min is not None:
+    # A daughter of some other PID isn't subject to a muon cut, so it can never
+    # fail it. Folding that in as "passes OR isn't a muon" turns the cut into a
+    # plain all-reduction onto the candidate.
+    muon_ok = ((tree['prt_pnn_mu'] > pnn_mu_min)
+               | (abs(tree['prt_pid']) != MUON_PID))
+    keep = keep & cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all',
+                                   target_ref=MASS_BRANCH)
 
 # --- Reduce to one candidate per event ---------------------------------------
 # `keep` goes in as the eligibility mask, so each event keeps the best candidate
 # that actually survived the cuts; the result is a mask on the same candidate
 # axis, ready to index any per-candidate branch.
-best = cut_utils.best_candidate_mask(tree[METRIC_BRANCH], keep, method='min')
-masses = ak.to_numpy(ak.flatten(tree[MASS_BRANCH][best]))  # <- awkward → numpy
+best = cut_utils.best_candidate_mask(tree, METRIC_BRANCH, keep, method='min')
+masses = cut_utils.values(tree, MASS_BRANCH, best)  # <- awkward → numpy
+
+# cut_utils returns its diagnostics rather than printing them, so the driver
+# decides what to log. Everything here also goes into the results JSON below.
+print(f"[INFO] events: read {drop_report['read']}, kept {drop_report['kept']}, "
+      f"dropped {drop_report['dropped_total']}", file=sys.stderr)
+for reason in ('dropped_no_candidates', 'dropped_idx_out_of_range',
+               'dropped_daughter_length_mismatch',
+               'dropped_partial_candidate_branch'):
+    if drop_report[reason]:
+        print(f'[INFO]   {reason}: {drop_report[reason]}', file=sys.stderr)
+if tos_report and tos_report['ignored']:
+    print(f"[INFO] TOS lines absent in every event (contributing nothing): "
+          f"{tos_report['ignored']}", file=sys.stderr)
 
 applied = ', '.join((['TOS'] if use_tos else [])
                     + ([f'pnn_mu>{pnn_mu_min}'] if pnn_mu_min is not None else [])) or 'none'
@@ -124,12 +154,15 @@ result['meta']['selection'] = {
 # from the results file alone rather than from terminal scrollback: events read
 # and why any were dropped, which trigger lines were actually available, and
 # candidates surviving each cut.
-result['selection_report'] = cut_utils.report()
-result['selection_report']['best_candidate'] = {
-    'metric': METRIC_BRANCH, 'method': 'min',
-    'events_with_best_candidate': len(masses),
+result['selection_report'] = {
+    'events': drop_report,
+    'triggers': tos_report,
+    'best_candidate': {
+        'metric': METRIC_BRANCH, 'method': 'min',
+        'events_with_best_candidate': len(masses),
+    },
+    'branches_read': BRANCHES,
 }
-result['selection_report']['branches_read'] = BRANCHES
 
 # Save results to JSON. --label suffixes both filenames so runs with different
 # selections can share an --outdir instead of overwriting each other.

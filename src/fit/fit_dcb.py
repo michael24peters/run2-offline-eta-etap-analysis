@@ -36,8 +36,8 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
     # Edges (nbins+1) rather than centers (nbins): the extended binned NLL
     # integrates the model CDF between consecutive edges.
     bin_edges = np.linspace(xmin, xmax, nbins + 1)
-    # Total observed yield in the fit window. Held fixed, and used both to seed
-    # n_sig and to derive n_bkg = N_CAND - n_sig.
+    # Total observed yield in the fit window, used to seed the yields and set
+    # their limits.
     N_CAND = counts.sum()
     print(f'[INFO] {int(N_CAND)} entries in [{xmin}, {xmax}] MeV across {nbins} bins',
           file=sys.stderr)
@@ -58,6 +58,7 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
         alphaR = alphaR_init,
         nR     = nR_init,
         n_sig  = N_CAND * 0.5,
+        n_bkg  = N_CAND * 0.5,
         c0     = 0.0,
         c1     = 0.0,
     )
@@ -69,7 +70,8 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
         nL     = (0.1, 50.0),    #   means "pure Gaussian", n -> large likewise
         alphaR = (0.1, 10.0),
         nR     = (0.1, 50.0),
-        n_sig  = (0.0, N_CAND),  # n_bkg = N_CAND - n_sig must stay >= 0
+        n_sig  = (0.0, N_CAND * 2),  # yields are non-negative, with an upper
+        n_bkg  = (0.0, N_CAND * 2),  #   bound well above the observed total
         c0     = (-1.0, 1.0),    # keeps the Chebyshev PDF non-negative on
         c1     = (-1.4, 1.4),    #   [xmin, xmax] and its norm (1 - c1/3) > 0
     )
@@ -78,11 +80,8 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
     m = fit_utils.run_fit(cost, init, limits)
     p, e = m.values, m.errors
 
-    # n_bkg is not a free parameter: n_cand = N_CAND is fixed, and n_sig + n_bkg = N_CAND
-    # by unitarity, so n_bkg is derived from n_sig. Since N_CAND carries no
-    # uncertainty, n_bkg's error equals n_sig's error (n_bkg = N_CAND - n_sig).
-    n_bkg = N_CAND - p['n_sig']
-    n_bkg_err = e['n_sig']
+    n_bkg = p['n_bkg']
+    n_bkg_err = e['n_bkg']
 
     print(f"[INFO] valid={m.valid}  "
           f"mean={p['mean']:.3f}±{e['mean']:.3f} MeV  "
@@ -181,8 +180,7 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
                 'n_sig': {'value': round(float(p['n_sig']), 2),
                           'error': round(float(e['n_sig']), 2)},
                 'n_bkg': {'value': round(float(n_bkg), 2),
-                          'error': round(float(n_bkg_err), 2),
-                          'note': 'derived: n_cand - n_sig (not a free fit parameter)'},
+                          'error': round(float(n_bkg_err), 2)},
                 'c0':    {'value': round(float(p['c0']), 6),
                           'error': round(float(e['c0']), 6),
                           'note': 'Chebyshev linear coefficient (slope)'},

@@ -63,14 +63,48 @@ MASS_BRANCH     = 'tag_dtf_m'      # the quantity being fit
 METRIC_BRANCH   = 'tag_dtf_chi2'   # ranks candidates within an event
 DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']
 PNN_MU_MIN      = 0.95
+MUON_PID        = 13
+TOS_TRIGGERS    = ['tag_l0_tos0', ...]   # ntuple-specific, so not in cut_utils
 ```
 
-The cut helpers in `cut_utils` return **per-candidate boolean masks** shaped
-like `tag_dtf_m`, so adding a cut is one line:
+Every cut is a **per-candidate boolean mask** shaped like `tag_dtf_m`, so they
+combine with a plain `&` and adding one is a line or two. There is deliberately
+no cut-specific helper beyond `tos_mask` -- a PID cut, a kinematic cut and a
+multiplicity cut are all just comparisons on a branch, moved to the candidate
+level with `reduce`:
 
 ```python
-keep = cut_utils.tos_mask(tree) & cut_utils.pnn_mask(tree, PNN_MU_MIN)
+tos, tos_report = cut_utils.tos_mask(tree, TOS_TRIGGERS)
+
+# every muon daughter passes the PID cut ("passes OR isn't a muon", so a
+# candidate with no muon daughters passes rather than fails)
+muon_ok = (tree['prt_pnn_mu'] > PNN_MU_MIN) | (abs(tree['prt_pid']) != MUON_PID)
+pnn = cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all')
+
+# every daughter has pT > 500 MeV
+fast = cut_utils.reduce(tree, kinematics.pt(tree['prt_px'], tree['prt_py']) > 500,
+                        'prt_idx_mom', how='all')
+
+# candidate has exactly one photon daughter
+one_gamma = cut_utils.reduce(tree, tree['prt_pid'] == 22, 'prt_idx_mom',
+                             how='sum') == 1
+
+keep = tos & pnn & fast & one_gamma
 ```
+
+The full pipeline is six lines:
+
+```python
+tree, drop_report = cut_utils.drop_malformed(cut_utils.read_branches(infile, BRANCHES))
+keep   = ...                                                   # as above
+best   = cut_utils.best_candidate_mask(tree, METRIC_BRANCH, keep)
+masses = cut_utils.values(tree, MASS_BRANCH, best)             # flat numpy
+result = fit_gauss(masses, ...)
+```
+
+`values()` is the awkward/numpy boundary: everything upstream is jagged and
+per-event, everything downstream is a flat array of numbers. Swapping what gets
+fit is one string.
 
 Two things to know before editing that block:
 
@@ -88,8 +122,21 @@ its arbitrarily-chosen candidate failed. Reordering is a matter of moving two
 lines in the driver.
 
 `drop_malformed()` removes events with no candidates and events whose `prt_*`
-branches are inconsistent with `prt_idx_mom` (~0.1% of current ntuples), and
-reports the count to stderr.
+branches are inconsistent with `prt_idx_mom` (~0.1% of current ntuples). It works
+out which branches live at which level from their name prefixes, so **every**
+`prt_*` branch read is checked as a daughter field and every `tag_*` branch as a
+candidate field — forgetting to list one is how a ragged event survives to blow
+up inside `reduce()` much later.
+
+Nothing in `cut_utils` prints. `drop_malformed()` and `tos_mask()` return their
+diagnostics as a second return value, and the driver decides what to log and what
+to write into the results JSON under `selection_report`.
+
+When traversing `mc_idx_mom`, AND in `cut_utils.valid(tree, 'mc_idx_mom')` first.
+A generator particle with no mother stores -1, which `follow()`/`reduce()` treat
+as a real index — silently, with no error — so it lands on the wrong entry.
+`valid()` is a plain `>= 0` mask; ANDing it keeps the array's shape intact and
+leaves the excluded entries countable via `ak.sum(~ok)`.
 
 ## Known ntuple quirks
 

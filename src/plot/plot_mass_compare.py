@@ -43,8 +43,8 @@ tag_m_all = ak.to_numpy(ak.flatten(tree['tag_dtf_m']))
 # it exists to compare "all candidates" against "best candidate" -- so every
 # candidate is eligible to win. Events with no candidates contribute nothing.
 eligible = ak.ones_like(tree['tag_dtf_m'], dtype=bool)
-best = cut_utils.best_candidate_mask(tree['tag_dtf_chi2'], eligible, method='min')
-tag_m_best = ak.to_numpy(ak.flatten(tree['tag_dtf_m'][best]))
+best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', eligible, method='min')
+tag_m_best = cut_utils.values(tree, 'tag_dtf_m', best)
 
 print(f"{'─' * 48}")
 print(f'Candidates plotted (all):  {len(tag_m_all)}')

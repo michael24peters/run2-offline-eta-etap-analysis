@@ -48,10 +48,14 @@ print(f'Reading from {args.input} and writing to {args.output}.')
 # The prt_/trigger branches are read and validated unconditionally so that every
 # selection variant runs over the same event sample and differs only by the cut.
 DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']
+MUON_PID = 13
+# Trigger lines are a property of this ntuple, not of cut_utils.
+TOS_TRIGGERS = ['tag_l0_tos0', 'tag_l0_tos1', 'tag_hlt1_tos0',
+                'tag_hlt1_tos1', 'tag_hlt2_tos0', 'tag_hlt2_tos1']
 tree = cut_utils.read_branches(
     args.input,
-    ['tag_dtf_m', 'tag_dtf_chi2', 'prt_idx_mom'] + DAUGHTER_FIELDS + cut_utils.TOS_TRIGGERS)
-tree = cut_utils.drop_malformed(tree, DAUGHTER_FIELDS, cut_utils.TOS_TRIGGERS)
+    ['tag_dtf_m', 'tag_dtf_chi2', 'prt_idx_mom'] + DAUGHTER_FIELDS + TOS_TRIGGERS)
+tree, _ = cut_utils.drop_malformed(tree)
 
 # Get lengths of arrays in tag_dtf_m to see how many candidates per event
 lengths = ak.to_numpy(ak.num(tree['tag_dtf_m']))
@@ -74,7 +78,16 @@ print(f"{'─' * 48}")
 
 # Apply the selection. pnn_mu_min defaults to the upstream floor, so a bare run
 # passes every candidate and only --tos / a raised threshold narrow it.
-keep = cut_utils.selection_mask(tree, use_tos=args.tos, pnn_mu_min=args.pnn_mu_min)
+keep = ak.ones_like(tree['tag_dtf_m'], dtype=bool)
+if args.tos:
+    tos, _ = cut_utils.tos_mask(tree, TOS_TRIGGERS)
+    keep = keep & tos
+if args.pnn_mu_min is not None:
+    # "passes OR isn't a muon", reduced onto the candidate, so a candidate is cut
+    # only when one of its own muon daughters fails.
+    muon_ok = ((tree['prt_pnn_mu'] > args.pnn_mu_min)
+               | (abs(tree['prt_pid']) != MUON_PID))
+    keep = keep & cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all')
 applied = ', '.join((['TOS'] if args.tos else [])
                     + ([f'pnn_mu>{args.pnn_mu_min}'] if args.pnn_mu_min is not None else []))
 mass = tree['tag_dtf_m'][keep]
@@ -85,8 +98,8 @@ if args.best:
     # Select the best candidate for each event, by lowest tag_dtf_chi2. `keep` is
     # the eligibility mask, so each event keeps the best candidate that survived
     # the selection; events with none left simply contribute nothing.
-    best = cut_utils.best_candidate_mask(tree['tag_dtf_chi2'], keep, method='min')
-    tag_m = ak.to_numpy(ak.flatten(tree['tag_dtf_m'][best]))
+    best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', keep, method='min')
+    tag_m = cut_utils.values(tree, 'tag_dtf_m', best)
 # Flatten to every surviving candidate
 else: tag_m = ak.to_numpy(ak.flatten(mass))
 

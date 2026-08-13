@@ -32,6 +32,10 @@ VARIANTS = [
 ]
 
 DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']
+MUON_PID = 13
+# Trigger lines are a property of this ntuple, not of cut_utils.
+TOS_TRIGGERS = ['tag_l0_tos0', 'tag_l0_tos1', 'tag_hlt1_tos0',
+                'tag_hlt1_tos1', 'tag_hlt2_tos0', 'tag_hlt2_tos1']
 
 # IO
 parser = argparse.ArgumentParser(
@@ -49,21 +53,28 @@ print(f'Reading from {args.input} and writing to {args.output}.')
 # Read once, then apply each variant's mask to the same tree.
 tree = cut_utils.read_branches(
     args.input,
-    ['tag_dtf_m', 'tag_dtf_chi2', 'prt_idx_mom'] + DAUGHTER_FIELDS + cut_utils.TOS_TRIGGERS)
-tree = cut_utils.drop_malformed(tree, DAUGHTER_FIELDS, cut_utils.TOS_TRIGGERS)
+    ['tag_dtf_m', 'tag_dtf_chi2', 'prt_idx_mom'] + DAUGHTER_FIELDS + TOS_TRIGGERS)
+tree, _ = cut_utils.drop_malformed(tree)
+
+# The TOS mask doesn't depend on the variant, so build it once.
+tos, _ = cut_utils.tos_mask(tree, TOS_TRIGGERS)
 
 samples = []
 for label, use_tos, pnn_mu_min, colour in VARIANTS:
-    keep = cut_utils.selection_mask(tree, use_tos=use_tos, pnn_mu_min=pnn_mu_min)
+    # "passes OR isn't a muon", reduced onto the candidate, so a candidate is cut
+    # only when one of its own muon daughters fails.
+    muon_ok = ((tree['prt_pnn_mu'] > pnn_mu_min)
+               | (abs(tree['prt_pid']) != MUON_PID))
+    keep = cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all')
+    if use_tos: keep = keep & tos
     # `keep` is the eligibility mask, so each event keeps the best candidate that
     # survived THIS variant's selection; events with none left contribute nothing.
-    best = cut_utils.best_candidate_mask(tree['tag_dtf_chi2'], keep, method='min')
-    samples.append((label, colour,
-                    ak.to_numpy(ak.flatten(tree['tag_dtf_m'][best]))))
+    best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', keep, method='min')
+    samples.append((label, colour, cut_utils.values(tree, 'tag_dtf_m', best)))
 
 print(f"{'─' * 56}")
-for label, _, values in samples:
-    print(f'{label:24s} {len(values):>12,d} best candidates')
+for label, _, sample in samples:
+    print(f'{label:24s} {len(sample):>12,d} best candidates')
 print(f"{'─' * 56}")
 
 # Plot
