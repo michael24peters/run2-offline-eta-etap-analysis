@@ -11,15 +11,37 @@ Usage:
     python concat_roots.py input_path [output.root]
 """
 
+import argparse
+
 import ROOT
 import os
 
-# User-inputted path to nested search ROOT files to concatenate
-print('Provide the base path containing the ROOT files to concatenate.')
-print('The base path must contain magup and magdown subdirectories.')
-print('Example: ntuple/mc_minbias_20260124/')
-input_path = input('Path: ').strip()
-if not input_path.endswith('/'): input_path += '/'
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('input_path', help='Base path containing the ROOT files')
+parser.add_argument('output', nargs='?', default=None,
+                    help='Output file (default: <input_path>/combined_files.root)')
+parser.add_argument('--subdirs', nargs='*', default=['magup', 'magdown'],
+                    help='Subdirectories to search (default: magup magdown)')
+args = parser.parse_args()
+
+# Convert input_path to properly formatted path
+input_path = os.path.abspath(args.input_path)
+# Same for output, if provided
+if args.output:
+    output_path = os.path.abspath(args.output)
+subdirs = args.subdirs
+
+# Make sure the input path exists
+if not os.path.exists(input_path):
+    print(f'[ERROR] Input path {input_path} does not exist.')
+    exit(1)
+# Create output path if it doesn't exist
+if args.output:
+    output_dir = os.path.dirname(output_path)
+    if not os.path.exists(output_dir):
+        print(f'[INFO] Creating output directory {output_dir}.')
+        os.makedirs(output_dir)
+
 # Now find all ROOT files in this path and its subdirectories
 infiles = []
 # Search the magup and magdown subdirectories within the provided path
