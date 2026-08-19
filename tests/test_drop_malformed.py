@@ -40,7 +40,7 @@ def test_well_formed_event_is_kept():
 # --- reason 1: no candidates -------------------------------------------------
 
 def test_drops_event_with_no_candidates():
-    """The commonest drop by far -- ~99% of MC events reconstruct nothing."""
+    """The most common drop -- ~99% of MC events reconstruct nothing."""
     tree = make_tree(tag_dtf_m=[[], [550.0]], tag_hlt2_tos0=[[], [1.0]],
                      prt_idx_mom=[[], [0, 0]], prt_pid=[[], [-13, 13]])
     kept, report = cut_utils.drop_malformed(tree)
@@ -98,9 +98,9 @@ def test_drops_event_where_a_daughter_branch_is_short():
 
 
 def test_every_prt_branch_is_checked_not_just_the_listed_ones():
-    """The real bug this guards: prt_idx_gen disagreeing with prt_idx_mom about
-    daughter count, in roughly 1 event in 200k. Auto-derivation is what catches
-    it without anyone having to remember to list the branch."""
+    """prt_idx_gen disagreeing with prt_idx_mom about daughter count. Auto-
+    derivation is what catches it without anyone having to remember to list the
+    branch."""
     fields = good_event()
     fields['prt_idx_gen'] = [[1, 2, 3]]           # 3 entries, not 4
     _, report = cut_utils.drop_malformed(make_tree(**fields))

@@ -34,6 +34,13 @@ def test_all(reco):
 
 
 def test_any(reco):
+    """True where any daughter of the candidate is True.
+    
+    cand 0 has daughters [T, T] -> True
+    cand 1 has daughters [F, T] -> True
+    event 1's cand has  [F, F]  -> False
+
+    """
     vals = ak.Array([[True, True, False, True], [False, False]])
     out = cut_utils.reduce(reco, vals, 'prt_idx_mom', how='any',
                            target_ref='tag_dtf_m')
@@ -70,6 +77,7 @@ def test_max(reco):
 
 
 def test_invalid_how_raises(reco):
+    """The five `how` modes are the only valid ones."""
     vals = ak.Array([[True, True, True, True], [True, True]])
     with pytest.raises(ValueError, match='Invalid how'):
         cut_utils.reduce(reco, vals, 'prt_idx_mom', how='median',
@@ -91,21 +99,38 @@ def test_invalid_how_raises(reco):
     ('max', -np.inf),
 ])
 def test_unreferenced_target_gets_the_identity(how, identity):
-    """Candidate 1 has no daughters at all; candidate 0 has two."""
-    tree = make_tree(tag=[[10.0, 20.0]], idx=[[0, 0]])
-    vals = ak.Array([[True, True]]) if how in ('all', 'any') else ak.Array([[1.0, 2.0]])
-    out = cut_utils.reduce(tree, vals, 'idx', how=how, target_ref='tag')
-    assert out[0][1] == identity
+    """A generator particle with no children lands on the identity.
+
+    eta -> mu+ mu-: the eta (index 0) collects both muons, but the muons
+    themselves are final state and collect nothing. That is the norm on the
+    generator side -- most mc_* entries have no children at all -- which is why
+    the identity is worth pinning for every aggregation.
+    """
+    tree = make_tree(mc_pid=[[221, -13, 13]], mc_idx_mom=[[-1, 0, 0]])
+    vals = (ak.Array([[True, True, True]]) if how in ('all', 'any')
+            else ak.Array([[1.0, 2.0, 3.0]]))
+    out = cut_utils.reduce(tree, vals, 'mc_idx_mom', how=how, target_ref='mc_pid')
+    assert out[0][1] == identity      # the mu+, no children
+    assert out[0][2] == identity      # the mu-, no children
 
 
 def test_all_identity_is_why_any_is_right_for_propagating_up():
-    """Documented trap: 'all' lights up every target nothing points at."""
-    tree = make_tree(tag=[[10.0, 20.0, 30.0]], idx=[[0]])
-    vals = ak.Array([[True]])
-    as_all = cut_utils.reduce(tree, vals, 'idx', how='all', target_ref='tag')
-    as_any = cut_utils.reduce(tree, vals, 'idx', how='any', target_ref='tag')
-    assert as_all.tolist() == [[True, True, True]]     # 1 and 2 are spurious
-    assert as_any.tolist() == [[True, False, False]]   # only the real one
+    """Why how='any' is the right choice for propagating selections up.
+
+    When pushing a reco selection up onto generator particles: one reco daughter
+    matched generator particle 1. With how='all' the three generator particles
+    nothing points at come back True as well, because an empty all() is True --
+    so the selection appears to cover the whole record. how='any' reports only
+    the particle that was really matched.
+    """
+    tree = make_tree(mc_pid=[[221, -13, 13, 22]], prt_idx_gen=[[1]])
+    selected = ak.Array([[True]])
+    as_all = cut_utils.reduce(tree, selected, 'prt_idx_gen', how='all',
+                              target_ref='mc_pid')
+    as_any = cut_utils.reduce(tree, selected, 'prt_idx_gen', how='any',
+                              target_ref='mc_pid')
+    assert as_all.tolist() == [[True, True, True, True]]     # 3 are spurious
+    assert as_any.tolist() == [[False, True, False, False]]  # only the match
 
 
 # --- the -1 "points nowhere" sentinel ---------------------------------------
@@ -401,3 +426,105 @@ def test_use_count_daughters_of_a_generator_mother():
     n = cut_utils.reduce(tree, ak.ones_like(tree['mc_pid'], dtype=bool),
                          'mc_idx_mom', how='sum', target_ref='mc_pid')
     assert n.tolist() == [[3.0, 0.0, 0.0, 0.0]]
+
+
+# --- identifying a decay by counting its daughters ----------------------------
+#
+# The pattern decay_mask() is built from, spelled out one reduce at a time. A
+# mother is the decay you want when every required PID appears the right number
+# of times AND the total daughter count matches -- the second check is what
+# rejects a mother carrying an extra daughter on top of the ones you asked for.
+
+@pytest.fixture
+def three_decays():
+    """One event, three generator mothers with different daughter sets.
+
+        index 0  eta -> mu+ mu- gamma      the decay we want
+        index 4  eta -> mu+ mu-            missing the photon
+        index 7  eta -> mu+ mu- gamma gamma  one photon too many
+    """
+    return make_tree(
+        mc_pid=[[221, -13, 13, 22,
+                 221, -13, 13,
+                 221, -13, 13, 22, 22]],
+        mc_idx_mom=[[-1, 0, 0, 0,
+                     -1, 4, 4,
+                     -1, 7, 7, 7, 7]],
+    )
+
+
+def n_daughters_of_pid(tree, pid_code):
+    """How many daughters of this PID does each generator particle have?"""
+    return cut_utils.reduce(tree, tree['mc_pid'] == pid_code, 'mc_idx_mom',
+                            how='sum', target_ref='mc_pid')
+
+
+def test_count_muplus_daughters(three_decays):
+    """One mu+ under each of the three mothers; everything else has none."""
+    n = n_daughters_of_pid(three_decays, -13)
+    assert n.tolist() == [[1.0, 0, 0, 0, 1.0, 0, 0, 1.0, 0, 0, 0, 0]]
+
+
+def test_count_muminus_daughters(three_decays):
+    n = n_daughters_of_pid(three_decays, 13)
+    assert n.tolist() == [[1.0, 0, 0, 0, 1.0, 0, 0, 1.0, 0, 0, 0, 0]]
+
+
+def test_count_photon_daughters(three_decays):
+    """This is the count that separates the three mothers: 1, 0 and 2."""
+    n = n_daughters_of_pid(three_decays, 22)
+    assert n[0][0] == 1.0      # eta -> mu mu gamma
+    assert n[0][4] == 0.0      # eta -> mu mu, no photon
+    assert n[0][7] == 2.0      # eta -> mu mu gamma gamma
+
+
+def test_count_total_daughters(three_decays):
+    """Reducing a constant True counts children regardless of PID. The
+    motherless mothers contribute nothing to anyone, so they count 0."""
+    ones = ak.ones_like(three_decays['mc_pid'], dtype=bool)
+    n = cut_utils.reduce(three_decays, ones, 'mc_idx_mom', how='sum',
+                         target_ref='mc_pid')
+    assert n[0][0] == 3.0
+    assert n[0][4] == 2.0
+    assert n[0][7] == 4.0
+    assert n[0][1] == 0.0      # a final-state muon has no children
+
+
+def test_species_counts_alone_do_not_identify_the_decay(three_decays):
+    """Why the total is needed: mother 7 has exactly one mu+ and one mu- and at
+    least one gamma, so PID counts alone would wrongly accept it."""
+    right_species = ((n_daughters_of_pid(three_decays, -13) == 1)
+                     & (n_daughters_of_pid(three_decays, 13) == 1)
+                     & (n_daughters_of_pid(three_decays, 22) >= 1))
+    assert bool(right_species[0][0])          # the real decay, correctly accepted
+    assert bool(right_species[0][7])          # the impostor slips through too
+
+
+def test_species_counts_plus_total_identify_the_decay(three_decays):
+    """Adding the total count rejects the impostor, and the whole thing is
+    exactly what decay_mask() does internally."""
+    ones = ak.ones_like(three_decays['mc_pid'], dtype=bool)
+    total = cut_utils.reduce(three_decays, ones, 'mc_idx_mom', how='sum',
+                             target_ref='mc_pid')
+    is_signal = ((three_decays['mc_pid'] == 221)
+                 & (n_daughters_of_pid(three_decays, -13) == 1)
+                 & (n_daughters_of_pid(three_decays, 13) == 1)
+                 & (n_daughters_of_pid(three_decays, 22) == 1)
+                 & (total == 3))
+    assert is_signal.tolist() == [[True, False, False, False,
+                                   False, False, False,
+                                   False, False, False, False, False]]
+
+
+def test_matches_decay_mask(three_decays):
+    """The hand-rolled version and the library function must agree."""
+    ones = ak.ones_like(three_decays['mc_pid'], dtype=bool)
+    total = cut_utils.reduce(three_decays, ones, 'mc_idx_mom', how='sum',
+                             target_ref='mc_pid')
+    manual = ((three_decays['mc_pid'] == 221)
+              & (n_daughters_of_pid(three_decays, -13) == 1)
+              & (n_daughters_of_pid(three_decays, 13) == 1)
+              & (n_daughters_of_pid(three_decays, 22) == 1)
+              & (total == 3))
+    library = cut_utils.decay_mask(three_decays, 221, [-13, 13, 22])
+    assert manual.tolist() == library.tolist()

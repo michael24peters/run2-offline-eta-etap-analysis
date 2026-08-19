@@ -143,7 +143,7 @@ def gen_with_strays():
 
         mc_pid     = [221, -13, 13, 22,  22, -211, 2112]
         mc_idx_mom = [ -1,   0,  0,  0,  -1,   -1,   -1]
-                      |---- the decay ---|  |--- strays ---|
+                     |--- the decay ---||--- strays ---|
     """
     return make_tree(
         mc_pid=[[221, -13, 13, 22, 22, -211, 2112]],
