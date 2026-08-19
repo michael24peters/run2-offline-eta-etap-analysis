@@ -136,6 +136,25 @@ def drop_malformed(tree, tag_ref='tag_dtf_m', idx_branch='prt_idx_mom',
     Returns:
     --------
     (tree, report) : the filtered event tree, and a dict of what was dropped
+
+    Dict Keys:
+    ----------
+    read : int, number of events read
+    kept : int, number of events kept
+    dropped_total : int, number of events dropped
+    dropped_no_candidates : int, number of events dropped for having no
+                            candidates
+    dropped_idx_out_of_range : int, number of events dropped for having an index
+                               that is out of range
+    dropped_daughter_length_mismatch : int, number of events dropped for having
+                                       a mismatch in the length of daughter
+                                       branches
+    dropped_partial_candidate_branch : int, number of events dropped for having
+                                       a candidate branch with a partial list
+    partial_by_branch : dict, candidate branch -> number of events dropped for
+                        that branch
+    daughter_fields_checked : list of str, the daughter fields checked
+    candidate_fields_checked : list of str, the candidate fields checked
     """
     if daughter_fields is None:
         daughter_fields = [f for f in tree.fields
@@ -412,47 +431,15 @@ def follow(tree, array, idx_branch):
     `array` must be indexed by whatever `idx_branch` points INTO, and the result
     comes back at the level of `idx_branch` itself.
 
-    Example: 2 events:
-
-        tag_dtf_m   = [[10.0, 20.0], [30.0]]     3 candidates -- what we have
-        prt_idx_mom = [[0, 0, 1, 1], [0, 0]]     6 indices / daughters -- target
-
-        follow(tree, tag_dtf_m, 'prt_idx_mom')
-            = [[10.0, 10.0, 20.0, 20.0], [30.0, 30.0]]
-
-    Read prt_idx_mom as "daughter 0 belongs to candidate 0, daughter 1 belongs
-    to candidate 0, daughter 2 belongs to candidate 1, ...". Because both sides
-    are jagged with the same number of events, awkward applies it event by
-    event, so event 1's index 0 picks event 1's candidate, not event 0's.
-
-        event 0:  take [10.0, 20.0] at [0, 0, 1, 1] -> [10.0, 10.0, 20.0, 20.0]
-        event 1:  take [30.0]       at [0, 0]       -> [30.0, 30.0]
-
-    The same call propagates a MASK down a level, which is the usual use:
-
-        mask        = [[True, False], [True]]
-        prt_idx_mom = [[0, 0, 1, 1], [0, 0]]
-        follow(...) = [[True, True, False, False], [True, True]]
-
-    i.e. the daughters of only the surviving (True) candidates are kept.
-
     NOTE: a negative index (mc_idx_mom uses -1 for "no mother") is NOT caught
     here -- numpy-style it silently wraps to the last entry. AND in
     valid(tree, idx_branch) to handle those.
     """
-    # The index branch is stored as float64 (everything in the ntuple is), and
-    # awkward will not index with floats, so cast to int first. This does not
-    # round or clamp -- 2.0 becomes 2, and -1.0 becomes -1.
-    #     tree['prt_idx_mom'] = [[0.0, 0.0, 1.0, 1.0], [0.0, 0.0]]
-    #                        -> [[0,   0,   1,   1  ], [0,   0  ]]
+    # The index branch is stored as float64, but indexes are just integers, so
+    # convert them to in64.
     idx = ak.values_astype(tree[idx_branch], np.int64)
 
-    # `array[idx]` where both sides are jagged with the same number of events is
-    # a per-event take: event k's indices are applied to event k's values, so an
-    # index never reaches across an event boundary.
-    #     event 0:  take [10.0, 20.0] at [0, 0, 1, 1] -> [10.0, 10.0, 20.0, 20.0]
-    #     event 1:  take [30.0]       at [0, 0]       -> [30.0, 30.0]
-    # The result has the shape of `idx`, i.e. one entry per daughter.
+    # Broadcast array to the same jagged structure as idx_branch
     return array[idx]
 
 
@@ -478,6 +465,10 @@ def valid(tree, idx_branch):
                        ^                 ^               ^
                        the eta           the eta         a muon produced
                        (no mother)                       outside the decay
+        
+        From here, follow() can be used safely, and looks like:
+        follow(mc_pid, mc_idx_mom)[valid(mc_idx_mom)] = 
+            = [[221.0, 221.0], [221.0, 221.0]]
     """
 
     return tree[idx_branch] >= 0
@@ -723,6 +714,7 @@ def decay_mask(tree, mother_pid, daughter_pids, idx_branch='mc_idx_mom',
     # Get the daughters of those mothers, and check that each mother has the
     # right number of daughters and the right PIDs.
     # Get daughters
+    # Example: n_all = [[3, 0, 0, 0]] for the eta -> mu mu gamma example above.
     n_all = reduce(tree, ak.ones_like(tree[pid_branch], dtype=bool), idx_branch,
                    how='sum', target_ref=target_ref)
     # Check that each mother has the correct number of daughters
