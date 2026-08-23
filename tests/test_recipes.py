@@ -236,15 +236,6 @@ def test_multiplicity_check_catches_a_malformed_candidate():
     assert (n_gamma == 1).tolist() == [[True, False]]
 
 
-def test_worst_muon_pnn_per_candidate(event):
-    """When you want the value rather than a pass/fail, use min. Push non-muons
-    to +inf first or they win the minimum -- photons carry pnn_mu = 0."""
-    is_muon = abs(event['prt_pid']) == 13
-    out = cut_utils.reduce(event, ak.where(is_muon, event['prt_pnn_mu'], np.inf),
-                           'prt_idx_mom', how='min', target_ref='tag_dtf_m')
-    assert out.tolist() == [[0.97, 0.20]]
-
-
 def test_propagate_a_candidate_selection_to_its_daughters(event):
     """follow() down. The result is daughter-shaped, so it indexes prt_* directly."""
     best = cut_utils.best_candidate_mask(event, 'tag_dtf_chi2',

@@ -102,21 +102,9 @@ def test_infinite_metric_on_an_eligible_candidate():
 # --- normal selection --------------------------------------------------------
 
 def test_min_picks_the_smallest(cands, eligible):
-    best = cut_utils.best_candidate_mask(cands, 'tag_dtf_chi2', eligible, method='min')
+    best = cut_utils.best_candidate_mask(cands, 'tag_dtf_chi2', eligible)
     assert best[0].tolist() == [True, False, False]      # 0.42 < 1.82
     assert best[2].tolist() == [True, False]             # 4.0 < 9.0
-
-
-def test_max_picks_the_largest(cands, eligible):
-    best = cut_utils.best_candidate_mask(cands, 'tag_dtf_chi2', eligible, method='max')
-    assert best[0].tolist() == [False, False, True]      # 1.82 > 0.42
-    assert best[2].tolist() == [False, True]             # 9.0 > 4.0
-
-
-def test_closest_picks_nearest_target(cands, eligible):
-    best = cut_utils.best_candidate_mask(cands, 'tag_dtf_chi2', eligible,
-                                         method='closest', target=1.9)
-    assert best[0].tolist() == [False, False, True]      # 1.82 nearest 1.9
 
 
 def test_ineligible_candidate_never_wins_even_if_best(cands, eligible):
@@ -129,7 +117,7 @@ def test_ineligible_candidate_never_wins_even_if_best(cands, eligible):
 
 def test_cutting_the_globally_best_candidate_keeps_the_event():
     """If the best candidate is cut, the event keeps its best SURVIVOR rather
-    than being dropped -- the failure mode that motivated the design."""
+    than being dropped."""
     tree = make_tree(tag_dtf_chi2=[[1.0, 5.0, 9.0]])
     eligible = ak.Array([[False, True, True]])
     best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', eligible)
@@ -192,28 +180,6 @@ def test_negative_metrics():
     eligible = ak.Array([[True, True, True]])
     best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', eligible)
     assert best.tolist() == [[False, False, True]]
-
-
-def test_max_with_negative_metrics():
-    """method='max' negates the metric, so sign handling must survive it."""
-    tree = make_tree(tag_dtf_chi2=[[-5.0, -1.0, -9.0]])
-    eligible = ak.Array([[True, True, True]])
-    best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', eligible, method='max')
-    assert best.tolist() == [[False, True, False]]
-
-
-def test_closest_without_target_raises():
-    tree = make_tree(tag_dtf_chi2=[[1.0]])
-    with pytest.raises(ValueError, match='requires a target'):
-        cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', ak.Array([[True]]),
-                                      method='closest')
-
-
-def test_invalid_method_raises():
-    tree = make_tree(tag_dtf_chi2=[[1.0]])
-    with pytest.raises(ValueError, match='Invalid method'):
-        cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', ak.Array([[True]]),
-                                      method='median')
 
 
 def test_events_are_independent(cands, eligible):

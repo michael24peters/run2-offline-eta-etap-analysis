@@ -15,6 +15,11 @@ want:
 
 import numpy as np
 
+# PDG masses [MeV]. Every fit in this repo works in MeV; divide by 1000 for
+# the GeV^2 Dalitz variables.
+M_MU  = 105.6583755
+M_ETA = 547.862
+
 
 def pt(px, py):
     """Transverse momentum."""

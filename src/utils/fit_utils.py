@@ -10,6 +10,10 @@ the time anything here is called, the data is a flat array of values.
 import math
 import numpy as np
 from scipy.special import erf
+from iminuit import Minuit
+from iminuit.cost import ExtendedBinnedNLL
+# Constraint-based fitting
+from iminuit.cost import NormalConstraint
 
 def _trapz(y, x):
     """Trapezoidal integration"""
@@ -183,7 +187,6 @@ def make_gauss_cost(counts, bin_edges, xmin, xmax):
     """ExtendedBinnedNLL cost for Gaussian signal + 2nd-order Chebyshev
     background. Free parameters: mean, sigma, n_sig, n_bkg, c0, c1.
     """
-    from iminuit.cost import ExtendedBinnedNLL
 
     def scaled_cdf(xe, mean, sigma, n_sig, n_bkg, c0, c1):
         return (
@@ -199,7 +202,6 @@ def make_dcb_cost(counts, bin_edges, xmin, xmax):
     ExtendedBinnedNLL cost for DCB signal + 2nd-order Chebyshev background.
     Free parameters: mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1.
     """
-    from iminuit.cost import ExtendedBinnedNLL
 
     def scaled_cdf(xe, mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1):
         return (
@@ -228,35 +230,42 @@ def make_dcb_sym_cost(counts, bin_edges, xmin, xmax):
 
 # --- Fit ---
 
-def run_fit(cost, initial_values, limits, fixed=None):
+def run_fit(cost, initial_values, limits=None, fixed=None, seeds=None):
     """
     Run MIGRAD (minimisation) then HESSE (covariance / symmetric errors).
 
     Parameters:
-    cost           : iminuit cost function (e.g. ExtendedBinnedNLL)
+    cost           : iminuit cost function (e.g. ExtendedBinnedNLL, or a sum
+                     of one with NormalConstraint terms added with `+`)
     initial_values : dict {param_name: start_value}
-    limits         : dict {param_name: (lo, hi)}
+    limits         : optional dict {param_name: (lo, hi)}, either bound may
+                     be None
     fixed          : optional list of param names to hold at their
-                     initial_values instead of floating (e.g. peak-shape
-                     params fixed from a prior inclusive fit, so only
-                     yields float in a low-statistics per-bin fit)
+                     initial_values instead of floating
+    seeds          : optional list of alternative {param: value} dicts,
+                     tried in order (each merged over initial_values) until
+                     one produces m.valid == True. Returns the lowest-fval
+                     attempt if none validate.
 
     Returns:
     m : iminuit.Minuit
         Fitted Minuit object. Key attributes:
           m.values     – best-fit parameter values (MnUserParameters-like dict)
           m.errors     – HESSE symmetric errors
+          m.covariance – full covariance matrix, name-indexable, e.g.
+                         m.covariance[['c0', 'c1']] for a 2x2 submatrix
           m.valid      – True if MIGRAD converged
           m.fval       – minimum function value (2 * NLL)
           m.nfit       – number of free floating parameters
           m.fmin.edm   – estimated distance to minimum
     """
-    from iminuit import Minuit
-    m = Minuit(cost, **initial_values)
-    for param, lim in limits.items(): m.limits[param] = lim
-    for param in (fixed or []): m.fixed[param] = True
-    # Give MIGRAD a call budget. MIGRAD stops early and reports valid=False 
-    # even though it was sitting at the minimum. A second migrad pass recovers cases the first misses.
-    m.migrad(ncall=100000)  # Find the minimum
-    m.hesse()  # Compute uncertainties from the Hessian at the minimum
-    return m
+    best = None
+    for start in [initial_values, *({**initial_values, **s} for s in (seeds or []))]:
+        m = Minuit(cost, **start)
+        for param, lim in (limits or {}).items(): m.limits[param] = lim
+        for param in (fixed or []): m.fixed[param] = True
+        m.migrad(ncall=100000)
+        m.hesse()
+        if m.valid: return m
+        if best is None or m.fval < best.fval: best = m
+    return best

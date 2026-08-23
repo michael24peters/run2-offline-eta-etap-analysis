@@ -7,7 +7,6 @@ materialising each mother's daughter list.
 """
 
 import awkward as ak
-import pytest
 from conftest import make_tree
 
 import cut_utils
@@ -132,23 +131,3 @@ def test_events_are_independent():
                      mc_idx_mom=[[-1, 0, 0], [-1, 0, 0, 0]])
     out = cut_utils.decay_mask(tree, 221, [-13, 13])
     assert out.tolist() == [[True, False, False], [False, False, False, False]]
-
-
-def test_requires_a_self_referential_index_branch():
-    """decay_mask reads mothers and daughters from the SAME pid_branch, so it
-    only works where the index branch points back into its own collection --
-    i.e. mc_idx_mom (mc_* -> mc_*), not prt_idx_mom (prt_* -> tag_*).
-
-    Documenting the limitation rather than the workaround: a cross-collection
-    version would need a separate mother_pid_branch argument.
-    """
-    tree = make_tree(
-        tag_dtf_m=[[550.0, 549.0]],
-        prt_pid=[[-13, 13, -13, 13, 22]],
-        prt_idx_mom=[[0, 0, 1, 1, 1]],
-    )
-    with pytest.raises(Exception):
-        cut_utils.decay_mask(tree, 221, [-13, 13],
-                             idx_branch='prt_idx_mom',
-                             pid_branch='prt_pid',
-                             target_ref='tag_dtf_m')

@@ -59,7 +59,7 @@ DEFAULT_CONFIG = {
     'description'    : 'Plot DCB fit results from JSON file',
     'output'         : 'dcb_mass_fit.png',  # output filename
     'title'          : 'Eta Mass',  # plot title
-    # "xlim"           : (420, 680),
+    "xlim"           : (400, 700),
     # "pull_ylim"      : (-3, 3),
     'font'           : 'sans',   # "serif" (default, STIXGeneral) or "sans" (Inter)
     # Pinned upper left: the stats box is tall enough that "auto" placement can

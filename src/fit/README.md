@@ -29,7 +29,7 @@ python src/fit/driver_dcb.py data.root \
     --outdir out \
     --max-events 500000 \
     --xmin 480 --xmax 620 --nbins 80 \
-    --mean-init 547.9 --sigma-init 10.0 \
+    --mean-init 547.862 --sigma-init 10.0 \
     --alphaL-init 1.5 --nL-init 2.0 \
     --alphaR-init 1.5 --nR-init 2.0
 ```
@@ -41,7 +41,7 @@ python src/fit/driver_gauss.py data.root \
     --outdir out \
     --max-events 500000 \
     --xmin 480 --xmax 620 --nbins 80 \
-    --mean-init 547.9 --sigma-init 10.0
+    --mean-init 547.862 --sigma-init 10.0
 ```
 
 Each driver runs the fit, saves `results_dcb.json` / `results_gauss.json`,
@@ -53,6 +53,83 @@ The drivers only expose fit hyperparameters as flags -- plot styling (title,
 font, stats box, etc.) isn't driver-configurable; it comes from each plot
 script's `DEFAULT_CONFIG` (see "Overriding plot style" below).
 
+## Running a full fit, start to finish (eta2mumu / eta2mumugamma)
+
+Two stages, driven by hand; no MC needed for either of them. `fit_dcb()` / `fit_gauss()` already run their own internal two-stage MIGRAD (background -- and for DCB, tails -- fixed first, then floated from that result) on every call, so this is the outer loop on top of that: a quick Gaussian check, then the DCB fit seeded from what it found.
+
+### 1. Gaussian sanity check
+
+Confirms the selection gives a clean peak and gives a rough sigma to seed the DCB fit with.
+
+eta2mumu:
+```
+python src/fit/driver_gauss.py ntuple/lhcb/eta2mumu/20260716/combined_files.root \
+    --outdir out/eta2mumu/turbo/$(date +%Y%m%d) \
+    --pnn-mu-min 0.95 \
+    --mean-init 547.862 \
+    --sigma-init 5.0
+```
+
+eta2mumugamma -- use `20260608`, not `20260716` (the `20260716` eta2mumugamma production writes each event ~5x, TBD why):
+```
+python src/fit/driver_gauss.py ntuple/lhcb/eta2mumugamma/20260608/combined_files.root \
+    --outdir out/eta2mumugamma/turbo/$(date +%Y%m%d) \
+    --xmin 450 --xmax 650 \
+    --pnn-mu-min 0.95 \
+    --mean-init 547.862 \
+    --sigma-init 10.0
+```
+
+Read the `[INFO] ... mean=...  σ=...` line on stderr and look at `gauss_mass_fit.png`. `--mean-init` doesn't need setting -- it already defaults to `kinematics.M_ETA` (547.862 MeV). TOS is on by default; add `--no-tos` to turn it off.
+
+### 2. DCB fit, seeded from stage 1
+
+Same file, same selection flags, `--sigma-init` set to whatever stage 1 reported:
+```
+python src/fit/driver_dcb.py ntuple/lhcb/eta2mumu/20260716/combined_files.root \
+    --outdir out/eta2mumu/turbo/$(date +%Y%m%d) \
+    --pnn-mu-min 0.95 \
+    --sigma-init <σ from step 1> \
+    --alphaL-init 1.5 --nL-init 2.0 --alphaR-init 1.5 --nR-init 2.0
+```
+```
+python src/fit/driver_dcb.py ntuple/lhcb/eta2mumugamma/20260608/combined_files.root \
+    --outdir out/eta2mumugamma/turbo/$(date +%Y%m%d) \
+    --xmin 450 --xmax 650 \
+    --pnn-mu-min 0.95 \
+    --sigma-init <σ from step 1> \
+    --alphaL-init 1.5 --nL-init 2.0 --alphaR-init 1.5 --nR-init 2.0
+```
+
+## Constraining tails from an MC fit
+
+It may help to get starting values from MC first and use them as starting points for real data fits:
+
+```python
+import sys
+sys.path.insert(0, "src/utils")
+sys.path.insert(0, "src/fit")
+import numpy as np
+from fit_dcb import fit_dcb, TAIL_PARAMS
+
+# 1. Fit signal MC -- same selection driver_dcb.py would apply
+#    (read_branches -> drop_malformed -> cuts -> best_candidate_mask ->
+#    values), against ntuple/mc/<channel>/signal_*/combined_files.root.
+mc_masses = ...
+_, m_mc = fit_dcb(mc_masses, sigma_init=..., alphaL_init=1.5, nL_init=2.0,
+                  alphaR_init=1.5, nR_init=2.0)
+
+tail_values = np.array([m_mc.values[p] for p in TAIL_PARAMS])
+tail_cov    = np.array(m_mc.covariance[list(TAIL_PARAMS)])
+
+# 2. Fit data with that as a prior on the tail-shape group.
+data_masses = ...
+result, m_data = fit_dcb(data_masses, sigma_init=...,
+                         tail_prior=(tail_values, tail_cov))
+```
+
+`m_mc.covariance[list(TAIL_PARAMS)]` (a plain list) gives the real 4x4 submatrix including tail-tail correlations. `m_mc.covariance[TAIL_PARAMS, TAIL_PARAMS]` (a tuple passed as a paired index) silently returns only the 4 diagonal entries instead -- always use the list form.
+
 ## Changing the selection
 
 Selection lives at the top of each driver as plain module-level constants, not
@@ -62,7 +139,7 @@ CLI flags -- editing them is the intended way to change what gets fit:
 MASS_BRANCH     = 'tag_dtf_m'      # the quantity being fit
 METRIC_BRANCH   = 'tag_dtf_chi2'   # ranks candidates within an event
 DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']
-PNN_MU_MIN      = 0.95
+PNN_MU_MIN      = 0.95  # ProbNNMu minimum for selection
 MUON_PID        = 13
 TOS_TRIGGERS    = ['tag_l0_tos0', ...]   # ntuple-specific, so not in cut_utils
 ```
@@ -102,9 +179,7 @@ masses = cut_utils.values(tree, MASS_BRANCH, best)             # flat numpy
 result = fit_gauss(masses, ...)
 ```
 
-`values()` is the awkward/numpy boundary: everything upstream is jagged and
-per-event, everything downstream is a flat array of numbers. Swapping what gets
-fit is one string.
+`values()` is where awkward is converted to numpy: everything upstream is jagged and per-event, everything downstream is a flat array of numbers.
 
 Two things to know before editing that block:
 
@@ -134,9 +209,7 @@ to write into the results JSON under `selection_report`.
 
 When traversing `mc_idx_mom`, AND in `cut_utils.valid(tree, 'mc_idx_mom')` first.
 A generator particle with no mother stores -1, which `follow()`/`reduce()` treat
-as a real index — silently, with no error — so it lands on the wrong entry.
-`valid()` is a plain `>= 0` mask; ANDing it keeps the array's shape intact and
-leaves the excluded entries countable via `ak.sum(~ok)`.
+as a real index and throws no error, which then produces the wrong entry.
 
 ## Known ntuple quirks
 
@@ -179,102 +252,15 @@ past the last candidate. Those events are dropped and counted.
 > `find_best_candidates()` takes `metric=` / `method=` so a better discriminant
 > can be substituted.
 
-## Overriding plot style
-
-Plot as a standalone CLI (only takes the JSON path -- uses `plot_dcb.py`'s
-`DEFAULT_CONFIG` as-is):
-
-```
-python src/plot/plot_dcb.py out/results_dcb.json
-```
-
-To override any plot style value, either edit `DEFAULT_CONFIG` in
-`plot_dcb.py` directly, or call `plot_dcb()` as a function with every value
-defined explicitly:
-
-```python
-import sys
-sys.path.insert(0, "src/plot")
-sys.path.insert(0, "src/utils")
-import plot_utils
-from plot_dcb import plot_dcb
-
-data = plot_utils.load_data("out/results_dcb.json")
-plot_dcb(data, {
-    "output":     "out/dcb_mass_fit.png",
-    "title":      "Eta Mass",
-    "font":       "sans",          # "serif" (STIXGeneral) or "sans" (Inter)
-    "x_lim":      (420, 680),      # or None to auto-range from the data
-    "pull_ylim":  (-4, 4),         # or None to auto-range from the pulls
-    "text_loc":   "upper left",    # "auto", or any plot_style.POSITIONS key
-                                    # (see "Config keys" below for the full list)
-    "show_stats": True,            # False to omit the stats box entirely
-    "legend_loc": "upper right",   # any matplotlib legend loc string
-})
-```
-
-`plot_gauss` works identically, with `plot_gauss.py`'s own `DEFAULT_CONFIG`.
-
-Each fit type's config stays entirely in that fit type's own file -- nothing is shared or
-copied between DCB and Gauss, so their titles/ranges/inits can diverge independently.
 
 ## Fitting an arbitrary array
 
-Because the fit modules take a numpy array, they can fit anything -- not just
-what a driver produced:
+The fit modules were written in a generic way so as to fit any numpy array of values:
 
 ```python
 import sys
 sys.path.insert(0, "src/fit")
 from fit_dcb import fit_dcb
 
-result = fit_dcb(masses, xmin=480, xmax=620, nbins=80)   # masses: 1-D ndarray
+result = fit_dcb(array, xmin=480, xmax=620, nbins=80)   # array: numpy array of values
 ```
-
-`result['meta']` records `n_input` (how many values were fit) but no filename;
-the driver adds `input_file` and `selection` afterwards for provenance.
-
-### Config keys
-
-These are the keys `plot_fit_data()` reads out of a config dict (whether that
-dict is `DEFAULT_CONFIG` as-is, or `DEFAULT_CONFIG` with overrides layered on
-top via `plot_dcb(data, {...})` / `plot_gauss(data, {...})`):
-
-- `output`: path to save the PNG to.
-- `title`: plot title.
-- `x_lim` (optional): `(xmin, xmax)` tuple; omit or set `None` to auto-range
-  from the data.
-- `pull_ylim` (optional): `(ymin, ymax)` tuple for the pull panel; omit or
-  set `None` to auto-range from the pulls.
-- `font` (optional): `"serif"` (default, STIXGeneral) or `"sans"` (Inter,
-  falls back to a generic sans-serif if Inter isn't installed).
-- `show_stats` (optional, default `True`): set `False` to omit the stats box
-  entirely.
-- `text_loc` (optional, default `"auto"`): where the stats box goes.
-  `"auto"` picks the emptiest of the upper positions by default; or pass any
-  `plot_style.POSITIONS` key directly for manual placement: `"upper left"`,
-  `"upper center"`, `"upper right"`, `"middle left"`, `"middle right"`,
-  `"lower left"`, `"lower center"`, `"lower right"`.
-- `legend_loc` (optional): any matplotlib legend `loc` string, default `"best"`.
-- `build_text`: function `(params, chi2_per_ndof) -> (plot_text, term_text)`
-  that builds the stats box content -- see `build_text()` in `plot_dcb.py` /
-  `plot_gauss.py` for how it's assembled via `plot_style.build_stats_text()`.
-
-### How config flows
-
-Each layer only knows about the layer directly below it, and only passes down what it
-needs to override -- no script reaches into another script's config object:
-
-- `driver_dcb.py` / `driver_gauss.py` own the fit hyperparameters (as CLI flags) and call
-  `fit_dcb()` / `fit_gauss()` directly. They then call `plot_dcb(result, {"output": ...})`
-  / `plot_gauss(result, {"output": ...})`, passing only the one override they need.
-- `plot_dcb.py` / `plot_gauss.py` own `DEFAULT_CONFIG` (styling: title, font, stats-box
-  placement, `build_text`) and expose a `plot_dcb(data, config=None)` / `plot_gauss(data,
-  config=None)` function that layers any caller overrides on top of `DEFAULT_CONFIG` before
-  calling into the shared engine. Running `python plot_dcb.py results.json` standalone (no
-  driver) just uses `DEFAULT_CONFIG` as-is.
-- `plot_mass_fit.py` is the shared rendering engine (`plot_fit_data(data, config)`) -- it owns
-  no defaults of its own, it just renders whatever config dict it's handed. It builds on two
-  shared helper modules: `src/utils/plot_utils.py` (generic JSON I/O, font setup, CLI arg
-  parsing) and `src/utils/plot_style.py` (the stats-box/placement/save-and-report "house
-  style," shared by any current or future fit-plot type).

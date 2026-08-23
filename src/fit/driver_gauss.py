@@ -12,7 +12,7 @@ selection. fit_gauss() downstream sees only a numpy array of masses.
 Usage:
     python driver_gauss.py input.root [--outdir out] [--max-events N]
                           [--xmin 480] [--xmax 620] [--nbins 80]
-                          [--mean-init 548] [--sigma-init 10]
+                          [--mean-init 548] [--sigma-init 5]
 """
 
 import sys
@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'fit'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
 import cut_utils
+import kinematics
 from fit_gauss import fit_gauss
 from plot_gauss import plot_gauss
 
@@ -38,9 +39,9 @@ from plot_gauss import plot_gauss
 
 MASS_BRANCH     = 'tag_dtf_m'  # the quantity being fit
 METRIC_BRANCH   = 'tag_dtf_chi2'  # ranks candidates within an event
-DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']  # per-daughter, need regrouping
-PNN_MU_MIN      = 0.95  # every muon daughter must exceed this
-MUON_PID        = 13    # |pid| of the daughters the pnn_mu cut applies to
+DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']  # branches the cuts below read
+PNN_MU_MIN      = 0.4  # every muon daughter must exceed this
+MUON_PID        = 13  # |pid| of the daughters the pnn_mu cut applies to
 
 # Trigger-on-signal lines OR'd together by the TOS cut. These are a property of
 # this ntuple, not of the framework, so they live here rather than in cut_utils.
@@ -67,15 +68,15 @@ parser.add_argument('--label', default='',
 parser.add_argument('--max-events', type=int, default=None,
                     help='Only read the first N events (default: all)')
 parser.add_argument('--pnn-mu-min', type=float, default=PNN_MU_MIN,
-                    help=f'Muon PID threshold (default: {PNN_MU_MIN}, the floor already '
-                         'applied upstream in the ntuple, i.e. no additional cut). Raise it '
-                         'to tighten, e.g. --pnn-mu-min 0.95')
+                    help=f'Muon PID threshold; every muon daughter must exceed it '
+                         f'(default: {PNN_MU_MIN}). The ntuple already carries a 0.4 floor '
+                         'upstream, so --pnn-mu-min 0.4 is effectively no cut.')
 parser.add_argument('--no-tos', action='store_true',
                     help='Skip the TOS trigger requirement, for selection studies')
 parser.add_argument('--xmin', type=float, default=480.0, help='Lower mass bound [MeV]')
 parser.add_argument('--xmax', type=float, default=620.0, help='Upper mass bound [MeV]')
 parser.add_argument('--nbins', type=int, default=80, help='Number of histogram bins')
-parser.add_argument('--mean-init', type=float, default=547.9, help='Initial mean [MeV]')
+parser.add_argument('--mean-init', type=float, default=kinematics.M_ETA, help='Initial mean [MeV]')
 parser.add_argument('--sigma-init', type=float, default=5.0, help='Initial sigma [MeV]')
 args = parser.parse_args()
 
@@ -108,7 +109,7 @@ if pnn_mu_min is not None:
 # Reduce to one candidate per event. `keep` goes in as the eligibility mask, so
 # each event keeps the best candidate that actually survived the cuts; the result
 # is a mask on the same candidate axis, ready to index any per-candidate branch.
-best = cut_utils.best_candidate_mask(tree, METRIC_BRANCH, keep, method='min')
+best = cut_utils.best_candidate_mask(tree, METRIC_BRANCH, keep)
 masses = cut_utils.values(tree, MASS_BRANCH, best)  # <- awkward → numpy
 
 # cut_utils returns its diagnostics rather than printing them, so the driver
@@ -131,7 +132,7 @@ print(f'[INFO] cutflow: {int(ak.sum(ak.num(keep)))} candidates -> '
       f'{len(masses)} events with a best candidate', file=sys.stderr)
 
 # --- Fit ---------------------------------------------------------------------
-result = fit_gauss(
+result, m = fit_gauss(
     masses,
     xmin=args.xmin, xmax=args.xmax, nbins=args.nbins,
     mean_init=args.mean_init, sigma_init=args.sigma_init,

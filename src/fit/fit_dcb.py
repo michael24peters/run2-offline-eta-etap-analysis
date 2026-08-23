@@ -14,30 +14,40 @@ happen upstream in driver_dcb.py via cut_utils.
 import sys
 import os
 import numpy as np
+from iminuit.cost import NormalConstraint
 # Ensure utils/fit_utils.py is importable
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 import fit_utils
+import kinematics
+
+# The DCB tail-shape parameters, as a group.
+TAIL_PARAMS = ('alphaL', 'nL', 'alphaR', 'nR')
+
 
 def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
-            mean_init=547.9, sigma_init=10.0,
+            mean_init=kinematics.M_ETA, sigma_init=5.0,
             alphaL_init=1.5, nL_init=2.0,
-            alphaR_init=1.5, nR_init=2.0):
+            alphaR_init=1.5, nR_init=2.0,
+            mean_prior=None, sigma_prior=None, tail_prior=None):
     """
-    Run the asymmetric DCB + Chebyshev fit and return the result dict.
+    Run the asymmetric DCB + Chebyshev fit and return (result, m).
 
-    values : 1-D numpy array of masses [MeV], one per event. This function
-             applies no selection of its own -- it fits whatever it is given.
+    values : 1-D numpy array of masses [MeV], one per event.
+    mean_prior, sigma_prior : optional (value, error) in MeV; see fit_gauss().
+    tail_prior : optional (values, cov) for TAIL_PARAMS as a group -- `values`
+             a length-4 array/dict, `cov` its 4x4 covariance. Adds
+             NormalConstraint(TAIL_PARAMS, values, error=cov) to the cost.
+
+    Returns:
+    result : JSON-serialisable dict.
+    m      : the final iminuit.Minuit object.
     """
     values = np.asarray(values, dtype=float)
 
     centers, counts, errors = fit_utils.make_histogram(
         values, xmin=xmin, xmax=xmax, nbins=nbins)
-    # Edges (nbins+1) rather than centers (nbins): the extended binned NLL
-    # integrates the model CDF between consecutive edges.
     bin_edges = np.linspace(xmin, xmax, nbins + 1)
-    # Total observed yield in the fit window, used to seed the yields and set
-    # their limits.
     N_CAND = counts.sum()
     print(f'[INFO] {int(N_CAND)} entries in [{xmin}, {xmax}] MeV across {nbins} bins',
           file=sys.stderr)
@@ -45,11 +55,13 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
     # Cost function: extended binned NLL comparing `counts` to the expected
     # events per bin from n_sig * DCB + n_bkg * Chebyshev.
     cost = fit_utils.make_dcb_cost(counts, bin_edges, xmin, xmax)  # asymmetric version
+    if mean_prior is not None:
+        cost = cost + NormalConstraint('mean', mean_prior[0], error=mean_prior[1])
+    if sigma_prior is not None:
+        cost = cost + NormalConstraint('sigma', sigma_prior[0], error=sigma_prior[1])
+    if tail_prior is not None:
+        cost = cost + NormalConstraint(TAIL_PARAMS, tail_prior[0], error=tail_prior[1])
 
-    # Initial parameters and limits. MIGRAD is a local minimiser, so the seeds
-    # matter: mean starts at the eta mass and the yield is split 50/50 between
-    # signal and background. Limits keep the tails in a physical regime and
-    # stop the minimiser wandering into flat/divergent corners of the space.
     init = dict(
         mean   = mean_init,
         sigma  = sigma_init,
@@ -62,22 +74,18 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
         c0     = 0.0,
         c1     = 0.0,
     )
-    # TODO: switch from limits to nuisance parameters
     limits = dict(
-        mean   = (xmin, xmax),   # peak must sit inside the fit window
-        sigma  = (1.0, 50.0),    # sigma > 0; upper bound ~ window width / 3
-        alphaL = (0.1, 10.0),    # tail turn-on in units of sigma; α -> large
-        nL     = (0.1, 50.0),    #   means "pure Gaussian", n -> large likewise
-        alphaR = (0.1, 10.0),
-        nR     = (0.1, 50.0),
-        n_sig  = (0.0, N_CAND * 2),  # yields are non-negative, with an upper
-        n_bkg  = (0.0, N_CAND * 2),  #   bound well above the observed total
-        c0     = (-1.0, 1.0),    # keeps the Chebyshev PDF non-negative on
-        c1     = (-1.4, 1.4),    #   [xmin, xmax] and its norm (1 - c1/3) > 0
+        sigma=(0.0, None), alphaL=(0.0, None), alphaR=(0.0, None),
+        nL=(0.0, None), nR=(0.0, None),
+        n_sig=(0.0, None), n_bkg=(0.0, None),
     )
 
-    # Run fit: MIGRAD to minimise, then HESSE for symmetric errors.
-    m = fit_utils.run_fit(cost, init, limits)
+    # Stage 1: fit with c0, c1, and the tail params fixed at their init
+    # values. Stage 2: float them, starting from stage 1's result.
+    stage1 = fit_utils.run_fit(cost, init, limits, fixed=['c0', 'c1', *TAIL_PARAMS])
+    init2 = dict(init, mean=stage1.values['mean'], sigma=stage1.values['sigma'],
+                n_sig=stage1.values['n_sig'], n_bkg=stage1.values['n_bkg'])
+    m = fit_utils.run_fit(cost, init2, limits)
     p, e = m.values, m.errors
 
     n_bkg = p['n_bkg']
@@ -106,27 +114,27 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
     bin_bkg = np.diff(bkg_cdf_edges) * n_bkg
     bin_fit = bin_sig + bin_bkg
 
-    # Goodness of fit: Pearson chi2, with the model as the variance estimate.
-    # Empty-prediction bins are skipped (division by zero) and don't count
-    # toward ndof, which is (bins used) - (free parameters).
-    mask = bin_fit > 0
-    chi2 = float(np.sum((counts[mask] - bin_fit[mask])**2 / bin_fit[mask]))
+    # Goodness of fit: Neyman (data-based) chi2, with the DATA as the variance
+    # estimate. The denominator is the measurement uncertainty rather than a fit
+    # uncertainty, which is the same argument the pulls below rest on -- so
+    # sum(pulls**2) == chi2 by construction. Empty-DATA bins are skipped
+    # (division by zero) and don't count toward ndof, which is
+    # (bins used) - (free parameters).
+    #
+    # Note this is a deliberate choice over the Pearson form (d-f)^2/f. Neyman
+    # chi2 is known to bias yields slightly low, because a downward Poisson
+    # fluctuation gets a smaller denominator and so more weight. The fit itself
+    # is unaffected -- it minimises a Poisson binned NLL, not this chi2, which
+    # is only a goodness-of-fit summary reported afterwards.
+    mask = counts > 0
+    chi2 = float(np.sum((counts[mask] - bin_fit[mask])**2 / counts[mask]))
     ndof = int(mask.sum()) - m.nfit
     chi2_per_ndof = chi2 / ndof if ndof > 0 else float('nan')
 
-    # Data-based pulls: (d − f) / √d  (RooFit pull plots; 0 for empty bins)
-    # Below is an alternate version of the pulls, but you should use this one
-    # because the denominator is the data error. The model error makes no sense
-    # to use because the uncertainty that we care about is the data uncertainty
-    # since it is from actual measurement resolutions and uncertainties, whereas
-    # the model error is just a fit uncertainty. The model error is not a
-    # physical uncertainty, though we do report it as a single value in the
-    # chi2/ndf value.
+    # Data-based pulls: (d - f) / sqrt(d), 0 for empty bins. Same denominator
+    # as the chi2 above, so sum(pulls**2) == chi2. fit_gauss.py and fit_dalitz_v3.ipynb use
+    # the same convention.
     pulls = np.where(counts > 0, (counts - bin_fit) / np.sqrt(counts), 0.0)
-    
-    # Per-bin Pearson pull: (d − f) / √f, model error in the denominator so that
-    # Σ pull² == the Pearson chi2 reported above (0 for empty bins).
-    # pulls = np.where(bin_fit > 0, (counts - bin_fit) / np.sqrt(bin_fit), 0.0)
 
     print(f'[INFO] χ²/ndf = {chi2_per_ndof:.4f}  ({chi2:.2f} / {ndof})',
           file=sys.stderr)
@@ -205,4 +213,4 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
             'bkg': curve_bkg.tolist(),
         },
     }
-    return result
+    return result, m

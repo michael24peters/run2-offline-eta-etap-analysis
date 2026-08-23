@@ -12,7 +12,7 @@ selection. fit_dcb() downstream sees only a numpy array of masses.
 Usage:
     python driver_dcb.py input.root [--outdir out] [--max-events N]
                        [--xmin 480] [--xmax 620] [--nbins 80]
-                       [--mean-init 548] [--sigma-init 10]
+                       [--mean-init 548] [--sigma-init 5]
                        [--alphaL-init 1.5] [--nL-init 2]
                        [--alphaR-init 1.5] [--nR-init 2]
 """
@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'fit'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
 import cut_utils
+import kinematics
 from fit_dcb import fit_dcb
 from plot_dcb import plot_dcb
 
@@ -40,7 +41,7 @@ from plot_dcb import plot_dcb
 
 MASS_BRANCH     = 'tag_dtf_m'      # the quantity being fit
 METRIC_BRANCH   = 'tag_dtf_chi2'   # ranks candidates within an event
-DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']   # per-daughter, need regrouping
+DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']   # branches the cuts below read
 PNN_MU_MIN      = 0.4              # every muon daughter must exceed this
 MUON_PID        = 13               # |pid| the pnn_mu cut applies to
 
@@ -63,7 +64,7 @@ parser.add_argument('infile', help='Input ROOT file')
 parser.add_argument('--outdir', default='out',
                     help='Output directory for results_dcb.json and dcb_mass_fit.png')
 parser.add_argument('--label', default='',
-                    help='Suffix for the output filenames, e.g. --label nopnn writes '
+                    help='Suffix for the output filenames, e.g. `--label nopnn` writes '
                          'results_dcb_nopnn.json / dcb_mass_fit_nopnn.png. Lets several '
                          'selections live side by side in one --outdir')
 parser.add_argument('--max-events', type=int, default=None,
@@ -77,7 +78,7 @@ parser.add_argument('--no-tos', action='store_true',
 parser.add_argument('--xmin', type=float, default=480.0, help='Lower mass bound [MeV]')
 parser.add_argument('--xmax', type=float, default=620.0, help='Upper mass bound [MeV]')
 parser.add_argument('--nbins', type=int, default=80, help='Number of histogram bins')
-parser.add_argument('--mean-init', type=float, default=547.9, help='Initial mean [MeV]')
+parser.add_argument('--mean-init', type=float, default=kinematics.M_ETA, help='Initial mean [MeV]')
 parser.add_argument('--sigma-init', type=float, default=5.0, help='Initial sigma [MeV]')
 parser.add_argument('--alphaL-init', type=float, default=1.5, help='Initial left tail α_L')
 parser.add_argument('--nL-init', type=float, default=2.0, help='Initial left tail n_L')
@@ -113,7 +114,7 @@ if pnn_mu_min is not None:
 # `keep` goes in as the eligibility mask, so each event keeps the best candidate
 # that actually survived the cuts; the result is a mask on the same candidate
 # axis, ready to index any per-candidate branch.
-best = cut_utils.best_candidate_mask(tree, METRIC_BRANCH, keep, method='min')
+best = cut_utils.best_candidate_mask(tree, METRIC_BRANCH, keep)
 masses = cut_utils.values(tree, MASS_BRANCH, best)  # <- awkward → numpy
 
 # cut_utils returns its diagnostics rather than printing them, so the driver
@@ -136,7 +137,7 @@ print(f'[INFO] cutflow: {int(ak.sum(ak.num(keep)))} candidates -> '
       f'{len(masses)} events with a best candidate', file=sys.stderr)
 
 # --- Fit ---------------------------------------------------------------------
-result = fit_dcb(
+result, m = fit_dcb(
     masses,
     xmin=args.xmin, xmax=args.xmax, nbins=args.nbins,
     mean_init=args.mean_init, sigma_init=args.sigma_init,

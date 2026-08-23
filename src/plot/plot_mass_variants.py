@@ -69,7 +69,7 @@ for label, use_tos, pnn_mu_min, colour in VARIANTS:
     if use_tos: keep = keep & tos
     # `keep` is the eligibility mask, so each event keeps the best candidate that
     # survived THIS variant's selection; events with none left contribute nothing.
-    best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', keep, method='min')
+    best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', keep)
     samples.append((label, colour, cut_utils.values(tree, 'tag_dtf_m', best)))
 
 print(f"{'─' * 56}")

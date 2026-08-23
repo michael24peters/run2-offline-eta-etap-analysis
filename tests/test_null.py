@@ -53,7 +53,7 @@ def test_valid_on_zero_events(zero_events):
     assert cut_utils.valid(zero_events, 'mc_idx_mom').tolist() == []
 
 
-@pytest.mark.parametrize('how', ['all', 'any', 'sum', 'min', 'max'])
+@pytest.mark.parametrize('how', ['all', 'any', 'sum'])
 def test_reduce_on_zero_events(zero_events, how):
     """Exercises the n_total == 0 short circuit for every aggregation."""
     vals = zero_events['mc_pid'] > 0

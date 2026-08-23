@@ -11,7 +11,6 @@ trips against follow().
 """
 
 import awkward as ak
-import numpy as np
 import pytest
 from conftest import make_tree
 
@@ -62,22 +61,8 @@ def test_sum_totals_floats(reco):
     assert out.tolist() == [[4.0, 30.0], [1.0]]
 
 
-def test_min(reco):
-    vals = ak.Array([[5.0, 2.0, 9.0, 7.0], [1.0, 4.0]])
-    out = cut_utils.reduce(reco, vals, 'prt_idx_mom', how='min',
-                           target_ref='tag_dtf_m')
-    assert out.tolist() == [[2.0, 7.0], [1.0]]
-
-
-def test_max(reco):
-    vals = ak.Array([[5.0, 2.0, 9.0, 7.0], [1.0, 4.0]])
-    out = cut_utils.reduce(reco, vals, 'prt_idx_mom', how='max',
-                           target_ref='tag_dtf_m')
-    assert out.tolist() == [[5.0, 9.0], [4.0]]
-
-
 def test_invalid_how_raises(reco):
-    """The five `how` modes are the only valid ones."""
+    """'all', 'any' and 'sum' are the only valid modes."""
     vals = ak.Array([[True, True, True, True], [True, True]])
     with pytest.raises(ValueError, match='Invalid how'):
         cut_utils.reduce(reco, vals, 'prt_idx_mom', how='median',
@@ -88,15 +73,13 @@ def test_invalid_how_raises(reco):
 #
 # A target that nothing points at reduces to the identity of its aggregation.
 # This is load-bearing: it is what lets a candidate with no muon daughters pass
-# a muon cut, and it is the trap that makes how='all' the wrong choice when
+# a muon cut, and it is why how='all' is the wrong choice when
 # propagating a selection upward.
 
 @pytest.mark.parametrize('how, identity', [
     ('all', True),
     ('any', False),
     ('sum', 0.0),
-    ('min', np.inf),
-    ('max', -np.inf),
 ])
 def test_unreferenced_target_gets_the_identity(how, identity):
     """A generator particle with no children lands on the identity.
@@ -135,12 +118,10 @@ def test_all_identity_is_why_any_is_right_for_propagating_up():
 
 # --- the -1 "points nowhere" sentinel ---------------------------------------
 
-@pytest.mark.parametrize('how', ['all', 'any', 'sum', 'min', 'max'])
+@pytest.mark.parametrize('how', ['all', 'any', 'sum'])
 def test_sentinel_does_not_raise(gen, how):
-    """mc_idx_mom is -1 for the eta. Every aggregation must cope with it.
-
-    Before the sentinel was handled, 'all' and 'sum' raised ValueError from
-    np.bincount and 'min'/'max' silently wrapped via ufunc.at.
+    """mc_idx_mom is -1 for the eta. Every aggregation must cope with it:
+    np.bincount rejects a negative id outright, and ufunc.at wraps it.
     """
     vals = (ak.Array([[True, True, True], [True, True, True]])
             if how in ('all', 'any') else
@@ -155,9 +136,8 @@ def test_sentinel_does_not_raise(gen, how):
     ('sum', [[True, False, False], [True, False, False]], 'and'),
 ])
 def test_guarding_with_valid_is_now_a_no_op(gen, how, vals, guarded):
-    """Callers used to have to AND/OR valid() in before reducing, with the
-    polarity depending on `how`. reduce() drops non-pointing entries itself now,
-    so the guard changes nothing -- both spellings must agree."""
+    """reduce() drops non-pointing entries itself, so ANDing or ORing valid()
+    in beforehand changes nothing. Both spellings must agree."""
     vals = ak.Array(vals)
     ok = cut_utils.valid(gen, 'mc_idx_mom')
     guard = (vals | ~ok) if guarded == 'or' else (vals & ok)
@@ -168,9 +148,7 @@ def test_guarding_with_valid_is_now_a_no_op(gen, how, vals, guarded):
 
 
 def test_sentinel_does_not_leak_into_the_previous_event(gen):
-    """Regression test for the subtle one.
-
-    The offset that makes ids globally unique is added per event. Event 1's -1
+    """The offset that makes ids globally unique is added per event. Event 1's -1
     plus its offset of 3 becomes 2 -- a perfectly valid id pointing at event 0's
     third particle. So the sentinel MUST be filtered on the local index, before
     the offset is added. Filtering afterwards on `ids >= 0` catches event 0's -1
@@ -339,23 +317,6 @@ def test_use_daughter_multiplicity_per_candidate(reco):
     out = cut_utils.reduce(reco, ones, 'prt_idx_mom', how='sum',
                            target_ref='tag_dtf_m')
     assert out.tolist() == [[2.0, 2.0], [2.0]]
-
-
-def test_use_worst_daughter_pnn_per_candidate(reco):
-    """5. 'min' : the weakest daughter's PID score, for a cut expressed as a
-    candidate-level quantity rather than an all-reduction."""
-    pnn = ak.Array([[0.99, 0.97, 0.99, 0.20], [0.96, 0.98]])
-    out = cut_utils.reduce(reco, pnn, 'prt_idx_mom', how='min',
-                           target_ref='tag_dtf_m')
-    assert out.tolist() == [[0.97, 0.20], [0.96]]
-
-
-def test_use_highest_daughter_pt_per_candidate(reco):
-    """6. 'max' : the leading daughter's pT, a common trigger-adjacent cut."""
-    pt = ak.Array([[600.0, 1500.0, 600.0, 100.0], [800.0, 900.0]])
-    out = cut_utils.reduce(reco, pt, 'prt_idx_mom', how='max',
-                           target_ref='tag_dtf_m')
-    assert out.tolist() == [[1500.0, 600.0], [900.0]]
 
 
 def test_use_flag_candidates_containing_a_stray_match():

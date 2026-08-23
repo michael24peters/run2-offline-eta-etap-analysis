@@ -73,7 +73,7 @@ import collections
 def read_branches(root_path, branches, tree='tree', entry_stop=None):
     """Read `branches` as awkward arrays.
 
-    entry_stop : optional cap on events read, for quick iteration on large files.
+    entry_stop : optional, specifies number of events to read (Default: all).
     """
     import uproot
     with uproot.open(root_path) as f:
@@ -300,7 +300,7 @@ def tos_mask(tree, triggers, tag_ref='tag_dtf_m'):
     return mask, report
 
 
-def best_candidate_mask(tree, metric_branch, eligible, method='min', target=None):
+def best_candidate_mask(tree, metric_branch, eligible):
     """
     Per-candidate mask, True only for each event's single best candidate.
 
@@ -310,9 +310,10 @@ def best_candidate_mask(tree, metric_branch, eligible, method='min', target=None
                     pre-filtered one
     eligible      : per-candidate mask of the candidates allowed to compete, i.e.
                     the combined cuts
-    method        : 'min' / 'max' -- smallest / largest metric wins
-                    'closest'     -- metric nearest `target` wins
-    target        : required for method='closest'
+
+    The smallest metric wins. Every call site ranks on tag_dtf_chi2, where
+    smaller is better; to rank on something where larger is better, negate it
+    at the call site.
 
     `eligible` is required, because we want to find the best SURVIVING
     candidate. If the best candidate is independently selected and then ANDed
@@ -328,24 +329,12 @@ def best_candidate_mask(tree, metric_branch, eligible, method='min', target=None
     To reach the daughter branches of the winning candidates, pass this mask to
     follow(tree, mask, 'prt_idx_mom').
     """
-    # Get metrics from the tree.
+    # Get metrics from the tree. Smallest wins, so the metric IS the score.
     metrics = tree[metric_branch]
-    # Reduce every method to "smallest score wins", so there is one argmin below.
-    if method == 'min':  # default
-        score = metrics
-    elif method == 'max':
-        score = -metrics  # argmin of the negated metric
-    elif method == 'closest':
-        if target is None:
-            raise ValueError("method='closest' requires a target value")
-        score = abs(metrics - target)
-    else:
-        raise ValueError(f"Invalid method {method!r}. Must be 'min', 'max', or "
-                         f"'closest'.")
 
     # -------------------------------------------------------------------------
     # Example:
-    #     score    = [[0.42, 0.95, 1.82], [7.0, 2.0], [4.0, 9.0], []]
+    #     metrics  = [[0.42, 0.95, 1.82], [7.0, 2.0], [4.0, 9.0], []]
     #     eligible = [[T,    F,    T   ], [F,   F  ], [T,   T  ], []]
     #                  event 0             event 1     event 2    event 3
     #                  normal (mixed)      NONE pass   all pass   no candidates
@@ -354,7 +343,7 @@ def best_candidate_mask(tree, metric_branch, eligible, method='min', target=None
     # Push ineligible candidates out of the running before the argmin, so the
     # winner is the best candidate that actually survived the cuts.
     #     score -> [[0.42, inf, 1.82], [inf, inf], [4.0, 9.0], []]
-    score = ak.where(eligible, score, np.inf)
+    score = ak.where(eligible, metrics, np.inf)
 
     # argmin(axis=1) asks each event separately "which position in YOUR list
     # holds the smallest score?". keepdims=True keeps the result nested 
@@ -474,13 +463,6 @@ def valid(tree, idx_branch):
     return tree[idx_branch] >= 0
 
 
-# Value each aggregation returns for a target entry that nothing points at, e.g.
-# a candidate with no daughters. These are the identity elements, so an empty
-# segment behaves like an empty ak.all()/ak.any()/sum.
-_REDUCE_IDENTITY = {'all': True, 'any': False, 'sum': 0.0,
-                    'min': np.inf, 'max': -np.inf}
-
-
 def reduce(tree, array, idx_branch, how='all', target_ref='tag_dtf_m'):
     """
     Fine -> coarse. Aggregate `array` from the level of `idx_branch` onto the
@@ -491,7 +473,10 @@ def reduce(tree, array, idx_branch, how='all', target_ref='tag_dtf_m'):
 
         how='all' / 'any'  : bool over the segment
         how='sum'          : sum over the segment
-        how='min' / 'max'  : extremum over the segment
+
+    A target entry that nothing points at (a candidate with no daughters) gets
+    the identity of its aggregation: True for 'all', False for 'any', 0 for
+    'sum'.
 
     array      : at the source level, same jagged shape as `idx_branch`
     target_ref : any branch whose per-event length defines the TARGET collection.
@@ -531,9 +516,8 @@ def reduce(tree, array, idx_branch, how='all', target_ref='tag_dtf_m'):
     previous event's segment. AND in valid(tree, 'mc_idx_mom') before reducing
     along mc_idx_mom. This must be handled by the caller.
     """
-    if how not in _REDUCE_IDENTITY:
-        raise ValueError(f"Invalid how {how!r}. Must be one of "
-                         f"{sorted(_REDUCE_IDENTITY)}.")
+    if how not in ('all', 'any', 'sum'):
+        raise ValueError(f"Invalid how {how!r}. Must be 'all', 'any' or 'sum'.")
 
     # -------------------------------------------------------------------------
     # Example: 2 events, reducing daughters onto candidates with how='all':
@@ -656,19 +640,11 @@ def reduce(tree, array, idx_branch, how='all', target_ref='tag_dtf_m'):
         #     bincount  = [2, 1, 1]
         #     > 0       = [True, True, True]
         out = np.bincount(ids[vals], minlength=n_total) > 0
-    elif how == 'sum':
+    else:  # 'sum'
         # `weights` adds vals[k] to bucket ids[k] instead of adding 1, so booleans
         # come out as a count and floats as a total.
         #     -> [2.0, 1.0, 1.0]
         out = np.bincount(ids, weights=vals.astype(float), minlength=n_total)
-    else:
-        # min / max: start every candidate at the identity (+inf / -inf) and let
-        # each daughter pull its own candidate's entry toward the extreme.
-        # ufunc.at is the unbuffered version, so repeated ids accumulate instead
-        # of the last write winning.
-        ufunc = np.minimum if how == 'min' else np.maximum
-        out = np.full(n_total, _REDUCE_IDENTITY[how], dtype=float)
-        ufunc.at(out, ids, vals)
 
     # --- Step 4: back to the per-event structure -----------------------------
     # `out` is flat, one entry per candidate in the file, in the same global-id
@@ -678,8 +654,7 @@ def reduce(tree, array, idx_branch, how='all', target_ref='tag_dtf_m'):
     #     unflatten([True, False, False], [2, 1]) = [[True, False], [False]]
     return ak.unflatten(out, n_target)
 
-def decay_mask(tree, mother_pid, daughter_pids, idx_branch='mc_idx_mom',
-               pid_branch='mc_pid', target_ref='mc_pid'):
+def decay_mask(tree, mother_pid, daughter_pids):
     """
     Per generator mother mask: True for each particle with mother_pid whose
     daughters are exactly the specified daughter_pids (could be in any order but
@@ -691,6 +666,11 @@ def decay_mask(tree, mother_pid, daughter_pids, idx_branch='mc_idx_mom',
         decay_mask(tree, 221, [-13, 13, 22])        eta -> mu mu gamma
         decay_mask(tree, 221, [-13, -13, 13, 13])   eta -> 4mu
         decay_mask(tree, 221, [-13, 13, -11, 11])   eta -> mu mu e e
+
+    Generator level only. Mothers and daughters are read from the same branch
+    (mc_pid), which works only because mc_idx_mom points back into its own
+    collection. The reco side has no equivalent -- prt_idx_mom crosses from
+    prt_* to tag_* -- so there is nothing to parameterise here.
     
     We ask counting questions to deduce the decay, rather than trying to match
     the daughters and resulting in combinatorial problems.
@@ -709,14 +689,14 @@ def decay_mask(tree, mother_pid, daughter_pids, idx_branch='mc_idx_mom',
     mu-, and one gamma, and no other daughters.
     """
     # Get the mother particles
-    mothers = tree[pid_branch] == mother_pid
+    mothers = tree['mc_pid'] == mother_pid
 
     # Get the daughters of those mothers, and check that each mother has the
     # right number of daughters and the right PIDs.
     # Get daughters
     # Example: n_all = [[3, 0, 0, 0]] for the eta -> mu mu gamma example above.
-    n_all = reduce(tree, ak.ones_like(tree[pid_branch], dtype=bool), idx_branch,
-                   how='sum', target_ref=target_ref)
+    n_all = reduce(tree, ak.ones_like(tree['mc_pid'], dtype=bool), 'mc_idx_mom',
+                   how='sum', target_ref='mc_pid')
     # Check that each mother has the correct number of daughters
     ok = mothers & (n_all == len(daughter_pids))
 
@@ -729,6 +709,6 @@ def decay_mask(tree, mother_pid, daughter_pids, idx_branch='mc_idx_mom',
     # decay_mask(221,[-13,13,22])  [[F,  F,  F ], [F,  F,  F,  F ], [T,  F,  F, F ]]
     # decay_mask(221,[-13,-13,13]) [[F,  F,  F ], [T,  F,  F,  F ], [F,  F,  F, F ]]
     for code, want in collections.Counter(daughter_pids).items():
-        ok = ok & (reduce(tree, tree[pid_branch] == code, idx_branch, how='sum',
-                          target_ref=target_ref) == want)
+        ok = ok & (reduce(tree, tree['mc_pid'] == code, 'mc_idx_mom', how='sum',
+                          target_ref='mc_pid') == want)
     return ok

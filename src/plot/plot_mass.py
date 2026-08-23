@@ -98,7 +98,7 @@ if args.best:
     # Select the best candidate for each event, by lowest tag_dtf_chi2. `keep` is
     # the eligibility mask, so each event keeps the best candidate that survived
     # the selection; events with none left simply contribute nothing.
-    best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', keep, method='min')
+    best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', keep)
     tag_m = cut_utils.values(tree, 'tag_dtf_m', best)
 # Flatten to every surviving candidate
 else: tag_m = ak.to_numpy(ak.flatten(mass))
@@ -116,7 +116,7 @@ plt.rcParams['font.family'] = 'STIXGeneral'
 plt.rcParams['font.size'] = 16
 plt.figure(figsize=(12, 9))
 if args.full_range: hist_range = (400, 1200)
-else: hist_range = (450, 600)
+else: hist_range = (450, 650)
 plt.hist(tag_m, bins=100, range=hist_range, histtype='step', color='black', label='Candidates')
 plt.axvline(x=547.86, color='tab:red', linestyle='--', label='Eta')
 if args.full_range:

@@ -12,20 +12,29 @@ happen upstream in driver_gauss.py via cut_utils.
 import sys
 import os
 import numpy as np
+from iminuit.cost import NormalConstraint
 
 # Ensure src/utils is importable regardless of working directory
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 import fit_utils
+import kinematics
 
 
 def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
-              mean_init=547.9, sigma_init=10.0):
+              mean_init=kinematics.M_ETA, sigma_init=5.0,
+              mean_prior=None, sigma_prior=None):
     """
-    Run the Gaussian + Chebyshev fit and return the result dict.
+    Run the Gaussian + Chebyshev fit and return (result, m).
 
-    values : 1-D numpy array of masses [MeV], one per event. This function
-             applies no selection of its own -- it fits whatever it is given.
+    values : 1-D numpy array of masses [MeV], one per event.
+    mean_prior, sigma_prior : optional (value, error) in MeV. Adds
+             NormalConstraint(name, value, error=error) to the cost. None
+             (default) adds no constraint.
+
+    Returns:
+    result : JSON-serialisable dict.
+    m      : the final iminuit.Minuit object.
     """
     values = np.asarray(values, dtype=float)
 
@@ -33,11 +42,15 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
         values, xmin=xmin, xmax=xmax, nbins=nbins)
     bin_edges = np.linspace(xmin, xmax, nbins + 1)
     N_CAND = counts.sum()
-    print(f'[info] {int(N_CAND)} entries in [{xmin}, {xmax}] MeV across {nbins} bins',
+    print(f'[INFO] {int(N_CAND)} entries in [{xmin}, {xmax}] MeV across {nbins} bins',
           file=sys.stderr)
 
     # Fit
     cost = fit_utils.make_gauss_cost(counts, bin_edges, xmin, xmax)
+    if mean_prior is not None:
+        cost = cost + NormalConstraint('mean', mean_prior[0], error=mean_prior[1])
+    if sigma_prior is not None:
+        cost = cost + NormalConstraint('sigma', sigma_prior[0], error=sigma_prior[1])
 
     init = dict(
         mean  = mean_init,
@@ -47,22 +60,20 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
         c0    = 0.0,
         c1    = 0.0,
     )
-    limits = dict(
-        mean  = (xmin, xmax),
-        sigma = (1.0, 50.0),
-        n_sig = (0.0, N_CAND * 2),
-        n_bkg = (0.0, N_CAND * 2),
-        c0    = (-1.0, 1.0),
-        c1    = (-1.4, 1.4),
-    )
+    limits = dict(sigma=(0.0, None), n_sig=(0.0, None), n_bkg=(0.0, None))
 
-    m = fit_utils.run_fit(cost, init, limits)
+    # Stage 1: fit with c0, c1 fixed at 0. Stage 2: float them, starting from
+    # stage 1's result.
+    stage1 = fit_utils.run_fit(cost, init, limits, fixed=['c0', 'c1'])
+    init2 = dict(init, mean=stage1.values['mean'], sigma=stage1.values['sigma'],
+                n_sig=stage1.values['n_sig'], n_bkg=stage1.values['n_bkg'])
+    m = fit_utils.run_fit(cost, init2, limits)
     p, e = m.values, m.errors
 
     n_bkg = p['n_bkg']
     n_bkg_err = e['n_bkg']
 
-    print(f"[fit] valid={m.valid}  "
+    print(f"[INFO] valid={m.valid}  "
           f"mean={p['mean']:.3f}±{e['mean']:.3f} MeV  "
           f"σ={p['sigma']:.3f}±{e['sigma']:.3f} MeV",
           file=sys.stderr)
@@ -76,24 +87,29 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
     bin_bkg = np.diff(bkg_cdf_edges) * n_bkg
     bin_fit = bin_sig + bin_bkg
 
-    # Goodness of fit
-    mask = bin_fit > 0
-    chi2 = float(np.sum((counts[mask] - bin_fit[mask])**2 / bin_fit[mask]))
+    # Goodness of fit: Neyman (data-based) chi2, with the DATA as the variance
+    # estimate. The denominator is the measurement uncertainty rather than a fit
+    # uncertainty, which is the same argument the pulls below rest on -- so
+    # sum(pulls**2) == chi2 by construction. Empty-DATA bins are skipped
+    # (division by zero) and don't count toward ndof, which is
+    # (bins used) - (free parameters).
+    #
+    # Note this is a deliberate choice over the Pearson form (d-f)^2/f. Neyman
+    # chi2 is known to bias yields slightly low, because a downward Poisson
+    # fluctuation gets a smaller denominator and so more weight. The fit itself
+    # is unaffected -- it minimises a Poisson binned NLL, not this chi2, which
+    # is only a goodness-of-fit summary reported afterwards.
+    mask = counts > 0
+    chi2 = float(np.sum((counts[mask] - bin_fit[mask])**2 / counts[mask]))
     ndof = int(mask.sum()) - m.nfit
     chi2_per_ndof = chi2 / ndof if ndof > 0 else float('nan')
 
-    # Data-based pulls: (d − f) / √d  (RooFit pull plots; 0 for empty bins)
-    # pulls = np.where(counts > 0, (counts - bin_fit) / np.sqrt(counts), 0.0)
-    
-    # Per-bin Pearson pull: (d − f) / √f, model error in the denominator so that
-    # Σ pull² == the Pearson chi2 reported above (0 for empty bins). Note the fit
-    # itself minimizes a Poisson binned NLL, whose exact residual is the
-    # Baker–Cousins deviance sign(d−f)·√(2[f − d + d·ln(d/f)]); at these per-bin
-    # counts (1e4+) Pearson and deviance pulls are numerically identical, so this
-    # simpler form is used.
-    pulls = np.where(bin_fit > 0, (counts - bin_fit) / np.sqrt(bin_fit), 0.0)
+    # Data-based pulls: (d - f) / sqrt(d), 0 for empty bins. Same denominator
+    # as the chi2 above, so sum(pulls**2) == chi2. fit_dcb.py and fit_dalitz_v3.ipynb use
+    # the same convention.
+    pulls = np.where(counts > 0, (counts - bin_fit) / np.sqrt(counts), 0.0)
 
-    print(f'[fit] χ²/ndf = {chi2_per_ndof:.4f}  ({chi2:.2f} / {ndof})',
+    print(f'[INFO] χ²/ndf = {chi2_per_ndof:.4f}  ({chi2:.2f} / {ndof})',
           file=sys.stderr)
 
     # Smooth curve
@@ -110,7 +126,6 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
             'xmin':  xmin,
             'xmax':  xmax,
             'nbins': nbins,
-            'symmetric': False,
         },
         'fit': {
             'converged':      bool(m.valid),
@@ -153,4 +168,4 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
             'bkg': curve_bkg.tolist(),
         },
     }
-    return result
+    return result, m
