@@ -4,11 +4,9 @@ fid_reqs.py
 Script to apply fiducial requirements to generator-level particles in a ROOT
 file. Uses uproot + awkward for I/O (no PyROOT/ROOT dependency).
 
-TODO: make this work for eta -> 4mu and eta -> 2mu 2e cases as well. Requires
-more generalized code.
-
 Usage:
-    python fid_reqs.py input.root [--gamma]
+------
+    python fid_reqs.py input.root
 """
 
 import argparse
