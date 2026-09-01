@@ -49,9 +49,9 @@ There is no direct candidate -> gen candidate link: go candidate -> daughter ->
 gen daughter -> gen candidate. MC generator particles are one flat collection
 per event, not split into tags and daughters like the reco side.
 
-NOTE: `mc_idx_mom` is -1 for a particle with no mother. Neither `follow` nor
-`reduce` guards that, and -1 silently indexes backwards into the previous event,
-so AND in `valid(tree, 'mc_idx_mom')` before traversing it.
+NOTE: `mc_idx_mom` is -1 for a particle with no mother, but passing in -1 
+silently indexes backwards into the previous event, so make sure to AND with
+`valid(tree, 'mc_idx_mom')` to ignore invalid indices before traversal.
 
 The typical pipeline:
 
@@ -60,9 +60,6 @@ The typical pipeline:
     keep         = tos & reduce(tree, muon_ok, 'prt_idx_mom', how='all')
     best         = best_candidate_mask(tree, 'tag_dtf_chi2', keep)
     masses       = values(tree, 'tag_dtf_m', best)   # flat numpy, ready to fit
-
-Nothing here prints. Functions that gather diagnostics return them alongside
-their result, so the caller decides what to log and what to write to JSON.
 """
 
 import awkward as ak
@@ -251,10 +248,10 @@ def tos_mask(tree, triggers, tag_ref='tag_dtf_m'):
     Per-candidate mask: True where the candidate is TOS for at least one of the
     specified triggers.
 
-    The only cut-specific helper here, because an absent trigger line is a real
-    quirk of the ntuple rather than a comparison: a line that was never
-    evaluated is stored as an empty list, and must read as "did not fire"
-    without knocking the mask out of candidate shape.
+    The only cut-specific helper here, because it is valid to have an absent
+    trigger line: a line that was never evaluated is stored as an empty list,
+    and must read as "did not fire" without changing the mask out of candidate
+    shape.
 
     Arguments:
     ----------
@@ -473,10 +470,11 @@ def reduce(tree, array, idx_branch, how='all', target_ref='tag_dtf_m'):
 
         how='all' / 'any'  : bool over the segment
         how='sum'          : sum over the segment
+        how='min' / 'max'  : min/max over the segment
 
     A target entry that nothing points at (a candidate with no daughters) gets
     the identity of its aggregation: True for 'all', False for 'any', 0 for
-    'sum'.
+    'sum', +inf for 'min', -inf for 'max'.
 
     array      : at the source level, same jagged shape as `idx_branch`
     target_ref : any branch whose per-event length defines the TARGET collection.
@@ -516,8 +514,8 @@ def reduce(tree, array, idx_branch, how='all', target_ref='tag_dtf_m'):
     previous event's segment. AND in valid(tree, 'mc_idx_mom') before reducing
     along mc_idx_mom. This must be handled by the caller.
     """
-    if how not in ('all', 'any', 'sum'):
-        raise ValueError(f"Invalid how {how!r}. Must be 'all', 'any' or 'sum'.")
+    if how not in ('all', 'any', 'sum', 'min', 'max'):
+        raise ValueError(f"Invalid how {how!r}. Must be 'all', 'any', 'sum', 'min' or 'max'.")
 
     # -------------------------------------------------------------------------
     # Example: 2 events, reducing daughters onto candidates with how='all':
@@ -640,11 +638,20 @@ def reduce(tree, array, idx_branch, how='all', target_ref='tag_dtf_m'):
         #     bincount  = [2, 1, 1]
         #     > 0       = [True, True, True]
         out = np.bincount(ids[vals], minlength=n_total) > 0
-    else:  # 'sum'
+    elif how == 'sum':
         # `weights` adds vals[k] to bucket ids[k] instead of adding 1, so booleans
         # come out as a count and floats as a total.
         #     -> [2.0, 1.0, 1.0]
         out = np.bincount(ids, weights=vals.astype(float), minlength=n_total)
+    elif how == 'min':
+        # Start every candidate at +inf (identity for min), then lower it to
+        # each of its daughters' values in turn.
+        out = np.full(n_total, np.inf)
+        np.minimum.at(out, ids, vals.astype(float))
+    else:  # 'max'
+        # Mirror image of 'min': start at -inf, raise to each daughter's value.
+        out = np.full(n_total, -np.inf)
+        np.maximum.at(out, ids, vals.astype(float))
 
     # --- Step 4: back to the per-event structure -----------------------------
     # `out` is flat, one entry per candidate in the file, in the same global-id

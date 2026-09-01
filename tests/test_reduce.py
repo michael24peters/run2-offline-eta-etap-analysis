@@ -61,8 +61,37 @@ def test_sum_totals_floats(reco):
     assert out.tolist() == [[4.0, 30.0], [1.0]]
 
 
+def test_min(reco):
+    """Smallest value among each candidate's daughters."""
+    vals = ak.Array([[5.0, 2.0, 9.0, 1.0], [7.0, 3.0]])
+    out = cut_utils.reduce(reco, vals, 'prt_idx_mom', how='min',
+                           target_ref='tag_dtf_m')
+    assert out.tolist() == [[2.0, 1.0], [3.0]]
+
+
+def test_max(reco):
+    """Largest value among each candidate's daughters."""
+    vals = ak.Array([[5.0, 2.0, 9.0, 1.0], [7.0, 3.0]])
+    out = cut_utils.reduce(reco, vals, 'prt_idx_mom', how='max',
+                           target_ref='tag_dtf_m')
+    assert out.tolist() == [[5.0, 9.0], [7.0]]
+
+
+def test_min_equals_max_iff_daughters_agree(reco):
+    """The min==max idiom used to check "do all daughters share one value?" --
+    this is what a truth-matching cut uses to check every daughter's matched
+    generator particle points at the same mother."""
+    agreeing = ak.Array([[4.0, 4.0, 6.0, 6.0], [8.0, 8.0]])
+    disagreeing = ak.Array([[4.0, 4.0, 6.0, 7.0], [8.0, 9.0]])
+    for vals, want in [(agreeing, [[True, True], [True]]),
+                       (disagreeing, [[True, False], [False]])]:
+        mn = cut_utils.reduce(reco, vals, 'prt_idx_mom', how='min', target_ref='tag_dtf_m')
+        mx = cut_utils.reduce(reco, vals, 'prt_idx_mom', how='max', target_ref='tag_dtf_m')
+        assert (mn == mx).tolist() == want
+
+
 def test_invalid_how_raises(reco):
-    """'all', 'any' and 'sum' are the only valid modes."""
+    """'all', 'any', 'sum', 'min' and 'max' are the only valid modes."""
     vals = ak.Array([[True, True, True, True], [True, True]])
     with pytest.raises(ValueError, match='Invalid how'):
         cut_utils.reduce(reco, vals, 'prt_idx_mom', how='median',
@@ -80,6 +109,8 @@ def test_invalid_how_raises(reco):
     ('all', True),
     ('any', False),
     ('sum', 0.0),
+    ('min', float('inf')),
+    ('max', float('-inf')),
 ])
 def test_unreferenced_target_gets_the_identity(how, identity):
     """A generator particle with no children lands on the identity.
@@ -118,7 +149,7 @@ def test_all_identity_is_why_any_is_right_for_propagating_up():
 
 # --- the -1 "points nowhere" sentinel ---------------------------------------
 
-@pytest.mark.parametrize('how', ['all', 'any', 'sum'])
+@pytest.mark.parametrize('how', ['all', 'any', 'sum', 'min', 'max'])
 def test_sentinel_does_not_raise(gen, how):
     """mc_idx_mom is -1 for the eta. Every aggregation must cope with it:
     np.bincount rejects a negative id outright, and ufunc.at wraps it.
@@ -317,6 +348,25 @@ def test_use_daughter_multiplicity_per_candidate(reco):
     out = cut_utils.reduce(reco, ones, 'prt_idx_mom', how='sum',
                            target_ref='tag_dtf_m')
     assert out.tolist() == [[2.0, 2.0], [2.0]]
+
+
+def test_use_truth_match_daughters_share_one_mc_mother():
+    """5./6. 'min'/'max' : do all of a candidate's daughters share one MC
+    mother? follow() re-indexes mc_idx_mom (gen-particle level) down to
+    daughter level via prt_idx_gen, then min == max across each candidate's
+    daughters checks agreement -- the core of an MC truth-match cut."""
+    tree = make_tree(
+        tag_dtf_m=[[550.0, 549.0]],
+        prt_idx_mom=[[0, 0, 1, 1]],
+        prt_idx_gen=[[1, 2, 1, 3]],
+        mc_idx_mom=[[-1, 0, 0, 5]],   # gen 1 and 2 share mother 0; gen 3's is 5
+    )
+    mom_idx_at_gen = cut_utils.follow(tree, tree['mc_idx_mom'], 'prt_idx_gen')
+    mn = cut_utils.reduce(tree, mom_idx_at_gen, 'prt_idx_mom', how='min', target_ref='tag_dtf_m')
+    mx = cut_utils.reduce(tree, mom_idx_at_gen, 'prt_idx_mom', how='max', target_ref='tag_dtf_m')
+    # cand 0's daughters (gen 1, gen 2) share mother 0 -> min == max
+    # cand 1's daughters (gen 1, gen 3) disagree (0 vs 5)   -> min != max
+    assert (mn == mx).tolist() == [[True, False]]
 
 
 def test_use_flag_candidates_containing_a_stray_match():

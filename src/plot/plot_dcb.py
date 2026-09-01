@@ -21,6 +21,7 @@ def build_text(params, chi2_per_ndof):
     sigma, sigma_err = plot_utils.val_err(params['sigma'])
     n_sig, n_sig_err = plot_utils.val_err(params['n_sig'])
     n_bkg, n_bkg_err = plot_utils.val_err(params['n_bkg'])
+    n_sig_rw, n_sig_rw_err = plot_utils.val_err(params.get('n_sig_report_window', {}))
     c0, c0_err       = plot_utils.val_err(params['c0'])
     c1, c1_err       = plot_utils.val_err(params['c1'])
 
@@ -45,6 +46,8 @@ def build_text(params, chi2_per_ndof):
         [(r'c_0', 'c_0', c0, c0_err, '.2f', ''),
          (r'c_1', 'c_1', c1, c1_err, '.2f', '')],
     ]
+    if 'n_sig_report_window' in params:
+        stats.append([(r'n_{sig}^{report}', 'n_sig(report)', n_sig_rw, n_sig_rw_err, '.0f', '')])
     # Values which are not a value-error pair (e.g., chi2/ndof). Must provide
     # exact strings for desired LaTeX and terminal output.
     extra = (

@@ -24,22 +24,31 @@ def _trapz(y, x):
     return np.sum(avg * dx)
 
 
-def make_histogram(values, xmin=480.0, xmax=620.0, nbins=80):
-    """
-    Bin a flat array of values into the fit window.
+def make_histogram(values, xmin, xmax, nbins):
+    """Bin a flat array of values into the fit window.
 
+    Arguments:
+    ----------
     values : 1-D numpy array (e.g. one mass per event, already selected and
              reduced to one candidate per event by cut_utils)
+    xmin : float
+        The minimum value of the fit window.
+    xmax : float
+        The maximum value of the fit window.
+    nbins : int
+        The number of bins to use.
 
     Returns:
-    centers ndarray (nbins,) : bin centre positions [MeV]
+    --------
+    centers ndarray (nbins,) : bin centre positions
+    edges   ndarray (nbins+1,) : bin edges
     counts  ndarray (nbins,) : observed counts per bin (float)
     errors  ndarray (nbins,) : per-bin uncertainty, max(sqrt(counts), 1)
     """
     counts, edges = np.histogram(values, bins=nbins, range=(xmin, xmax))
     centers = 0.5 * (edges[:-1] + edges[1:])
     errors  = np.maximum(np.sqrt(counts.astype(float)), 1.0)
-    return centers, counts.astype(float), errors
+    return centers, edges, counts.astype(float), errors
 
 
 # --- Chebyshev ---
@@ -83,7 +92,7 @@ def cheb_cdf(x, xmin, xmax, c0, c1):
 
 # --- Gaussian ---
 
-def gauss_pdf(x, mean, sigma, xmin, xmax):
+def gauss_pdf(x, xmin, xmax, mean, sigma):
     """Normalized Gaussian signal PDF."""
     x = np.asarray(x, float)
     sqrt2 = math.sqrt(2.0)
@@ -93,7 +102,7 @@ def gauss_pdf(x, mean, sigma, xmin, xmax):
     return raw / norm
 
 
-def gauss_cdf(x, mean, sigma, xmin, xmax):
+def gauss_cdf(x, xmin, xmax, mean, sigma):
     """Gaussian CDF normalized to [0, 1] over [xmin, xmax]."""
     x = np.asarray(x, float)
     sqrt2 = math.sqrt(2.0)
@@ -151,7 +160,7 @@ def _dcb_grid(xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR, n_grid=1000):
     return xg, fg
 
 
-def dcb_pdf(x, mean, sigma, alphaL, nL, alphaR, nR, xmin, xmax):
+def dcb_pdf(x, xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR):
     """Normalized DCB PDF over [xmin, xmax], computed numerically via trapezoid
     rule over a dense grid."""
     # Evaluate DCB on evenly spaced grid
@@ -162,7 +171,7 @@ def dcb_pdf(x, mean, sigma, alphaL, nL, alphaR, nR, xmin, xmax):
                       mean, sigma, alphaL, nL, alphaR, nR) / norm
 
 
-def dcb_cdf(x, mean, sigma, alphaL, nL, alphaR, nR, xmin, xmax):
+def dcb_cdf(x, xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR):
     """DCB CDF normalized to [0, 1] over [xmin, xmax]. Computed via cumulative
     trapezoid on a dense grid, then interpolated."""
     # Evaluate DCB on evenly spaced grid
@@ -173,6 +182,17 @@ def dcb_cdf(x, mean, sigma, alphaL, nL, alphaR, nR, xmin, xmax):
     # Normalize to [0, 1]
     cdf_grid = cdf_grid / cdf_grid[-1]
     return np.interp(np.asarray(x, float), xg, cdf_grid)
+
+
+def dcb_window_yield(p, e, xmin, xmax, window):
+    """Signal yield (and its error) from a fitted DCB within an arbitrary
+    (lo, hi) sub-window, by scaling n_sig by the DCB CDF's mass fraction
+    there. `p`/`e` are the fit's values/errors (e.g. Minuit's m.values,
+    m.errors), needing mean/sigma/alphaL/nL/alphaR/nR/n_sig."""
+    edge_cdf = dcb_cdf(np.array(window), xmin, xmax, p['mean'], p['sigma'],
+                       p['alphaL'], p['nL'], p['alphaR'], p['nR'])
+    frac = float(edge_cdf[1] - edge_cdf[0])
+    return p['n_sig'] * frac, e['n_sig'] * frac
 
 
 # --- iminuit cost functions ---
@@ -190,7 +210,7 @@ def make_gauss_cost(counts, bin_edges, xmin, xmax):
 
     def scaled_cdf(xe, mean, sigma, n_sig, n_bkg, c0, c1):
         return (
-            gauss_cdf(xe, mean, sigma, xmin, xmax) * n_sig
+            gauss_cdf(xe, xmin, xmax, mean, sigma) * n_sig
             + cheb_cdf(xe, xmin, xmax, c0, c1) * n_bkg
         )
 

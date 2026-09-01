@@ -2,15 +2,7 @@
 kinematics.py
 
 Four-vector arithmetic. Elementwise, so it works on plain numpy arrays and on
-awkward arrays at any level -- per-candidate, per-daughter, per-generator
-particle -- without knowing which it was handed.
-
-Nothing here reads files, applies cuts, or knows about the event structure.
-Use `cut_utils.follow` / `cut_utils.reduce` to move the result to the level you
-want:
-
-    fast = cut_utils.reduce(tree, pt(tree['prt_px'], tree['prt_py']) > 500,
-                            'prt_idx_mom', how='all')
+awkward arrays.
 """
 
 import numpy as np
@@ -43,6 +35,7 @@ def invariant_mass2(px1, py1, pz1, e1, px2, py2, pz2, e2):
     py = py1 + py2
     pz = pz1 + pz2
     return e**2 - px**2 - py**2 - pz**2
+
 
 def eta(px, py, pz):
     """

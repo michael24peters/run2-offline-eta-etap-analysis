@@ -149,7 +149,7 @@ def test_fit_dcb_returns_result_and_minuit():
     assert isinstance(m, Minuit)
 
 
-# --- mean_prior / sigma_prior / tail_prior wiring ----------------------------
+# --- mean_prior / sigma_prior / tail_fixed / fit_window wiring ---------------
 
 def test_fit_gauss_sigma_prior_pulls_the_fit():
     """sigma_prior=(value, error) must behave like the manual constraint
@@ -165,21 +165,81 @@ def test_fit_gauss_sigma_prior_pulls_the_fit():
     assert abs(constrained_sigma - 5.0) < abs(free_sigma - 5.0)
 
 
-def test_fit_dcb_tail_prior_constrains_the_tails():
-    """tail_prior=(values, cov) for TAIL_PARAMS must change the fitted tail
-    values relative to an unconstrained fit on the same low-statistics data --
-    this is the direct fix for tails running away with no ceiling."""
+def test_fit_dcb_tail_fixed_holds_the_tails():
+    """tail_fixed=values for TAIL_PARAMS must hold the fitted tail values
+    exactly at the given values instead of floating them -- this is the fix
+    for a weakly-MC-constrained tail param (e.g. nR) drifting into the
+    barely-decaying regime and absorbing background as signal."""
     from fit_dcb import TAIL_PARAMS
     rng = np.random.default_rng(4)
     vals = np.concatenate([rng.normal(547.9, 8.0, 60),
                            rng.uniform(XMIN, XMAX, 300)])
 
     tail_values = np.array([1.5, 2.0, 1.5, 2.0])
-    tail_cov = np.diag([0.05, 0.05, 0.05, 0.05])
     result_free, _ = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60)
-    result_constrained, _ = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60,
-                                    tail_prior=(tail_values, tail_cov))
+    result_fixed, m_fixed = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60,
+                                    tail_fixed=tail_values)
+    free_values = [result_free['fit']['parameters'][p]['value'] for p in TAIL_PARAMS]
+    assert free_values != pytest.approx(list(tail_values))
     for i, p in enumerate(TAIL_PARAMS):
-        free_v = result_free['fit']['parameters'][p]['value']
-        con_v = result_constrained['fit']['parameters'][p]['value']
-        assert abs(con_v - tail_values[i]) <= abs(free_v - tail_values[i]) + 1e-9
+        assert result_fixed['fit']['parameters'][p]['value'] == pytest.approx(tail_values[i])
+        assert m_fixed.fixed[p] is True
+
+
+def test_fit_dcb_fit_window_restricts_the_likelihood():
+    """fit_window=(lo, hi) must only use bins inside it: the reported chi2/
+    ndof should be computed over a smaller bin count than the full-window fit,
+    and meta['fit_window'] should record the bounds used."""
+    rng = np.random.default_rng(5)
+    vals = np.concatenate([rng.normal(547.9, 5.0, 400),
+                           rng.uniform(XMIN, XMAX, 4000)])
+
+    result_full, _ = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60)
+    result_windowed, _ = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60,
+                                 fit_window=(530.0, 570.0))
+
+    assert result_windowed['meta']['fit_window'] == [530.0, 570.0]
+    assert result_windowed['fit']['ndof'] < result_full['fit']['ndof']
+    # n_sig_fit_window integrates only the fitted window, so it should be no
+    # larger than the full-window-normalized n_sig.
+    params = result_windowed['fit']['parameters']
+    assert params['n_sig_fit_window']['value'] <= params['n_sig']['value']
+
+
+def test_fit_dcb_no_background_fixes_bkg_params_to_zero():
+    """no_background=True must hold n_bkg/c0/c1 fixed at 0 rather than
+    floating them -- for a sample (e.g. truth-matched signal MC) that
+    shouldn't have a background component competing for events at all."""
+    rng = np.random.default_rng(6)
+    vals = rng.normal(547.9, 5.0, 500)
+
+    result, m = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60, no_background=True)
+    params = result['fit']['parameters']
+    assert params['n_bkg']['value'] == 0.0
+    assert params['c0']['value'] == 0.0
+    assert params['c1']['value'] == 0.0
+    for p in ('n_bkg', 'c0', 'c1'):
+        assert m.fixed[p] is True
+
+
+def test_fit_dcb_report_halfwidth_sigma_adds_a_core_window_yield():
+    """report_halfwidth_sigma=k must add n_sig_report_window, integrating
+    n_sig over [mean-k*sigma, mean+k*sigma] using the fit's own mean/sigma,
+    without changing what the likelihood was fit against (unlike
+    fit_window) -- so ndof should match a plain fit with no window at all."""
+    rng = np.random.default_rng(7)
+    vals = np.concatenate([rng.normal(547.9, 5.0, 400),
+                           rng.uniform(XMIN, XMAX, 4000)])
+
+    result_plain, _ = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60)
+    result_reported, _ = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60,
+                                 report_halfwidth_sigma=3.0)
+
+    assert result_reported['fit']['ndof'] == result_plain['fit']['ndof']
+    params = result_reported['fit']['parameters']
+    assert 'n_sig_report_window' in params
+    assert params['n_sig_report_window']['value'] <= params['n_sig']['value']
+    mean = params['mean']['value']
+    sigma = params['sigma']['value']
+    assert result_reported['meta']['report_window'] == pytest.approx(
+        [mean - 3.0 * sigma, mean + 3.0 * sigma])

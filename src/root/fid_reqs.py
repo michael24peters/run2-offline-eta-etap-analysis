@@ -5,12 +5,14 @@ Script to apply fiducial requirements to generator-level particles in a ROOT
 file. Uses uproot + awkward for I/O (no PyROOT/ROOT dependency).
 
 Usage:
-------
-    python fid_reqs.py input.root
+    python fid_reqs.py input.root mother_pid daughter_pid1 daughter_pid2 ...
+
+Examples:
+    python fid_reqs.py input.root 221 13 -13  |  (eta -> mu+ mu-)
+    python fid_reqs.py input.root 221 13 -13 22  |  (eta -> mu+ mu- gamma)
 """
 
 import argparse
-import logging
 import os
 import sys
 
@@ -24,6 +26,7 @@ sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 import kinematics
 import cut_utils
 
+# LHCb fiducial requirements.
 FIDUCIAL_REQS = {
     13: lambda pt, p, eta: (2.0 < eta) & (eta < 4.5) & (pt > 500) & (p > 3000),
     11: lambda pt, p, eta: (2.0 < eta) & (eta < 4.5) & (pt > 500) & (p > 3000),
@@ -44,41 +47,43 @@ def fiducial_mask(tree):
 
     # [False, False, ...]
     ok = np.zeros(len(pid), dtype=bool)
-    # Apply fiducial requirements to each particle type, i.e., for each PID.
+    # Apply fiducial requirements to each particle type (PID).
     for ptype, reqs in FIDUCIAL_REQS.items():
-        # True for all particles of this PID
+        # True for all particles of this PID 
+        # [13, -13, 22, ...] -> [True, True, False, ...] for ptype=13
         mask = np.abs(pid) == ptype
         # For each particle of this PID, check if it passes the fiducial reqs.
         if mask.any(): ok[mask] = reqs(pt[mask], p[mask], eta[mask])
     # Unflatten back to per-event structure, also require momentum > 0 to avoid
-    # divison by zero, just in case.
-    return ak.unflatten(ok & (p != 0), ak.num(tree['mc_pid']))
+    # divison by zero and unphysical momenta, just in case.
+    return ak.unflatten(ok & (p > 0), ak.num(tree['mc_pid']))
+
 
 def fiducial_masks(tree, mother_pid, daughter_pids):
     '''Returns a dict of per-event boolean masks for the mother and daughter
     particles of a given decay. True for all particles that pass the LHCb
-    fiducidal requirements. Every mask is the same shape and can be composed
+    fiducial requirements. Every mask is the same shape and can be composed
     with logical operators to select events with all daughters passing.
 
     Keys:
-    'signal':          True for all signal particles (mothers with correct 
-                       daughters)
-    'in_acceptance':   ...and every daughter is in the fiducial region
-    'failed_muon':     ...except for at least one muon daughter outside the
-                          fiducial region
-    'failed_gamma':    ...except for at least one photon daughter outside the
-                          fiducial region
-    'failed_electron': ...except for at least one electron daughter outside the
-                          fiducial region
+    'signal':          Confirmed mother and daughters of the specified decay
+    'in_acceptance':   ...and every daughter passes fiducial requirements
+    'failed_muon':     ...except for at least one muon daughter that fails
+    'failed_gamma':    ...except for at least one photon daughter that fails
+    'failed_electron': ...except for at least one electron daughter that fails
     'stray':           Generator particles with no mother that are not the signal
                        mother/candidate; i.e., MC-matched background particles
     '''
-    # Get the per-particle fiducial mask for the whole tree.
+    # Get the per-particle fiducial mask for the whole tree, i.e., all generator
+    # level particles in the ntuple.
     ok = fiducial_mask(tree)
-    # Select only the mother and daughter particles of the given decay.
+    # Select only the mother and daughter particles of the given decay, i.e.,
+    # ignore background, strays, etc. and isolate to only pure signal. Formatted
+    # as a per-particle mask. True for all mother and daughter particles of
+    # the signal, False for all others.
     signal = cut_utils.decay_mask(tree, mother_pid, daughter_pids)
 
-    # Check whether ALL daughters are in acceptance.
+    # Now check whether ALL daughters are in acceptance (not just signal).
     daughters_ok = cut_utils.reduce(tree, ok, 'mc_idx_mom', how='all',
                                     target_ref='mc_pid')
 
@@ -92,19 +97,17 @@ def fiducial_masks(tree, mother_pid, daughter_pids):
 
     pid = tree['mc_pid']
     return {
-        'signal':        signal,
-        'in_acceptance': signal & daughters_ok,
+        'signal':          signal,
+        'in_acceptance':   signal & daughters_ok,
         'failed_muon':     signal & fail_mask(abs(pid) == 13),
         'failed_gamma':    signal & fail_mask(pid == 22),
         'failed_electron': signal & fail_mask(abs(pid) == 11),
-        'stray':         ~cut_utils.valid(tree, 'mc_idx_mom') & ~signal,
+        'stray':           ~cut_utils.valid(tree, 'mc_idx_mom') & ~signal,
     }
+
 
 # -------------------------------------------------------------------------------
 
-# Guarded so the functions above can be imported (by tests, or by a notebook)
-# without argparse firing and the file being read. Matches bkg.py, plot_gauss.py
-# and the other entry points in this repo.
 if __name__ == '__main__':
     # Parse command line arguments
     parser = argparse.ArgumentParser()

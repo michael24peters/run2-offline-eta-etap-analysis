@@ -63,6 +63,28 @@ def plot_fit_data(data, config):
     ax.plot(x, bkg, '--', label='Background', color='green')
     ax.axvline(x=547.86, color='black', linestyle='--', label='PDG Mass')
 
+    # Mark the region actually used in the likelihood, if the fit was
+    # restricted (fit_dcb's fit_window) -- curves elsewhere on the plot are
+    # extrapolated from the fixed/fitted shape, not fit against those bins.
+    fit_window = data.get('meta', {}).get('fit_window')
+    if fit_window:
+        for ax_i in (ax, ax_pull):
+            for edge in fit_window:
+                ax_i.axvline(x=edge, color='0.4', linestyle=':', linewidth=1.2)
+        ax.text(fit_window[0], ax.get_ylim()[1], ' fit region', color='0.4',
+                fontsize=10, va='top', ha='left')
+
+    # Mark the core window a signal yield was quoted over (fit_dcb's
+    # report_halfwidth_sigma/report_window), if present -- doesn't affect the
+    # likelihood, just shows where n_sig_report_window was integrated over.
+    report_window = data.get('meta', {}).get('report_window')
+    if report_window:
+        for ax_i in (ax, ax_pull):
+            for edge in report_window:
+                ax_i.axvline(x=edge, color='darkorange', linestyle=':', linewidth=1.2)
+        ax.text(report_window[1], ax.get_ylim()[1], 'report window ', color='darkorange',
+                fontsize=10, va='top', ha='right')
+
     # Grid, legend, and label
     ax.grid(alpha=0.3)
     ax.legend(loc=config.get('legend_loc', 'best'), frameon=True, fancybox=True,
@@ -92,9 +114,18 @@ def plot_fit_data(data, config):
     ax_pull.bar(x, pulls, width=bin_width, color='red', edgecolor='none')
     ax_pull.axhline(0, color='black', lw=0.8)
     # y axis config
-    # Set y axis limits based on config or pull range
-    if config.get('pull_ylim') is not None: ymin, ymax = config['pull_ylim']
-    else: ymin, ymax = int(np.floor(pulls.min())) - 1, int(np.ceil(pulls.max())) + 1
+    # Set y axis limits based on config or pull range. Bins outside
+    # fit_window (if set) were never fit against, so their pulls can be huge
+    # and shouldn't blow out the axis scale for the bins that matter.
+    if config.get('pull_ylim') is not None:
+        ymin, ymax = config['pull_ylim']
+    else:
+        scale_pulls = pulls
+        if fit_window:
+            in_window = (x >= fit_window[0]) & (x <= fit_window[1])
+            if in_window.any():
+                scale_pulls = pulls[in_window]
+        ymin, ymax = int(np.floor(scale_pulls.min())) - 1, int(np.ceil(scale_pulls.max())) + 1
     ax_pull.set_ylim(ymin, ymax)
     ax_pull.set_yticks(np.arange(ymin, ymax + 1, 1))  # TODO: test ticks
     ax_pull.tick_params(axis='y', direction='in')
