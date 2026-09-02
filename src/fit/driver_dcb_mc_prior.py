@@ -3,19 +3,34 @@ driver_dcb_mc_prior.py
 
 Two-stage DCB fit: fit signal MC first to pin down the tail-shape parameters
 (alphaL, nL, alphaR, nR) with no background component, then fit data with the
-tails held fixed and quote a signal yield restricted to a core window.
+tails softly constrained (not fixed) to that MC shape.
 
     read MC root   → select → best candidate
-                    → fit_dcb(fixed_params={n_bkg,c0,c1: 0}) → tail_values
+                    → fit_dcb(fixed_params={n_bkg,c0,c1: 0}) → tail_values, tail_cov
     read data root → select → best candidate
-                    → fit_dcb(fixed_params=dict(zip(TAIL_PARAMS, tail_values)))
-                    → n_sig_report_window (this driver, via fit_utils.dcb_window_yield)
+                    → fit_dcb(tail_prior=(tail_values, tail_cov * TAIL_PRIOR_FACTOR**2))
                     → results/plot
 
-A soft NormalConstraint prior on the tails isn't enough: if MC only weakly
-constrains one of the four (nR is nearly degenerate with alphaR at large n),
-the data fit can drift it into the barely-decaying regime and reclassify
-background as signal. Hard-fixing removes that degree of freedom outright.
+Hard-fixing the tails to their MC values was tried first and hard-fixing does
+remove the tails as a degree of freedom the data fit could otherwise drift
+into a degenerate regime with -- but it also removes any ability for the data
+fit to compensate for real MC/data differences in the tail shape. Measured
+result on this channel: both legs converged (`valid=True`) but the data fit's
+chi2/ndof came back at ~21 (worse than the single-stage, unconstrained-tail
+fit's ~1.2), and hard-fixing that MC-only tail shape across ~150 per-bin
+Dalitz fits produced *more* non-converging bins than before, with a median
+chi2/ndof of ~12 among the ones that did converge -- i.e. a numerically valid
+but systematically wrong shape, not something worth trading real bins for.
+
+Now the tails float in the data fit, but are penalized (via
+`NormalConstraint(TAIL_PARAMS, tail_values, error=tail_cov)`) for straying
+from the MC-fitted values, with that constraint's covariance inflated by
+`TAIL_PRIOR_FACTOR**2` (a stdev multiplier, so this is `factor` standard
+deviations of slack, the same widening scheme `fit_dalitz.ipynb` already
+uses for its per-bin mean/sigma and c0/c1 priors) so the data fit has real
+room to move away from the MC value where the data disagrees, while staying
+anchored against drifting into the degenerate large-n regime the naive soft
+constraint above was originally worried about.
 
 The full mass window is kept for both fits -- restricting the data fit's
 likelihood to a narrow core window was tried and made things worse: floating
@@ -29,13 +44,10 @@ deep-tail regions of the (background-free) MC -- the near tail wants a
 heavier tail than the deep tail actually supports, so nL/nR end up as a
 compromise that measurably over-predicts the deepest tail (~17% over MC's own
 counts 17-23 sigma out). This is a real modeling limitation, not something a
-parameter fix can remove. Two mitigations: fixing n_bkg/c0/c1 to 0 on the MC
-fit (background shouldn't float at all in a truth-matched sample, and doing
-so was additionally distorting the tail-shape estimate -- nR came back far
-more precisely determined without it); and, on the data fit's result,
-n_sig_report_window -- the signal yield integrated over a sane core window
-(--report-halfwidth-sigma wide), decoupled from the over-extrapolating far
-tail. See README.md.
+parameter fix can remove. Mitigation: fixing n_bkg/c0/c1 to 0 on the MC fit
+(background shouldn't float at all in a truth-matched sample, and doing so
+was additionally distorting the tail-shape estimate -- nR came back far more
+precisely determined without it). See README.md.
 
 Same selection flags apply to both files, since the tail-shape fix is only
 valid if MC and data were selected the same way.
@@ -46,7 +58,7 @@ Usage:
                        [--mean-init 548] [--sigma-init 5]
                        [--alphaL-init 1.5] [--nL-init 2]
                        [--alphaR-init 1.5] [--nR-init 2]
-                       [--report-halfwidth-sigma 10]
+                       [--tail-prior-factor 5]
 """
 
 import sys
@@ -64,7 +76,6 @@ sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'fit'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
 import cut_utils
-import fit_utils
 import kinematics
 from fit_dcb import fit_dcb, TAIL_PARAMS
 from plot_dcb import plot_dcb
@@ -126,11 +137,12 @@ parser.add_argument('--alphaL-init', type=float, default=1.5, help='Initial left
 parser.add_argument('--nL-init', type=float, default=2.0, help='Initial left tail n_L')
 parser.add_argument('--alphaR-init', type=float, default=1.5, help='Initial right tail α_R')
 parser.add_argument('--nR-init', type=float, default=2.0, help='Initial right tail n_R')
-parser.add_argument('--report-halfwidth-sigma', type=float, default=10.0,
-                    help='Half-width, in units of the fitted sigma, of the core window used '
-                         'to compute n_sig_report_window -- a single power-law DCB tail '
-                         'over-extrapolates far from the peak (see README.md), so this is '
-                         'the number to quote as the signal yield rather than n_sig itself')
+parser.add_argument('--tail-prior-factor', type=float, default=5.0,
+                    help='Stdev multiplier widening the MC fit\'s tail-parameter covariance '
+                         'before it constrains the data fit\'s tails (default: 5.0, i.e. the '
+                         'data fit gets 5 MC-fit standard deviations of slack per tail '
+                         'parameter). Larger = looser constraint, closer to floating the '
+                         'tails freely; smaller = closer to hard-fixing them at the MC values')
 args = parser.parse_args()
 
 
@@ -268,7 +280,22 @@ mc_result, m_mc = fit_dcb(
 
 tail_values = np.array([m_mc.values[p] for p in TAIL_PARAMS])
 
-print(f'[INFO] MC tail shape (fixed for data fit): ' + ', '.join(
+# Widen the MC fit's own tail covariance before it constrains the data fit --
+# `tail_prior_factor` MC-fit standard deviations of slack per parameter, same
+# widening scheme as fit_dalitz.ipynb's per-bin mean/sigma and c0/c1 priors.
+# Falls back to a diagonal matrix from m_mc.errors if HESSE's matrix inversion
+# failed (m_mc.covariance is then None) -- no cross-parameter correlation
+# term, but still a usable prior instead of a crash.
+if m_mc.covariance is not None:
+    tail_cov = np.array(m_mc.covariance[list(TAIL_PARAMS)]) * args.tail_prior_factor**2
+else:
+    print('[WARN] m_mc.covariance is None -- falling back to a diagonal prior '
+          'from m_mc.errors for the tail parameters', file=sys.stderr)
+    tail_errs = np.array([m_mc.errors[p] for p in TAIL_PARAMS])
+    tail_cov = np.diag(tail_errs**2) * args.tail_prior_factor**2
+
+print(f'[INFO] MC tail shape (prior for data fit, x{args.tail_prior_factor:.0f} '
+      f'widened stdev): ' + ', '.join(
     f'{p}={v:.4f}±{m_mc.errors[p]:.4f}' for p, v in zip(TAIL_PARAMS, tail_values)
 ), file=sys.stderr)
 
@@ -286,36 +313,20 @@ with open(mc_json_path, 'w') as f:
 print(f'[DONE] MC JSON saved to: {mc_json_path}', file=sys.stderr)
 plot_dcb(mc_result, {'output': os.path.join(args.outdir, f'dcb_mass_fit_mc{suffix}.png')})
 
-# --- 2. Fit data with the MC tail shape fixed ---------------------------------
+# --- 2. Fit data with the MC tail shape as a (widened) prior ------------------
 data_masses, data_selection_report = select_masses(args.data_infile, 'data')
 data_result, m_data = fit_dcb(
     data_masses,
     xmin=args.xmin, xmax=args.xmax, nbins=args.nbins,
     mean_init=args.mean_init, sigma_init=args.sigma_init,
-    fixed_params=dict(zip(TAIL_PARAMS, tail_values)),
+    alphaL_init=tail_values[0], nL_init=tail_values[1],
+    alphaR_init=tail_values[2], nR_init=tail_values[3],
+    tail_prior=(tail_values, tail_cov),
 )
 
-# n_sig_report_window: a single power-law DCB tail can't fit both the
-# near-tail and deep-tail of the real shape at once (see README.md, ~17%
-# over-prediction 17-23 sigma out), so quote the signal yield in a sane core
-# window -- [mean - k*sigma, mean + k*sigma], from the fit's own mean/sigma --
-# instead of trusting the over-extrapolated tail integral.
-p_data = m_data.values
-report_window = (p_data['mean'] - args.report_halfwidth_sigma * p_data['sigma'],
-                  p_data['mean'] + args.report_halfwidth_sigma * p_data['sigma'])
-n_sig_rw, n_sig_rw_err = fit_utils.dcb_window_yield(
-    m_data.values, m_data.errors, args.xmin, args.xmax, report_window)
-data_result['meta']['report_window'] = list(report_window)
-data_result['fit']['parameters']['n_sig_report_window'] = {
-    'value': round(float(n_sig_rw), 2),
-    'error': round(float(n_sig_rw_err), 2),
-    'note': 'signal yield within report_window, independent of the likelihood -- use this '
-            'to quote a core-region count when the fitted tail shape over-extrapolates '
-            'further out',
-}
-
 data_result['meta']['input_file'] = args.data_infile
-data_result['meta']['tail_fixed_from'] = args.mc_infile
+data_result['meta']['tail_prior_from'] = args.mc_infile
+data_result['meta']['tail_prior_factor'] = args.tail_prior_factor
 data_result['meta']['selection'] = {
     'tos': not args.no_tos, 'pnn_mu_min': args.pnn_mu_min,
     'best_candidate': f'min {METRIC_BRANCH}',

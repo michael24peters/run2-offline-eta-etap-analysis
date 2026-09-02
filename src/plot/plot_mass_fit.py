@@ -74,17 +74,6 @@ def plot_fit_data(data, config):
         ax.text(fit_window[0], ax.get_ylim()[1], ' fit region', color='0.4',
                 fontsize=10, va='top', ha='left')
 
-    # Mark the core window a signal yield was quoted over (fit_dcb's
-    # report_halfwidth_sigma/report_window), if present -- doesn't affect the
-    # likelihood, just shows where n_sig_report_window was integrated over.
-    report_window = data.get('meta', {}).get('report_window')
-    if report_window:
-        for ax_i in (ax, ax_pull):
-            for edge in report_window:
-                ax_i.axvline(x=edge, color='darkorange', linestyle=':', linewidth=1.2)
-        ax.text(report_window[1], ax.get_ylim()[1], 'report window ', color='darkorange',
-                fontsize=10, va='top', ha='right')
-
     # Grid, legend, and label
     ax.grid(alpha=0.3)
     ax.legend(loc=config.get('legend_loc', 'best'), frameon=True, fancybox=True,

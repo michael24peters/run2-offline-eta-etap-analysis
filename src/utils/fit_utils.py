@@ -225,7 +225,7 @@ def make_dcb_cost(counts, bin_edges, xmin, xmax):
 
     def scaled_cdf(xe, mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1):
         return (
-            dcb_cdf(xe, mean, sigma, alphaL, nL, alphaR, nR, xmin, xmax) * n_sig
+            dcb_cdf(xe, xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR) * n_sig
             + cheb_cdf(xe, xmin, xmax, c0, c1) * n_bkg
         )
 
@@ -241,7 +241,7 @@ def make_dcb_sym_cost(counts, bin_edges, xmin, xmax):
 
     def scaled_cdf(xe, mean, sigma, alpha, n, n_sig, n_bkg, c0, c1):
         return (
-            dcb_cdf(xe, mean, sigma, alpha, n, alpha, n, xmin, xmax) * n_sig
+            dcb_cdf(xe, xmin, xmax, mean, sigma, alpha, n, alpha, n) * n_sig
             + cheb_cdf(xe, xmin, xmax, c0, c1) * n_bkg
         )
 
@@ -286,6 +286,57 @@ def run_fit(cost, initial_values, limits=None, fixed=None, seeds=None):
         for param in (fixed or []): m.fixed[param] = True
         m.migrad(ncall=100000)
         m.hesse()
+        if not m.valid:
+            # A single MIGRAD pass can land close enough for HESSE to succeed
+            # but still miss MIGRAD's own EDM convergence goal -- standard
+            # MINUIT practice is to re-run it once more from there, refining
+            # off the now-improved Hessian estimate, before giving up.
+            m.migrad(ncall=100000)
+            m.hesse()
         if m.valid: return m
         if best is None or m.fval < best.fval: best = m
     return best
+
+
+# --- Reloading a saved fit ---
+
+class NamedCovariance:
+    """Read-only stand-in for iminuit's name-indexable covariance view, e.g.
+    cov[['mean', 'sigma']] returns the 2x2 submatrix for those two parameters,
+    in that order."""
+
+    def __init__(self, names, matrix):
+        self._index = {name: i for i, name in enumerate(names)}
+        self._matrix = np.asarray(matrix, dtype=float)
+
+    def __getitem__(self, names):
+        idx = [self._index[n] for n in names]
+        return self._matrix[np.ix_(idx, idx)]
+
+
+class LoadedFit:
+    """Minuit-like read-only view over a JSON fit result's `fit` block, so
+    code written against a live Minuit object (m.values[name],
+    m.errors[name], m.valid, m.covariance) runs unchanged against a fit
+    reloaded from disk.
+
+    `covariance` is None unless the `fit` block has a `covariance` entry
+    ({'names': [...], 'matrix': [[...]]}) -- same as a live fit whose HESSE
+    matrix inversion failed, so callers that already fall back to a diagonal
+    prior from `errors` in that case need no changes. There is no live HESSE
+    run behind a loaded fit, so `fmin` and `limits` aren't reconstructed --
+    debugging cells built around those should be skipped for a loaded fit
+    rather than adapted.
+    """
+
+    def __init__(self, fit_block):
+        self.valid = fit_block['valid']
+        self.fval = fit_block['fval']
+        self.nfit = fit_block['n_free_params']
+        params = fit_block['parameters']
+        self.parameters = tuple(params)
+        self.values = {name: p['value'] for name, p in params.items()}
+        self.errors = {name: p['error'] for name, p in params.items()}
+        cov = fit_block.get('covariance')
+        self.covariance = (NamedCovariance(cov['names'], cov['matrix'])
+                            if cov is not None else None)

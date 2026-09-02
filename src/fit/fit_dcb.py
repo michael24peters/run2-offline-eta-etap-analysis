@@ -30,7 +30,7 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
             alphaL_init=1.5, nL_init=2.0,
             alphaR_init=1.5, nR_init=2.0,
             c0_init=0.0, c1_init=0.0,
-            mean_prior=None, sigma_prior=None, fixed_params=None):
+            mean_prior=None, sigma_prior=None, tail_prior=None, fixed_params=None):
     """
     Run the asymmetric DCB + Chebyshev fit and return (result, m).
 
@@ -44,6 +44,12 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
     alphaR_init, nR_init : float : Initial values for the right tail parameters.
     c0_init, c1_init : float : Initial values for the Chebyshev coefficients.
     mean_prior, sigma_prior : optional (value, error) in MeV; see fit_gauss().
+    tail_prior : optional (values, cov) for TAIL_PARAMS as a group -- `values`
+             a length-4 array/dict, `cov` its 4x4 covariance. Adds
+             NormalConstraint(TAIL_PARAMS, values, error=cov) to the cost, so
+             the tails float but are penalized for straying from `values`
+             (e.g. an MC-derived tail shape) by an amount set by `cov` --
+             looser than hard-fixing them via `fixed_params`.
     fixed_params : optional dict {param_name: value}, any of mean, sigma,
              alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1. Each is seeded at
              the given value and held fixed through both fit stages instead
@@ -68,6 +74,8 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
         cost = cost + NormalConstraint('mean', mean_prior[0], error=mean_prior[1])
     if sigma_prior is not None:
         cost = cost + NormalConstraint('sigma', sigma_prior[0], error=sigma_prior[1])
+    if tail_prior is not None:
+        cost = cost + NormalConstraint(TAIL_PARAMS, tail_prior[0], error=tail_prior[1])
 
     init = dict(
         mean   = mean_init,
@@ -149,6 +157,15 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
     curve_bkg = fit_utils.cheb_bkg_pdf(x_curve, xmin, xmax, p['c0'], p['c1']) * p['n_bkg'] * bw
     curve_fit = curve_sig + curve_bkg
 
+    # Covariance, name-indexed so it survives the round trip through JSON.
+    # None if HESSE's matrix inversion failed (m.covariance is then None too).
+    covariance = None
+    if m.covariance is not None:
+        covariance = {
+            'names': list(m.parameters),
+            'matrix': np.asarray(m.covariance).tolist(),
+        }
+
     # Build JSON. Everything a plotting script needs travels in the result, so
     # plotting never has to re-open the ROOT file or re-run the fit: `meta` for
     # provenance, `fit` for the numbers, `histogram` for the points/residuals,
@@ -171,6 +188,7 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
             'ndof': ndof,
             'chi2_per_ndof': round(chi2_per_ndof, 6),
             'n_free_params': m.nfit,
+            'covariance': covariance,
             'parameters': {
                 'mean':  {'value': round(float(p['mean']), 6),
                           'error': round(float(e['mean']), 6), 'unit': 'MeV'},

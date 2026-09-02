@@ -104,12 +104,24 @@ python src/fit/driver_dcb.py ntuple/lhcb/eta2mumugamma/20260608/combined_files.r
 ## Fixing tails from an MC fit
 
 Fit signal MC first to pin down the tail-shape parameters (alphaL, nL, alphaR,
-nR), then fix them in the data fit -- a soft `NormalConstraint` prior isn't
-enough on its own: if MC only weakly constrains one of the four (a real
-failure mode -- CB tails are nearly degenerate at large n), the data fit can
-still drift it into the region where the tail barely decays at all, letting
-background get reclassified as signal. Fixing removes that degree of freedom
-outright.
+nR), then constrain them in the data fit with a `NormalConstraint` prior
+centered on the MC values, its covariance widened by `--tail-prior-factor`
+standard deviations (default 5) rather than hard-fixed.
+
+Hard-fixing was tried first, on the reasoning that a soft prior isn't enough
+if MC only weakly constrains one of the four (CB tails are nearly degenerate
+at large n, so a weak constraint lets the data fit drift into the
+barely-decaying regime and reclassify background as signal). It does remove
+that degree of freedom outright -- but it also removes the data fit's only
+way to compensate for real MC/data differences in tail shape, and measured on
+`eta2mumugamma`: both legs converged (`valid=True`), but the data fit's
+chi2/ndof came back at ~21 (vs. ~1.2 for the unconstrained-tail single-stage
+fit), and locking ~150 per-bin Dalitz fits to that MC-only shape produced
+*more* non-converging bins than before, with a median chi2/ndof of ~12 among
+the bins that did converge. A numerically valid but systematically wrong
+shape isn't worth trading real bins for, so the tails float with a wide-slack
+prior instead: real freedom to move away from the MC value where data
+disagrees, while still anchored against drifting into the degenerate regime.
 
 Keep the full mass window for both fits. Restricting the data fit's
 likelihood to a narrow core window around the peak was tried, to stop the
@@ -127,18 +139,12 @@ supports, so nL/nR end up as a compromise -- concretely, the fitted MC model
 over-predicts its own deep-tail bin counts by ~17% (480-498 MeV, 17-23 sigma
 from the peak), while under-predicting slightly in the 500-525 MeV near-tail
 region. No parameter fix removes this; it's the functional form running out
-of flexibility. Two mitigations, both applied here:
-
-- `fixed_params={'n_bkg': 0.0, 'c0': 0.0, 'c1': 0.0}` on the MC fit. The
-  sample is truth-matched signal MC, so it shouldn't have a floating
-  background component at all -- and letting one float anyway was
-  additionally distorting the tail-shape estimate (`nR` came back at
-  4.98+/-1.25 with it floating vs. 2.10+/-0.16 fixed to zero -- the former
-  was largely unconstrained noise, not real precision).
-- Quoting a `[mean - k*sigma, mean + k*sigma]` window on the data fit's
-  result, instead of the full-window `n_sig` -- see the worked example and
-  "Why quote a report window" below. This is the number to quote, decoupled
-  from the tail's known over-extrapolation further out.
+of flexibility. Mitigation: `fixed_params={'n_bkg': 0.0, 'c0': 0.0, 'c1': 0.0}`
+on the MC fit. The sample is truth-matched signal MC, so it shouldn't have a
+floating background component at all -- and letting one float anyway was
+additionally distorting the tail-shape estimate (`nR` came back at 4.98+/-1.25
+with it floating vs. 2.10+/-0.16 fixed to zero -- the former was largely
+unconstrained noise, not real precision).
 
 ```python
 import sys
@@ -158,33 +164,16 @@ _, m_mc = fit_dcb(mc_masses, sigma_init=..., alphaL_init=1.5, nL_init=2.0,
                   fixed_params={'n_bkg': 0.0, 'c0': 0.0, 'c1': 0.0})
 
 tail_values = np.array([m_mc.values[p] for p in TAIL_PARAMS])
+tail_cov = np.array(m_mc.covariance[list(TAIL_PARAMS)])
 
-# 2. Fit data with the tail shape fixed.
+# 2. Fit data with the tail shape as a widened prior, not fixed -- gives the
+#    data fit TAIL_PRIOR_FACTOR MC-fit standard deviations of slack per tail
+#    parameter to move away from the MC value where the data disagrees.
+TAIL_PRIOR_FACTOR = 5.0
 data_masses = ...
 result, m_data = fit_dcb(data_masses, sigma_init=...,
-                         fixed_params=dict(zip(TAIL_PARAMS, tail_values)))
-
-# 3. Quote a core-window yield, computed by the caller (not fit_dcb itself)
-#    from the raw fit result -- see "Why quote a report window" below.
-p, e = m_data.values, m_data.errors
-window = (p['mean'] - 10.0 * p['sigma'], p['mean'] + 10.0 * p['sigma'])
-signal_yield, signal_yield_err = fit_utils.dcb_window_yield(p, e, xmin, xmax, window)
+                         tail_prior=(tail_values, tail_cov * TAIL_PRIOR_FACTOR**2))
 ```
-
-### Why quote a report window
-
-A single power-law DCB tail can't fit both the near-tail and deep-tail of the
-real (MC) shape at once. Comparing the MC-only fit's model prediction against
-its own histogram counts, binned by distance from the peak: the model tracks
-MC to within ~2% out to 10σ, then over-predicts by ~30% in the 17-23σ shell.
-That inflates `n_sig` (normalized over the full fit window, which typically
-spans ±20-25σ) by a real, measured amount -- ~15% in one representative fit
-(`n_sig` 47,932 vs. the ±10σ window's 40,566). This is a modeling limitation,
-not something a parameter fix removes; quoting the yield in a narrower window
-that stays inside where the model is verified against MC sidesteps it instead
-of pretending it isn't there. `fit_utils.dcb_window_yield(p, e, xmin, xmax,
-window)` computes this for any window from a finished fit's own `m.values`/
-`m.errors` -- it's generic, not something `fit_dcb` needs to know about.
 
 ## Changing the selection
 
