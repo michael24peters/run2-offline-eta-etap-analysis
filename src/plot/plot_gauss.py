@@ -33,13 +33,10 @@ def build_text(params, chi2_per_ndof):
 DEFAULT_CONFIG = {
     'description'    : 'Plot Gaussian fit results from JSON file',
     'output'         : 'gauss_mass_fit.png',  # output filename
-    'title'          : 'Eta Mass',  # plot title
     # "xlim"           : (420, 680),
     # "pull_ylim"      : (-3, 3),
     'font'           : 'sans',   # "serif" (default, STIXGeneral) or "sans" (Inter)
-    # "text_loc"       : "upper left",   # "auto" (default) or a plot_style.POSITIONS key
     'show_stats'     : True,   # set False to omit the stats box entirely
-    # "legend_loc"     : "upper right",  # any matplotlib legend loc string, default "best"
     'build_text'     : build_text,
 }
 

@@ -34,20 +34,17 @@ def build_fit_figure(data, config):
     y = np.array(hist['bin_counts'])
     yerr = np.array(hist['bin_errors'])
     fit = np.array(hist['bin_fit'])
-    sig = np.array(hist['bin_sig'])
     bkg = np.array(hist['bin_bkg'])
     pulls = np.array(hist['bin_pulls'])
     # Font
     plot_utils.apply_font(config.get('font', 'serif'))
-    plt.rcParams['font.size'] = config.get('font_size', 16)
+    plt.rcParams['font.size'] = config.get('font_size', 19)
     # Create figure with two panels
     fig, (ax, ax_pull) = plt.subplots(
         2, 1, figsize=config.get('figsize', (12, 12)),
         gridspec_kw={'height_ratios': [3, 1]},
         sharex=True
     )
-    # Title and label
-    ax.set_title(config['title'])
 
     # Top panel: data + fit
     # Set x-axis limits based on config or data range
@@ -55,20 +52,23 @@ def build_fit_figure(data, config):
     else: xmin, xmax = x.min() - 0.5, x.max() + 0.5
     ax.set_xlim(xmin, xmax)
     ax.errorbar(x, y, yerr=yerr,
-                fmt='o',
+                fmt='+',
                 label='Data',
-                color='black',
-                markersize=5,
-                markeredgewidth=1,
-                elinewidth=0.8,
-                capsize=2
+                color=plot_style.COLORS['data'],
+                markersize=7,
+                markeredgewidth=1.3,
+                elinewidth=1.3,
+                capsize=0
     )
-    # Plot fit, signal, background
-    ax.plot(x, fit, label='Total fit', color='red')
-    ax.plot(x, sig, '--', label='Signal', color='blue')
-    ax.plot(x, bkg, '--', label='Background', color='green')
+    # Background as a filled region from zero, total fit drawn on top of it --
+    # the gap between the fill's top edge and the fit curve reads as signal.
+    ax.fill_between(x, 0, bkg, label='Background',
+                     color=plot_style.COLORS['background'], alpha=0.35,
+                     linewidth=0.8, edgecolor=plot_style.COLORS['background'])
+    ax.plot(x, fit, label='Total fit', color=plot_style.COLORS['fit'], linewidth=1.8)
     if config.get('pdg_line', True):
-        ax.axvline(x=547.86, color='black', linestyle='--', label='PDG Mass')
+        ax.axvline(x=547.86, color=plot_style.COLORS['reference'],
+                   linestyle='--', label='PDG Mass')
 
     # Mark the region actually used in the likelihood, if the fit was
     # restricted (fit_dcb's fit_window) -- curves elsewhere on the plot are
@@ -77,15 +77,18 @@ def build_fit_figure(data, config):
     if fit_window:
         for ax_i in (ax, ax_pull):
             for edge in fit_window:
-                ax_i.axvline(x=edge, color='0.4', linestyle=':', linewidth=1.2)
-        ax.text(fit_window[0], ax.get_ylim()[1], ' fit region', color='0.4',
-                fontsize=10, va='top', ha='left')
+                ax_i.axvline(x=edge, color=plot_style.COLORS['reference'],
+                             linestyle=':', linewidth=1.2)
 
-    # Grid, legend, and label
-    ax.grid(alpha=0.3)
-    ax.legend(loc=config.get('legend_loc', 'best'), frameon=True, fancybox=True,
-              edgecolor='0.3', framealpha=0.85)
-    ax.set_ylabel(config.get('y_label', 'Candidates'))
+    # Ticks and grid
+    plot_style.style_axes(ax)
+
+    # Bin width, reused for both the y-label and the pull-bar width below.
+    bin_width = x[1] - x[0]
+
+    legend = ax.legend(loc='upper right', frameon=True, fancybox=False,
+                        edgecolor='none', framealpha=1)
+    ax.set_ylabel(config.get('y_label', f'Candidates / ({bin_width:.1f} MeV/c²)'))
 
     # Add fit parameters to plot
     params = data['fit']['parameters']
@@ -97,18 +100,22 @@ def build_fit_figure(data, config):
         plot_text = config['build_text'](params, chi2_per_ndof)
         term_text = None
 
-    plot_style.add_stats_box(
-        ax, plot_text,
-        loc=config.get('text_loc', 'auto'),
-        show=config.get('show_stats', True),
-        x=x, curve=fit,
-        loc_candidates=config.get('text_loc_candidates'),
-    )
+    stats_box = plot_style.add_stats_box(ax, plot_text,
+                                          show=config.get('show_stats', True))
+
+    # Reserve headroom above the data/curves for the stats box + legend,
+    # sized by actually measuring what was rendered -- not a fixed fraction.
+    content_max = max(fit.max(), (y + yerr).max())
+    plot_style.reserve_top_margin(ax, content_max, artists=[stats_box, legend])
+    plot_style.format_y_axis(ax)
+
+    if fit_window:
+        ax.text(fit_window[0], ax.get_ylim()[1], ' fit region',
+                color=plot_style.COLORS['reference'], fontsize=12, va='top', ha='left')
 
     # Bottom panel: pulls
-    bin_width = x[1] - x[0]
-    ax_pull.bar(x, pulls, width=bin_width, color='red', edgecolor='none')
-    ax_pull.axhline(0, color='black', lw=0.8)
+    ax_pull.bar(x, pulls, width=bin_width, color=plot_style.COLORS['pull'], edgecolor='none')
+    ax_pull.axhline(0, color=plot_style.COLORS['data'], lw=0.8)
     # y axis config
     # Set y axis limits based on config or pull range. Bins outside
     # fit_window (if set) were never fit against, so their pulls can be huge
@@ -124,13 +131,18 @@ def build_fit_figure(data, config):
         ymin, ymax = int(np.floor(scale_pulls.min())) - 1, int(np.ceil(scale_pulls.max())) + 1
     ax_pull.set_ylim(ymin, ymax)
     ax_pull.set_yticks(np.arange(ymin, ymax + 1, 1))  # TODO: test ticks
-    ax_pull.tick_params(axis='y', direction='in')
-    # Grid and labels
-    ax_pull.grid(alpha=0.3)
+    plot_style.style_axes(ax_pull, minor_y=False)
+    # Labels
     ax_pull.set_ylabel('Pulls')
-    ax_pull.set_xlabel('Mass (MeV/c²)')
+    ax_pull.set_xlabel(config.get('x_label', plot_style.decay_label(data.get('meta', {}))))
     # Show x labels on both panels, comment out for only bottom panel
     # ax.tick_params(axis='x', which='both', labelbottom=True)
+
+    # The leftmost x-tick label sits right where the pull axis's bottom
+    # y-tick label ends, so it collides with it -- drop it.
+    xticklabels = ax_pull.get_xticklabels()
+    if xticklabels:
+        min(xticklabels, key=lambda t: t.get_position()[0]).set_visible(False)
 
     return fig, ax, ax_pull, plot_text, term_text
 

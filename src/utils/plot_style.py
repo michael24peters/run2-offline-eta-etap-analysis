@@ -5,55 +5,38 @@ Repeatable plot style for figures: text-box stat summaries, text placement (auto
 or manual), and summary statistics both to terminal and matplotlib.
 """
 
-import numpy as np
+import math
 
-# Axes-fraction (x, y, ha, va) for each named placement. "auto" placement
-# (see choose_best_position) picks among a caller-supplied subset of these.
-POSITIONS = {
-    'upper left':   (0.025, 0.95, 'left',   'top'),
-    'upper center': (0.5,   0.95, 'center', 'top'),
-    'upper right':  (0.975, 0.95, 'right',  'top'),
-    'middle left':  (0.025, 0.5,  'left',   'center'),
-    'middle right': (0.975, 0.5,  'right',  'center'),
-    'lower left':   (0.025, 0.05, 'left',   'bottom'),
-    'lower center': (0.5,   0.05, 'center', 'bottom'),
-    'lower right':  (0.975, 0.05, 'right',  'bottom'),
+import matplotlib.ticker as mticker
+
+# Shared fit-plot palette. fit/background/pull validated pairwise
+# colorblind-safe (dataviz skill's validate_palette.js, all-pairs, light mode).
+COLORS = {
+    'data':       '#000000',
+    'fit':        '#2a78d6',
+    'background': '#1baf7a',
+    'pull':       '#eb6834',
+    'reference':  '#898781',
 }
 
-def choose_best_position(ax, plot_text, curve_x, curve_y, loc_candidates=None):
-    """
-    Pick the position (from `loc_candidates`, default: all of POSITIONS)
-    whose rendered stats box overlaps the curve the least.
+# LaTeX decay string for each channel, keyed by the channel segment of
+# meta.input_file ('ntuple/lhcb/<channel>/<date>/combined_files.root').
+CHANNEL_LABELS = {
+    'eta2mumu':      r'\eta \to \mu^+ \mu^-',
+    'eta2mumugamma': r'\eta \to \mu^+ \mu^- \gamma',
+}
 
-    This actually draws `plot_text` at each candidate position, measures its
-    real rendered bounding box via the canvas renderer (so it automatically
-    accounts for font size, number of lines, and box padding), and counts how
-    many (curve_x, curve_y) points fall inside it.
-
-    Ties resolve to whichever position is listed first in
-    `loc_candidates` / POSITIONS, so upper positions are preferred over
-    middle/lower ones when multiple are equally clear.
+def decay_label(meta):
     """
-    loc_candidates = loc_candidates or list(POSITIONS.keys())
-    fig = ax.figure
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-    xf, yf = ax.transAxes.inverted().transform(
-        ax.transData.transform(np.column_stack([curve_x, curve_y]))
-    ).T
-    scores = {}
-    for pos in loc_candidates:
-        px, py, ha, va = POSITIONS[pos]
-        artist = ax.text(px, py, plot_text, transform=ax.transAxes,
-                          horizontalalignment=ha, verticalalignment=va,
-                          bbox=dict(boxstyle='round,pad=0.4'))
-        bbox_axes = artist.get_window_extent(renderer=renderer).transformed(
-            ax.transAxes.inverted())
-        inside = ((xf >= bbox_axes.x0) & (xf <= bbox_axes.x1) &
-                  (yf >= bbox_axes.y0) & (yf <= bbox_axes.y1))
-        scores[pos] = int(inside.sum())
-        artist.remove()
-    return min(scores, key=scores.get)
+    LaTeX x-axis mass label for a fit-result's meta dict, derived from the
+    channel segment of meta['input_file']. Falls back to a bare 'Mass' label
+    if no known channel is found.
+    """
+    segments = meta.get('input_file', '').split('/')
+    for segment in segments:
+        if segment in CHANNEL_LABELS:
+            return fr'$m({CHANNEL_LABELS[segment]})$ [MeV/c$^2$]'
+    return 'Mass [MeV/c²]'
 
 def build_stats_text(stats, extra=None):
     """
@@ -88,26 +71,81 @@ def build_stats_text(stats, extra=None):
         term_lines.append(extra[1])
     return '\n'.join(plot_lines), '\n'.join(term_lines)
 
-def add_stats_box(ax, plot_text, loc='auto', show=True, x=None, curve=None,
-                   loc_candidates=None):
+def add_stats_box(ax, plot_text, show=True):
     """
-    Draw a boxed text annotation on `ax` at `loc` (a POSITIONS key, or "auto"
-    to resolve via choose_best_position(ax, plot_text, x, curve,
-    loc_candidates)). Does nothing if show=False or plot_text is empty --
-    this is the "statistics / no statistics" toggle.
+    Draw a boxed text annotation in `ax`'s upper-left corner. Does nothing and
+    returns None if show=False or plot_text is empty -- this is the
+    "statistics / no statistics" toggle. Returns the Text artist otherwise, so
+    the caller can measure it (see reserve_top_margin).
     """
     if not show or not plot_text:
+        return None
+    return ax.text(0.02, 0.97, plot_text,
+                    transform=ax.transAxes,
+                    horizontalalignment='left',
+                    verticalalignment='top',
+                    bbox=dict(boxstyle='round,pad=0.4', facecolor='none',
+                              edgecolor='none'))
+
+def reserve_top_margin(ax, content_max, artists, ymin=0, growth=1.15, max_iter=8):
+    """
+    Grow ax's y-limit (from content_max upward) until none of `artists`
+    (already placed at fixed axes-fraction corners, e.g. the stats box and
+    legend) extends down past content_max in data coordinates -- so the
+    reserved headroom is sized to whatever was actually rendered, rather than
+    a hand-tuned fraction.
+    """
+    artists = [a for a in artists if a is not None]
+    if not artists:
+        ax.set_ylim(ymin, content_max * growth)
         return
-    if loc == 'auto':
-        loc = choose_best_position(ax, plot_text, x, curve,
-                                    loc_candidates=loc_candidates)
-    tx, ty, ha, va = POSITIONS[loc]
-    ax.text(tx, ty, plot_text,
-            transform=ax.transAxes,
-            horizontalalignment=ha,
-            verticalalignment=va,
-            bbox=dict(boxstyle='round,pad=0.4', facecolor='white',
-                      edgecolor='0.3', alpha=0.85))
+    ymax = content_max * growth
+    for _ in range(max_iter):
+        ax.set_ylim(ymin, ymax)
+        fig = ax.figure
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        lowest = min(
+            artist.get_window_extent(renderer=renderer)
+                  .transformed(ax.transData.inverted()).y0
+            for artist in artists
+        )
+        if lowest >= content_max:
+            return
+        ymax *= growth
+    ax.set_ylim(ymin, ymax)
+
+def style_axes(ax, minor_y=True):
+    """Inward, mirrored major+minor ticks on all four sides, and heavier
+    spines -- shared chrome for every panel of a fit plot. Set minor_y=False
+    to omit minor ticks on the y-axis only (e.g. the pull panel's integer
+    scale has no need for them)."""
+    ax.minorticks_on()
+    if not minor_y:
+        ax.yaxis.set_minor_locator(mticker.NullLocator())
+    ax.tick_params(which='major', direction='in', top=True, right=True, width=1.6, length=7.0)
+    ax.tick_params(which='minor', direction='in', top=True, right=True, width=1.2, length=4.0)
+    for spine in ax.spines.values():
+        spine.set_linewidth(2.0)
+
+def format_y_axis(ax):
+    """
+    Plain integer y-tick labels, offset by whatever power of ten keeps the
+    mantissa a short integer (e.g. 0, 100, 200, 300 with a x10^2 marker)
+    instead of matplotlib's default single-digit-plus-decimal mantissa (0.0,
+    0.5, ..., 3.0 x10^4). Values under 1000 need no offset at all. Reads ax's
+    current y-limit, so call this after the axis range is final (i.e. after
+    reserve_top_margin).
+    """
+    ymax = ax.get_ylim()[1]
+    if ymax < 1000:
+        ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, pos: f'{v:.0f}'))
+        return
+    divisor_oom = math.floor(math.log10(ymax)) - 2
+    divisor = 10 ** divisor_oom
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, pos: f'{v / divisor:.0f}'))
+    ax.text(0, 1.0, fr'$\times 10^{{{divisor_oom}}}$', transform=ax.transAxes,
+            ha='left', va='bottom')
 
 def print_summary(text, width=48, title='Fit summary'):
     """Print a summary to the terminal."""

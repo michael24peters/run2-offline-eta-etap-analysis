@@ -65,16 +65,10 @@ def build_text(params, chi2_per_ndof):
 DEFAULT_CONFIG = {
     'description'    : 'Plot DCB fit results from JSON file',
     'output'         : 'dcb_mass_fit.png',  # output filename
-    'title'          : 'Eta Mass',  # plot title
     "xlim"           : (400, 700),
     # "pull_ylim"      : (-3, 3),
     'font'           : 'sans',   # "serif" (default, STIXGeneral) or "sans" (Inter)
-    # Pinned upper left: the stats box is tall enough that "auto" placement can
-    # drop it over the peak. The legend defaults to the upper right, so the two
-    # do not collide.
-    'text_loc'       : 'upper left',   # "auto" or a plot_style.POSITIONS key
     'show_stats'     : True,   # set False to omit the stats box entirely
-    # "legend_loc"     : "upper right",  # any matplotlib legend loc string, default "best"
     'build_text'     : build_text,
 }
 
