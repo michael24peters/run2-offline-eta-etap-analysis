@@ -77,6 +77,8 @@ sys.path.insert(0, os.path.join(_here, '..', 'fit'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
 import cut_utils
 import kinematics
+import fit_utils
+import bkg_utils
 from fit_dcb import fit_dcb, TAIL_PARAMS
 from plot_dcb import plot_dcb
 
@@ -90,6 +92,8 @@ METRIC_BRANCH   = 'tag_dtf_chi2'   # ranks candidates within an event
 DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']   # branches the cuts below read
 PNN_MU_MIN      = 0.4              # every muon daughter must exceed this
 MUON_PID        = 13               # |pid| the pnn_mu cut applies to
+MOTHER_PID      = 221              # signal mother PID, for truth-matching (eta)
+DAUGHTER_PIDS   = [-13, 13]        # signal daughter PIDs, for truth-matching
 
 # Trigger-on-signal lines OR'd together by the TOS cut. These are a property of
 # this ntuple, not of the framework, so they live here rather than in cut_utils.
@@ -102,7 +106,7 @@ BRANCHES = ([MASS_BRANCH, METRIC_BRANCH, 'prt_idx_mom']
 # MC-only branches for truth-matching. Not in BRANCHES since the data file has
 # no mc_* / prt_idx_gen branches -- read_branches() would fail on the data leg
 # if these were read unconditionally.
-MC_TRUTH_BRANCHES = ['prt_idx_gen', 'mc_idx_mom']
+MC_TRUTH_BRANCHES = ['prt_idx_gen', 'mc_idx_mom', 'mc_pid']
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(
@@ -137,6 +141,9 @@ parser.add_argument('--alphaL-init', type=float, default=1.5, help='Initial left
 parser.add_argument('--nL-init', type=float, default=2.0, help='Initial left tail n_L')
 parser.add_argument('--alphaR-init', type=float, default=1.5, help='Initial right tail α_R')
 parser.add_argument('--nR-init', type=float, default=2.0, help='Initial right tail n_R')
+parser.add_argument('--bkg-model', default='cheb2', choices=list(fit_utils.BACKGROUND_MODELS),
+                    help='Background shape for both legs (default: cheb2, prior behavior). '
+                         'See fit_utils.BACKGROUND_MODELS for what each one is.')
 parser.add_argument('--tail-prior-factor', type=float, default=5.0,
                     help='Stdev multiplier widening the MC fit\'s tail-parameter covariance '
                          'before it constrains the data fit\'s tails (default: 5.0, i.e. the '
@@ -156,8 +163,10 @@ def select_masses(infile, tag, truth_match=False):
 
     `truth_match` : only meaningful for the MC file (it reads mc_*/prt_idx_gen
     branches the data file doesn't have). Requires every daughter of a
-    candidate to have a matched generator particle, and all of those matched
-    particles to share one common generator mother.
+    candidate to match the signal decay MOTHER_PID -> DAUGHTER_PIDS: a
+    matched generator particle, reco PID agreeing with that particle's true
+    PID, and that particle's mother being the real signal mother (see
+    bkg_utils.signal_daughter_mask).
     """
     branches = list(BRANCHES) + (MC_TRUTH_BRANCHES if truth_match else [])
     tree = cut_utils.read_branches(infile, branches, entry_stop=args.max_events)
@@ -183,42 +192,13 @@ def select_masses(infile, tag, truth_match=False):
 
     truth_report = None
     if truth_match:
-        # True per daughter: its matched gen particle exists (prt_idx_gen >= 0)
-        # and is a valid index into this event's mc_ collection.
-        n_mc = ak.num(tree['mc_idx_mom'])
-        has_gen_match = cut_utils.valid(tree, 'prt_idx_gen') & (tree['prt_idx_gen'] < n_mc)
-        # True per candidate: every one of its daughters has a gen match.
-        all_gen_matched = cut_utils.reduce(tree, has_gen_match, 'prt_idx_mom',
-                                            how='all', target_ref=MASS_BRANCH)
-
-        # Per daughter, the mc_idx_mom of the gen particle it matched to --
-        # i.e. the generator-level mother index of that daughter's true
-        # particle. follow(tree, tree['mc_idx_mom'], 'prt_idx_gen') re-indexes
-        # mc_idx_mom (currently at gen-particle level) down to daughter level:
-        # one value per daughter, looking up mc_idx_mom[prt_idx_gen[i]] for
-        # each daughter i.
-        #   e.g. prt_idx_gen = [2, 0, 1], mc_idx_mom = [-1, 5, 5]
-        #     -> mom_idx_at_gen = [5, -1, 5]  (daughters 0 and 2 share mother 5)
-        mom_idx_at_gen = cut_utils.follow(tree, tree['mc_idx_mom'], 'prt_idx_gen')
-        # Per candidate, the smallest/largest mom_idx_at_gen among its
-        # daughters. If every daughter's gen particle points to the same
-        # mother, min and max both equal that shared index.
-        #   e.g. daughters' mom_idx_at_gen = [5, 5, 5] -> min=max=5 (agree)
-        #        daughters' mom_idx_at_gen = [5, 5, 7] -> min=5, max=7 (disagree)
-        mom_min = cut_utils.reduce(tree, mom_idx_at_gen, 'prt_idx_mom',
-                                    how='min', target_ref=MASS_BRANCH)
-        mom_max = cut_utils.reduce(tree, mom_idx_at_gen, 'prt_idx_mom',
-                                    how='max', target_ref=MASS_BRANCH)
-        # True per candidate: all daughters' matched gen particles share one
-        # mother (min == max), and that mother index is real (>= 0) -- rules
-        # out two daughters both matching a gen particle with no mother
-        # (-1 == -1), which would otherwise look like agreement.
-        truth_matched = all_gen_matched & (mom_min == mom_max) & (mom_min >= 0)
+        # Per candidate: every daughter matches the signal decay
+        # MOTHER_PID -> DAUGHTER_PIDS (see bkg_utils.signal_daughter_mask).
+        truth_matched = bkg_utils.signal_candidate_mask(
+            tree, MOTHER_PID, DAUGHTER_PIDS, target_ref=MASS_BRANCH)
 
         keep = keep & truth_matched
         truth_report = {
-            'all_daughters_gen_matched': int(ak.sum(all_gen_matched)),
-            'shared_valid_mother': int(ak.sum((mom_min == mom_max) & (mom_min >= 0))),
             'truth_matched': int(ak.sum(truth_matched)),
         }
 
@@ -262,11 +242,18 @@ os.makedirs(args.outdir, exist_ok=True)
 suffix = f'_{args.label}' if args.label else ''
 
 # --- 1. Fit MC to get the tail-shape prior ------------------------------------
-# fixed_params holds n_bkg/c0/c1 at 0: this sample is truth-matched signal MC,
-# so it shouldn't have any real background -- letting them float anyway (as a
-# plain fit_dcb() call would) lets a spurious background component compete
-# for events and distort the tail-shape parameters (nR in particular came out
-# far less precisely determined with it floating: see README.md).
+# fixed_params holds n_bkg and the background shape at its (window-filled)
+# default init: this sample is truth-matched signal MC, so it shouldn't have
+# any real background -- letting them float anyway (as a plain fit_dcb() call
+# would) lets a spurious background component compete for events and distort
+# the tail-shape parameters (nR in particular came out far less precisely
+# determined with it floating: see README.md). n_bkg=0 zeroes out the
+# background's actual contribution regardless of which shape's parameters
+# are fixed alongside it or what they're fixed to -- they're fixed at the
+# model's own default init (not e.g. 0.0 for all of them) only so a future
+# shape whose math isn't well-defined everywhere (e.g. a ratio with a
+# parameter-dependent denominator) stays safe by construction.
+bkg_model_mc = fit_utils.BACKGROUND_MODELS[args.bkg_model]
 mc_masses, mc_selection_report = select_masses(args.mc_infile, 'mc',
                                                 truth_match=not args.no_truth_match)
 mc_result, m_mc = fit_dcb(
@@ -275,24 +262,12 @@ mc_result, m_mc = fit_dcb(
     mean_init=args.mean_init, sigma_init=args.sigma_init,
     alphaL_init=args.alphaL_init, nL_init=args.nL_init,
     alphaR_init=args.alphaR_init, nR_init=args.nR_init,
-    fixed_params={'n_bkg': 0.0, 'c0': 0.0, 'c1': 0.0},
+    bkg_model=args.bkg_model,
+    fixed_params={'n_bkg': 0.0, **bkg_model_mc.init},
 )
 
-tail_values = np.array([m_mc.values[p] for p in TAIL_PARAMS])
-
-# Widen the MC fit's own tail covariance before it constrains the data fit --
-# `tail_prior_factor` MC-fit standard deviations of slack per parameter, same
-# widening scheme as fit_dalitz.ipynb's per-bin mean/sigma and c0/c1 priors.
-# Falls back to a diagonal matrix from m_mc.errors if HESSE's matrix inversion
-# failed (m_mc.covariance is then None) -- no cross-parameter correlation
-# term, but still a usable prior instead of a crash.
-if m_mc.covariance is not None:
-    tail_cov = np.array(m_mc.covariance[list(TAIL_PARAMS)]) * args.tail_prior_factor**2
-else:
-    print('[WARN] m_mc.covariance is None -- falling back to a diagonal prior '
-          'from m_mc.errors for the tail parameters', file=sys.stderr)
-    tail_errs = np.array([m_mc.errors[p] for p in TAIL_PARAMS])
-    tail_cov = np.diag(tail_errs**2) * args.tail_prior_factor**2
+tail_values, tail_cov = fit_utils.build_prior(m_mc, TAIL_PARAMS,
+                                              factor=args.tail_prior_factor)
 
 print(f'[INFO] MC tail shape (prior for data fit, x{args.tail_prior_factor:.0f} '
       f'widened stdev): ' + ', '.join(
@@ -321,6 +296,7 @@ data_result, m_data = fit_dcb(
     mean_init=args.mean_init, sigma_init=args.sigma_init,
     alphaL_init=tail_values[0], nL_init=tail_values[1],
     alphaR_init=tail_values[2], nR_init=tail_values[3],
+    bkg_model=args.bkg_model,
     tail_prior=(tail_values, tail_cov),
 )
 

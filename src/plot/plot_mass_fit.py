@@ -18,10 +18,16 @@ import plot_utils
 import plot_style
 
 
-def plot_fit_data(data, config):
-    """Render a fit + pull plot from an already-loaded result dict."""
-    output = config['output'] if 'output' in config else 'out/fit_result.png'
+def build_fit_figure(data, config):
+    """
+    Draw a fit + pull figure from an already-loaded result dict. Does not
+    save or print anything -- that's plot_fit_data(), which wraps this for
+    the single-plot-per-JSON-file callers (plot_dcb.py, plot_gauss.py). A
+    caller that needs the figure itself (e.g. to add it to a multi-page
+    PdfPages) should call this directly instead.
 
+    Returns (fig, ax, ax_pull, plot_text, term_text).
+    """
     # Extract histogram data
     hist = data['histogram']
     x = np.array(hist['bin_centers'])
@@ -33,10 +39,10 @@ def plot_fit_data(data, config):
     pulls = np.array(hist['bin_pulls'])
     # Font
     plot_utils.apply_font(config.get('font', 'serif'))
-    plt.rcParams['font.size'] = 16
+    plt.rcParams['font.size'] = config.get('font_size', 16)
     # Create figure with two panels
     fig, (ax, ax_pull) = plt.subplots(
-        2, 1, figsize=(12, 12),
+        2, 1, figsize=config.get('figsize', (12, 12)),
         gridspec_kw={'height_ratios': [3, 1]},
         sharex=True
     )
@@ -61,7 +67,8 @@ def plot_fit_data(data, config):
     ax.plot(x, fit, label='Total fit', color='red')
     ax.plot(x, sig, '--', label='Signal', color='blue')
     ax.plot(x, bkg, '--', label='Background', color='green')
-    ax.axvline(x=547.86, color='black', linestyle='--', label='PDG Mass')
+    if config.get('pdg_line', True):
+        ax.axvline(x=547.86, color='black', linestyle='--', label='PDG Mass')
 
     # Mark the region actually used in the likelihood, if the fit was
     # restricted (fit_dcb's fit_window) -- curves elsewhere on the plot are
@@ -78,7 +85,7 @@ def plot_fit_data(data, config):
     ax.grid(alpha=0.3)
     ax.legend(loc=config.get('legend_loc', 'best'), frameon=True, fancybox=True,
               edgecolor='0.3', framealpha=0.85)
-    ax.set_ylabel('Candidates')
+    ax.set_ylabel(config.get('y_label', 'Candidates'))
 
     # Add fit parameters to plot
     params = data['fit']['parameters']
@@ -125,7 +132,13 @@ def plot_fit_data(data, config):
     # Show x labels on both panels, comment out for only bottom panel
     # ax.tick_params(axis='x', which='both', labelbottom=True)
 
-    # Save plot and print summary
+    return fig, ax, ax_pull, plot_text, term_text
+
+def plot_fit_data(data, config):
+    """Render a fit + pull plot from an already-loaded result dict, save it,
+    and print its summary."""
+    output = config['output'] if 'output' in config else 'out/fit_result.png'
+    fig, ax, ax_pull, plot_text, term_text = build_fit_figure(data, config)
     plot_style.save_plot(fig, output)
     plot_style.print_summary(term_text if term_text else plot_text)
 

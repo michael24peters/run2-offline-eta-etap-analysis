@@ -32,6 +32,7 @@ sys.path.insert(0, os.path.join(_here, '..', 'fit'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
 import cut_utils
 import kinematics
+import fit_utils
 from fit_dcb import fit_dcb
 from plot_dcb import plot_dcb
 
@@ -84,6 +85,9 @@ parser.add_argument('--alphaL-init', type=float, default=1.5, help='Initial left
 parser.add_argument('--nL-init', type=float, default=2.0, help='Initial left tail n_L')
 parser.add_argument('--alphaR-init', type=float, default=1.5, help='Initial right tail α_R')
 parser.add_argument('--nR-init', type=float, default=2.0, help='Initial right tail n_R')
+parser.add_argument('--bkg-model', default='cheb2', choices=list(fit_utils.BACKGROUND_MODELS),
+                    help='Background shape (default: cheb2, prior behavior). See '
+                         'fit_utils.BACKGROUND_MODELS for what each one is.')
 args = parser.parse_args()
 
 # --- Read --------------------------------------------------------------------
@@ -143,6 +147,7 @@ result, m = fit_dcb(
     mean_init=args.mean_init, sigma_init=args.sigma_init,
     alphaL_init=args.alphaL_init, nL_init=args.nL_init,
     alphaR_init=args.alphaR_init, nR_init=args.nR_init,
+    bkg_model=args.bkg_model,
 )
 # Where the numbers came from -- the fit itself only ever saw an array.
 result['meta']['input_file'] = args.infile

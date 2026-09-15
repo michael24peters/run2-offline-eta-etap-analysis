@@ -90,6 +90,44 @@ def cheb_cdf(x, xmin, xmax, c0, c1):
                     - _cheb_antideriv(u_lo, c0, c1)) / norm
 
 
+# --- Chebyshev x exponential (positive-by-construction background) ---
+#
+# pdf(x) ~ exp(k0*u + k1*(2u^2 - 1)), u the same normalized [-1, 1] Chebyshev
+# variable as above, i.e., the same Chebyshev polynomial as above, exponentiated.
+# Always > 0 everywhere by construction (it's an exp), so it can never produce
+# the negative-background dips the plain Chebyshev can.
+# k1 < 0 (concave) decays toward zero at BOTH edges; a k0-dominant, k1~0
+# shape decays at just one edge -- sign/magnitude of (k0, k1) determine which.
+
+def _grid_norm_cdf(xg, fg):
+    """Cumulative-trapezoid CDF over a grid, normalized to [0, 1]. Shared by
+    every background model below that has no closed-form CDF."""
+    cdf_grid = np.zeros_like(fg)
+    cdf_grid[1:] = np.cumsum(0.5 * (fg[:-1] + fg[1:]) * np.diff(xg))
+    return cdf_grid / cdf_grid[-1]
+
+
+def _chebexp_unnorm(u, k0, k1):
+    return np.exp(k0 * u + k1 * (2.0 * u**2 - 1.0))
+
+
+def chebexp_bkg_pdf(x, xmin, xmax, k0, k1, n_grid=1000):
+    """Normalized exponentiated-Chebyshev background PDF."""
+    xg = np.linspace(xmin, xmax, n_grid)
+    fg = _chebexp_unnorm(_xtilde(xg, xmin, xmax), k0, k1)
+    norm = _trapz(fg, xg)
+    ux = _xtilde(np.asarray(x, float), xmin, xmax)
+    return _chebexp_unnorm(ux, k0, k1) / norm
+
+
+def chebexp_cdf(x, xmin, xmax, k0, k1, n_grid=1000):
+    """Exponentiated-Chebyshev CDF normalized to [0, 1] over [xmin, xmax]."""
+    xg = np.linspace(xmin, xmax, n_grid)
+    fg = _chebexp_unnorm(_xtilde(xg, xmin, xmax), k0, k1)
+    cdf_grid = _grid_norm_cdf(xg, fg)
+    return np.interp(np.asarray(x, float), xg, cdf_grid)
+
+
 # --- Gaussian ---
 
 def gauss_pdf(x, xmin, xmax, mean, sigma):
@@ -195,57 +233,103 @@ def dcb_window_yield(p, e, xmin, xmax, window):
     return p['n_sig'] * frac, e['n_sig'] * frac
 
 
+# --- Pluggable background models ---
+#
+# A BackgroundModel bundles a background shape's own parameter names with its
+# pdf/cdf and default init/limits, so `make_gauss_cost`/`make_dcb_cost` below
+# can swap the background out via a `bkg=` name instead of having it
+# hardcoded. Registering a future shape (or, per arXiv:1408.6865, eventually
+# profiling the choice itself) means adding one entry here -- nothing about
+# the signal side, or about existing entries, needs to change.
+
+class BackgroundModel:
+    def __init__(self, name, param_names, pdf, cdf, init, limits=None):
+        self.name = name
+        self.param_names = tuple(param_names)
+        self.pdf = pdf
+        self.cdf = cdf
+        self.init = dict(init)
+        self.limits = dict(limits or {})
+
+
+BACKGROUND_MODELS = {
+    'cheb2': BackgroundModel(
+        'cheb2', ('c0', 'c1'), cheb_bkg_pdf, cheb_cdf,
+        init={'c0': 0.0, 'c1': 0.0}),
+    'cheb_exp': BackgroundModel(
+        'cheb_exp', ('k0', 'k1'), chebexp_bkg_pdf, chebexp_cdf,
+        init={'k0': 0.0, 'k1': 0.0}),
+}
+
+
 # --- iminuit cost functions ---
 #
-# Each method returns an iminuit.cost.ExtendedBinnedNLL instance.
-# The inner `scaled_cdf(xe, *params)` function must return:
-#   (n_total, cdf)  where n_total = n_sig + n_bkg  and
-#   cdf[i] = expected events with x < xe[i], so cdf[0]=0, cdf[-1]=n_total.
-# iminuit infers parameter names from the inner function's signature.
+# Each method returns an iminuit.cost.ExtendedBinnedNLL instance. The inner
+# function passed to it must return the expected cumulative count at each
+# bin edge, cdf[i] = expected events with x < xe[i] (so cdf[0] ~ 0,
+# cdf[-1] ~ n_sig + n_bkg) -- exactly `signal_cdf(...)*n_sig +
+# bkg_cdf(...)*n_bkg`. Its parameter list varies with the chosen background
+# model, so it's a `*args` function whose signature iminuit can't infer by
+# introspection; `_make_scaled_cdf` returns the matching parameter names
+# alongside it, for ExtendedBinnedNLL's own `name=` argument.
 
-def make_gauss_cost(counts, bin_edges, xmin, xmax):
-    """ExtendedBinnedNLL cost for Gaussian signal + 2nd-order Chebyshev
-    background. Free parameters: mean, sigma, n_sig, n_bkg, c0, c1.
+def _make_scaled_cdf(signal_param_names, signal_cdf, bkg_model, xmin, xmax):
+    """Returns (scaled_cdf, param_names). scaled_cdf(xe, *params) -> expected
+    cumulative count; param_names is signal_param_names + ('n_sig', 'n_bkg')
+    + bkg_model.param_names, in the order scaled_cdf expects them."""
+    n_sig_params = len(signal_param_names)
+    param_names = (tuple(signal_param_names) + ('n_sig', 'n_bkg')
+                   + bkg_model.param_names)
+
+    def scaled_cdf(xe, *args):
+        sig_args = args[:n_sig_params]
+        n_sig, n_bkg = args[n_sig_params], args[n_sig_params + 1]
+        bkg_args = args[n_sig_params + 2:]
+        return (signal_cdf(xe, xmin, xmax, *sig_args) * n_sig
+                + bkg_model.cdf(xe, xmin, xmax, *bkg_args) * n_bkg)
+
+    return scaled_cdf, param_names
+
+
+def make_gauss_cost(counts, bin_edges, xmin, xmax, bkg='cheb2'):
+    """ExtendedBinnedNLL cost for Gaussian signal + a pluggable background
+    (`bkg`, a BACKGROUND_MODELS key; default 'cheb2' matches prior behavior).
+    Free parameters: mean, sigma, n_sig, n_bkg, then the background model's
+    own parameters (c0, c1 for 'cheb2').
     """
-
-    def scaled_cdf(xe, mean, sigma, n_sig, n_bkg, c0, c1):
-        return (
-            gauss_cdf(xe, xmin, xmax, mean, sigma) * n_sig
-            + cheb_cdf(xe, xmin, xmax, c0, c1) * n_bkg
-        )
-
-    return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf)
+    model = BACKGROUND_MODELS[bkg]
+    scaled_cdf, param_names = _make_scaled_cdf(('mean', 'sigma'), gauss_cdf, model, xmin, xmax)
+    return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf, name=param_names)
 
 
-def make_dcb_cost(counts, bin_edges, xmin, xmax):
+def make_dcb_cost(counts, bin_edges, xmin, xmax, bkg='cheb2'):
     """
-    ExtendedBinnedNLL cost for DCB signal + 2nd-order Chebyshev background.
-    Free parameters: mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1.
+    ExtendedBinnedNLL cost for DCB signal + a pluggable background (`bkg`, a
+    BACKGROUND_MODELS key; default 'cheb2' matches prior behavior).
+    Free parameters: mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, then
+    the background model's own parameters (c0, c1 for 'cheb2').
     """
-
-    def scaled_cdf(xe, mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1):
-        return (
-            dcb_cdf(xe, xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR) * n_sig
-            + cheb_cdf(xe, xmin, xmax, c0, c1) * n_bkg
-        )
-
-    return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf)
+    model = BACKGROUND_MODELS[bkg]
+    signal_params = ('mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR')
+    scaled_cdf, param_names = _make_scaled_cdf(signal_params, dcb_cdf, model, xmin, xmax)
+    return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf, name=param_names)
 
 
-def make_dcb_sym_cost(counts, bin_edges, xmin, xmax):
+def _dcb_sym_cdf(xe, xmin, xmax, mean, sigma, alpha, n):
+    return dcb_cdf(xe, xmin, xmax, mean, sigma, alpha, n, alpha, n)
+
+
+def make_dcb_sym_cost(counts, bin_edges, xmin, xmax, bkg='cheb2'):
     """
-    ExtendedBinnedNLL cost for symmetric DCB (α_R ≡ α_L, n_R ≡ n_L) + Chebyshev.
-    Free parameters: mean, sigma, alpha, n, n_sig, n_bkg, c0, c1  (8 vs 10).
+    ExtendedBinnedNLL cost for symmetric DCB (α_R ≡ α_L, n_R ≡ n_L) + a
+    pluggable background (`bkg`, a BACKGROUND_MODELS key).
+    Free parameters: mean, sigma, alpha, n, n_sig, n_bkg, then the
+    background model's own parameters (8 vs 10 for 'cheb2').
     """
-    from iminuit.cost import ExtendedBinnedNLL
-
-    def scaled_cdf(xe, mean, sigma, alpha, n, n_sig, n_bkg, c0, c1):
-        return (
-            dcb_cdf(xe, xmin, xmax, mean, sigma, alpha, n, alpha, n) * n_sig
-            + cheb_cdf(xe, xmin, xmax, c0, c1) * n_bkg
-        )
-
-    return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf)
+    model = BACKGROUND_MODELS[bkg]
+    signal_params = ('mean', 'sigma', 'alpha', 'n')
+    scaled_cdf, param_names = _make_scaled_cdf(signal_params, _dcb_sym_cdf, model, xmin, xmax)
+    return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf, name=param_names)
 
 
 # --- Fit ---
@@ -296,6 +380,67 @@ def run_fit(cost, initial_values, limits=None, fixed=None, seeds=None):
         if m.valid: return m
         if best is None or m.fval < best.fval: best = m
     return best
+
+
+# --- Priors from a previous fit ---
+
+def build_prior(fit, params, factor=1.0):
+    """
+    Build a (values, cov) pair -- ready for
+    `NormalConstraint(params, values, error=cov)` -- from a previous fit's
+    parameters, with each parameter's uncertainty scaled by `factor`.
+
+    fit    : a live iminuit.Minuit or a LoadedFit (both expose .values,
+             .errors, .covariance).
+    params : names to constrain. A parameter NOT in this list gets no prior
+             at all -- this is how a prior is dropped entirely for a given
+             stage of a fit chain (e.g. floating a background parameter
+             completely on the per-bin fits after constraining it on the
+             data fit).
+    factor : a single float (one stdev multiplier applied to every parameter
+             in `params`) or a {param_name: float} dict (a per-parameter
+             multiplier; a name missing from the dict defaults to 1.0) --
+             e.g. factor={'mean': 5.0, 'sigma': 5.0, 'c0': 25.0, 'c1': 25.0}
+             loosens background far more than signal in one call, replacing
+             the previous SIGNAL_PRIOR_FACTOR / BKG_PRIOR_FACTOR two-call
+             pattern. This is a STDEV multiplier, so variances scale by
+             factor**2.
+
+    Off-diagonal covariance terms encode correlation: cov_ij says how much
+    parameter i and j moved together in the original fit, and
+    rho_ij = cov_ij / (sigma_i * sigma_j) is unitless (-1 to 1). Scaling with
+    F = diag(factors) as cov' = F @ cov @ F multiplies var_i by factor_i**2
+    and cov_ij by factor_i*factor_j for i != j -- every rho_ij is UNCHANGED.
+    So each parameter's marginal uncertainty can be loosened independently
+    while the correlation structure the original fit measured is preserved
+    exactly, rather than discarded (a diagonal-only prior is a strictly
+    worse approximation of what the earlier fit actually learned -- it is
+    used here only as the fallback below, when there is no real covariance
+    to draw from). A single scalar factor is the special case F = factor*I,
+    identical to the earlier `cov * factor**2` code.
+
+    Falls back to a diagonal matrix built from `fit.errors` when
+    `fit.covariance` is None (HESSE's matrix inversion failed) -- no
+    cross-parameter term, but still a usable prior instead of a crash.
+    """
+    params = list(params)
+    if isinstance(factor, dict):
+        factors = np.array([factor.get(p, 1.0) for p in params], dtype=float)
+    else:
+        factors = np.full(len(params), float(factor))
+
+    values = np.array([fit.values[p] for p in params], dtype=float)
+    if fit.covariance is not None:
+        cov = np.array(fit.covariance[params], dtype=float)
+    else:
+        errs = np.array([fit.errors[p] for p in params], dtype=float)
+        cov = np.diag(errs**2)
+
+    F = np.diag(factors)
+    scaled = F @ cov @ F
+    # F @ cov @ F is symmetric in exact arithmetic but not always bit-exact
+    # symmetric in floating point; NormalConstraint requires the latter.
+    return values, (scaled + scaled.T) / 2
 
 
 # --- Reloading a saved fit ---

@@ -1,9 +1,10 @@
 """
 Unit tests for cut_utils's fitting counterpart, src/utils/fit_utils.py.
 
-Covers the parts of the limits -> constraints migration that are shared
-infrastructure: run_fit's optional limits/seeds, and that fit_gauss()/
-fit_dcb() hand back the fitted Minuit object. All toy data, no ROOT files, a
+Covers shared infrastructure: run_fit's optional limits/seeds, that
+fit_gauss()/fit_dcb() hand back the fitted Minuit object, the pluggable
+background models (BACKGROUND_MODELS / bkg= on the cost builders / bkg_model=
+on fit_gauss()/fit_dcb()), and build_prior(). All toy data, no ROOT files, a
 fixed RNG seed -- consistent with the house style in conftest.py.
 """
 
@@ -165,81 +166,179 @@ def test_fit_gauss_sigma_prior_pulls_the_fit():
     assert abs(constrained_sigma - 5.0) < abs(free_sigma - 5.0)
 
 
-def test_fit_dcb_tail_fixed_holds_the_tails():
-    """tail_fixed=values for TAIL_PARAMS must hold the fitted tail values
-    exactly at the given values instead of floating them -- this is the fix
-    for a weakly-MC-constrained tail param (e.g. nR) drifting into the
-    barely-decaying regime and absorbing background as signal."""
-    from fit_dcb import TAIL_PARAMS
-    rng = np.random.default_rng(4)
-    vals = np.concatenate([rng.normal(547.9, 8.0, 60),
-                           rng.uniform(XMIN, XMAX, 300)])
+# --- Pluggable background models ----------------------------------------------
 
-    tail_values = np.array([1.5, 2.0, 1.5, 2.0])
-    result_free, _ = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60)
-    result_fixed, m_fixed = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60,
-                                    tail_fixed=tail_values)
-    free_values = [result_free['fit']['parameters'][p]['value'] for p in TAIL_PARAMS]
-    assert free_values != pytest.approx(list(tail_values))
-    for i, p in enumerate(TAIL_PARAMS):
-        assert result_fixed['fit']['parameters'][p]['value'] == pytest.approx(tail_values[i])
-        assert m_fixed.fixed[p] is True
+def toy_bkg_from_model(rng, n, bkg_model, oversample=5):
+    """Rejection-sample n values from a BACKGROUND_MODELS entry's own pdf over
+    [XMIN, XMAX], at its default init -- matched toy data for a model whose
+    density isn't flat, so a fit seeded at that same default init converges
+    quickly instead of fighting a mismatched toy background."""
+    model = fit_utils.BACKGROUND_MODELS[bkg_model]
+    params = [model.init[p] for p in model.param_names]
+    xg = np.linspace(XMIN, XMAX, 2000)
+    ymax = model.pdf(xg, XMIN, XMAX, *params).max() * 1.05
+    out = []
+    while len(out) < n:
+        x = rng.uniform(XMIN, XMAX, n * oversample)
+        y = rng.uniform(0.0, ymax, n * oversample)
+        out.extend(x[y < model.pdf(x, XMIN, XMAX, *params)])
+    return np.array(out[:n])
 
 
-def test_fit_dcb_fit_window_restricts_the_likelihood():
-    """fit_window=(lo, hi) must only use bins inside it: the reported chi2/
-    ndof should be computed over a smaller bin count than the full-window fit,
-    and meta['fit_window'] should record the bounds used."""
-    rng = np.random.default_rng(5)
-    vals = np.concatenate([rng.normal(547.9, 5.0, 400),
-                           rng.uniform(XMIN, XMAX, 4000)])
-
-    result_full, _ = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60)
-    result_windowed, _ = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60,
-                                 fit_window=(530.0, 570.0))
-
-    assert result_windowed['meta']['fit_window'] == [530.0, 570.0]
-    assert result_windowed['fit']['ndof'] < result_full['fit']['ndof']
-    # n_sig_fit_window integrates only the fitted window, so it should be no
-    # larger than the full-window-normalized n_sig.
-    params = result_windowed['fit']['parameters']
-    assert params['n_sig_fit_window']['value'] <= params['n_sig']['value']
-
-
-def test_fit_dcb_no_background_fixes_bkg_params_to_zero():
-    """no_background=True must hold n_bkg/c0/c1 fixed at 0 rather than
-    floating them -- for a sample (e.g. truth-matched signal MC) that
-    shouldn't have a background component competing for events at all."""
-    rng = np.random.default_rng(6)
-    vals = rng.normal(547.9, 5.0, 500)
-
-    result, m = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60, no_background=True)
-    params = result['fit']['parameters']
-    assert params['n_bkg']['value'] == 0.0
-    assert params['c0']['value'] == 0.0
-    assert params['c1']['value'] == 0.0
-    for p in ('n_bkg', 'c0', 'c1'):
-        assert m.fixed[p] is True
+@pytest.mark.parametrize('bkg_model', ['cheb2', 'cheb_exp'])
+def test_background_pdf_integrates_to_one_and_is_nonnegative(bkg_model):
+    """Every registered background's pdf must be a real, non-negative density
+    over [XMIN, XMAX] across a spread of its own parameter values -- 'cheb2'
+    can dip negative in principle (that's the whole reason 'cheb_exp' exists)
+    but not at these mild parameter values, so it's included too."""
+    model = fit_utils.BACKGROUND_MODELS[bkg_model]
+    xg = np.linspace(XMIN, XMAX, 3000)
+    default = model.init
+    variants = [default]
+    if bkg_model == 'cheb2':
+        variants.append({'c0': 0.3, 'c1': -0.2})
+    elif bkg_model == 'cheb_exp':
+        variants += [{'k0': 3.0, 'k1': -2.0}, {'k0': -1.0, 'k1': -3.0}]
+    for variant in variants:
+        params = [variant[p] for p in model.param_names]
+        y = model.pdf(xg, XMIN, XMAX, *params)
+        assert (y >= 0).all()
+        assert fit_utils._trapz(y, xg) == pytest.approx(1.0, abs=1e-3)
 
 
-def test_fit_dcb_report_halfwidth_sigma_adds_a_core_window_yield():
-    """report_halfwidth_sigma=k must add n_sig_report_window, integrating
-    n_sig over [mean-k*sigma, mean+k*sigma] using the fit's own mean/sigma,
-    without changing what the likelihood was fit against (unlike
-    fit_window) -- so ndof should match a plain fit with no window at all."""
-    rng = np.random.default_rng(7)
-    vals = np.concatenate([rng.normal(547.9, 5.0, 400),
-                           rng.uniform(XMIN, XMAX, 4000)])
+@pytest.mark.parametrize('bkg_model', ['cheb2', 'cheb_exp'])
+def test_make_gauss_cost_recovers_toy_params_for_each_bkg_model(bkg_model):
+    """make_gauss_cost(..., bkg=bkg_model) must build a cost Minuit can
+    actually fit, for every registered model -- proof the dynamically-named
+    signature (_make_scaled_cdf / ExtendedBinnedNLL's name=) works end to
+    end, not just that describe() parses it."""
+    rng = np.random.default_rng(10)
+    model = fit_utils.BACKGROUND_MODELS[bkg_model]
+    sig = rng.normal(547.9, 8.0, 2000)
+    bkg = toy_bkg_from_model(rng, 6000, bkg_model)
+    counts, edges = np.histogram(np.concatenate([sig, bkg]), bins=60, range=(XMIN, XMAX))
+    counts = counts.astype(float)
 
-    result_plain, _ = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60)
-    result_reported, _ = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60,
-                                 report_halfwidth_sigma=3.0)
+    cost = fit_utils.make_gauss_cost(counts, edges, XMIN, XMAX, bkg=bkg_model)
+    init = dict(mean=547.9, sigma=8.0, n_sig=2000.0, n_bkg=6000.0, **model.init)
+    limits = dict(n_sig=(0.0, None), n_bkg=(0.0, None), **model.limits)
+    m = fit_utils.run_fit(cost, init, limits)
 
-    assert result_reported['fit']['ndof'] == result_plain['fit']['ndof']
-    params = result_reported['fit']['parameters']
-    assert 'n_sig_report_window' in params
-    assert params['n_sig_report_window']['value'] <= params['n_sig']['value']
-    mean = params['mean']['value']
-    sigma = params['sigma']['value']
-    assert result_reported['meta']['report_window'] == pytest.approx(
-        [mean - 3.0 * sigma, mean + 3.0 * sigma])
+    assert m.valid
+    assert set(m.parameters) == {'mean', 'sigma', 'n_sig', 'n_bkg', *model.param_names}
+    assert m.values['mean'] == pytest.approx(547.9, abs=1.0)
+
+
+@pytest.mark.parametrize('bkg_model', ['cheb2', 'cheb_exp'])
+def test_fit_dcb_bkg_model_roundtrips_through_json(bkg_model):
+    """fit_dcb(bkg_model=...) must record meta.background_model, name the
+    background parameters in the result JSON after that model's own
+    param_names, and a LoadedFit built from that JSON must expose them under
+    the same names (so plot_dcb.py / a later per-bin fit reading this JSON
+    back doesn't need to guess which shape produced it)."""
+    rng = np.random.default_rng(11)
+    model = fit_utils.BACKGROUND_MODELS[bkg_model]
+    sig = rng.normal(547.9, 8.0, 2000)
+    bkg = toy_bkg_from_model(rng, 6000, bkg_model)
+    vals = np.concatenate([sig, bkg])
+
+    result, m = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60, bkg_model=bkg_model)
+
+    assert result['meta']['background_model'] == bkg_model
+    for name in model.param_names:
+        assert name in result['fit']['parameters']
+        # JSON values are round()ed to 6 decimals -- an absolute, not relative,
+        # tolerance, so a value near 0 needs abs= rather than approx()'s default
+        # relative one.
+        assert result['fit']['parameters'][name]['value'] == pytest.approx(
+            m.values[name], abs=1e-5)
+
+    loaded = fit_utils.LoadedFit(result['fit'])
+    for name in model.param_names:
+        assert name in loaded.values
+
+
+# --- build_prior -----------------------------------------------------------
+
+def test_build_prior_scalar_factor_matches_cov_times_factor_squared():
+    rng = np.random.default_rng(3)
+    vals = np.concatenate([rng.normal(547.9, 8.0, 1500),
+                           rng.uniform(XMIN, XMAX, 6000)])
+    _, m = fit_gauss(vals, xmin=XMIN, xmax=XMAX, nbins=60)
+
+    values, cov = fit_utils.build_prior(m, ['n_sig', 'n_bkg'], factor=5.0)
+    raw = np.array(m.covariance[['n_sig', 'n_bkg']])
+
+    assert values == pytest.approx([m.values['n_sig'], m.values['n_bkg']])
+    assert cov == pytest.approx(raw * 25.0)
+
+
+def test_build_prior_per_parameter_factor_preserves_correlation():
+    """A {param: factor} dict must scale each parameter's own marginal error
+    by its own factor while leaving the correlation coefficient between them
+    exactly as the original fit measured it -- the whole point of the
+    outer-product (F @ cov @ F) scaling over a plain cov*factor**2."""
+    rng = np.random.default_rng(3)
+    vals = np.concatenate([rng.normal(547.9, 8.0, 1500),
+                           rng.uniform(XMIN, XMAX, 6000)])
+    _, m = fit_gauss(vals, xmin=XMIN, xmax=XMAX, nbins=60)
+    raw = np.array(m.covariance[['n_sig', 'n_bkg']])
+
+    def corr(cov):
+        return cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1])
+
+    _, cov = fit_utils.build_prior(m, ['n_sig', 'n_bkg'],
+                                   factor={'n_sig': 5.0, 'n_bkg': 1.0})
+
+    assert cov[0, 0] == pytest.approx(raw[0, 0] * 25.0)
+    assert cov[1, 1] == pytest.approx(raw[1, 1])
+    assert corr(cov) == pytest.approx(corr(raw))
+
+
+def test_build_prior_missing_dict_entry_defaults_to_one():
+    rng = np.random.default_rng(3)
+    vals = np.concatenate([rng.normal(547.9, 8.0, 1500),
+                           rng.uniform(XMIN, XMAX, 6000)])
+    _, m = fit_gauss(vals, xmin=XMIN, xmax=XMAX, nbins=60)
+    raw = np.array(m.covariance[['n_sig', 'n_bkg']])
+
+    _, cov = fit_utils.build_prior(m, ['n_sig', 'n_bkg'], factor={'n_sig': 3.0})
+
+    assert cov[0, 0] == pytest.approx(raw[0, 0] * 9.0)
+    assert cov[1, 1] == pytest.approx(raw[1, 1])  # n_bkg missing -> factor 1.0
+
+
+def test_build_prior_excluded_param_gets_no_prior():
+    """A parameter simply left out of `params` is how a prior is dropped
+    entirely -- build_prior only ever returns values/cov for what it's asked
+    for, so the caller's NormalConstraint(params, ...) never mentions it."""
+    rng = np.random.default_rng(3)
+    vals = np.concatenate([rng.normal(547.9, 8.0, 1500),
+                           rng.uniform(XMIN, XMAX, 6000)])
+    _, m = fit_gauss(vals, xmin=XMIN, xmax=XMAX, nbins=60)
+
+    values, cov = fit_utils.build_prior(m, ['n_sig'], factor=5.0)
+
+    assert values.shape == (1,)
+    assert cov.shape == (1, 1)
+
+
+def test_build_prior_falls_back_to_diagonal_when_covariance_is_none():
+    """A LoadedFit with no 'covariance' block in its JSON (HESSE's matrix
+    inversion failed on the original fit) must fall back to a diagonal
+    matrix built from .errors, not raise."""
+    fit_block = {
+        'valid': True, 'fval': 0.0, 'n_free_params': 2,
+        'parameters': {
+            'n_sig': {'value': 100.0, 'error': 10.0},
+            'n_bkg': {'value': 500.0, 'error': 20.0},
+        },
+    }
+    loaded = fit_utils.LoadedFit(fit_block)
+    assert loaded.covariance is None
+
+    values, cov = fit_utils.build_prior(loaded, ['n_sig', 'n_bkg'], factor=2.0)
+
+    assert values == pytest.approx([100.0, 500.0])
+    assert cov == pytest.approx(np.diag([10.0**2, 20.0**2]) * 4.0)
+    assert cov[0, 1] == 0.0

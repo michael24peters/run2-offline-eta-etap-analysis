@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.join(_here, '..', 'fit'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
 import cut_utils
 import kinematics
+import fit_utils
 from fit_gauss import fit_gauss
 from plot_gauss import plot_gauss
 
@@ -78,6 +79,9 @@ parser.add_argument('--xmax', type=float, default=620.0, help='Upper mass bound 
 parser.add_argument('--nbins', type=int, default=80, help='Number of histogram bins')
 parser.add_argument('--mean-init', type=float, default=kinematics.M_ETA, help='Initial mean [MeV]')
 parser.add_argument('--sigma-init', type=float, default=5.0, help='Initial sigma [MeV]')
+parser.add_argument('--bkg-model', default='cheb2', choices=list(fit_utils.BACKGROUND_MODELS),
+                    help='Background shape (default: cheb2, prior behavior). See '
+                         'fit_utils.BACKGROUND_MODELS for what each one is.')
 args = parser.parse_args()
 
 # Read the ROOT file.
@@ -136,6 +140,7 @@ result, m = fit_gauss(
     masses,
     xmin=args.xmin, xmax=args.xmax, nbins=args.nbins,
     mean_init=args.mean_init, sigma_init=args.sigma_init,
+    bkg_model=args.bkg_model,
 )
 # Where the numbers came from -- the fit itself only ever saw an array.
 result['meta']['input_file'] = args.infile

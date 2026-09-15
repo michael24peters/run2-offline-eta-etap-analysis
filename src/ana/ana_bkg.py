@@ -26,6 +26,7 @@ import numpy as np
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 import cut_utils
+import bkg_utils
 
 BRANCHES = ['tag_pid', 'prt_pid', 'prt_idx_gen', 'prt_idx_mom', 'prt_pnn_mu',
             'mc_pid', 'mc_idx_mom']
@@ -78,22 +79,15 @@ def build_masks(tree, args):
     the real signal mother (found via decay_mask) -- not merely "some
     generator particle at position i", which is what bkg.py's classify_candidate
     got wrong for the second and later candidates in multi-candidate events.
+    See bkg_utils.signal_daughter_mask.
     """
-    signal_mother = cut_utils.decay_mask(tree, args.mother_pid, args.daughter_pids)
-
-    has_gen_match = cut_utils.valid(tree, 'prt_idx_gen')
-    pid_at_gen = cut_utils.follow(tree, tree['mc_pid'], 'prt_idx_gen')
-    mc_mom_at_gen = cut_utils.follow(tree, tree['mc_idx_mom'], 'prt_idx_gen')
-    pid_match = has_gen_match & (pid_at_gen == tree['prt_pid'])
-
-    # Two-hop: daughter -> its gen particle (prt_idx_gen) -> that particle's
-    # mother (mc_idx_mom) -> is that mother the real signal eta?
-    gen_is_child_of_signal = (cut_utils.valid(tree, 'mc_idx_mom')
-                              & cut_utils.follow(tree, signal_mother, 'mc_idx_mom'))
-    is_child_of_signal_mother = has_gen_match & cut_utils.follow(
-        tree, gen_is_child_of_signal, 'prt_idx_gen')
-
-    is_signal_dtr = pid_match & is_child_of_signal_mother
+    dtr_match = bkg_utils.signal_daughter_mask(tree, args.mother_pid, args.daughter_pids)
+    has_gen_match = dtr_match['has_gen_match']
+    pid_at_gen = dtr_match['pid_at_gen']
+    mc_mom_at_gen = dtr_match['mc_mom_at_gen']
+    pid_match = dtr_match['pid_match']
+    is_child_of_signal_mother = dtr_match['is_child_of_signal_mother']
+    is_signal_dtr = dtr_match['is_signal_dtr']
 
     mup, mum, pho = tree['prt_pid'] == -13, tree['prt_pid'] == 13, tree['prt_pid'] == 22
     other = ~(mup | mum | pho)

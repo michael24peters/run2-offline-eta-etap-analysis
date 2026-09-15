@@ -21,8 +21,6 @@ def build_text(params, chi2_per_ndof):
     sigma, sigma_err = plot_utils.val_err(params['sigma'])
     n_sig, n_sig_err = plot_utils.val_err(params['n_sig'])
     n_bkg, n_bkg_err = plot_utils.val_err(params['n_bkg'])
-    c0, c0_err       = plot_utils.val_err(params['c0'])
-    c1, c1_err       = plot_utils.val_err(params['c1'])
 
     # DCB tail parameters (asymmetric)
     alphaL, alphaL_err = plot_utils.val_err(params.get('alphaL', {}))
@@ -30,8 +28,18 @@ def build_text(params, chi2_per_ndof):
     alphaR, alphaR_err = plot_utils.val_err(params.get('alphaR', {}))
     nR, nR_err         = plot_utils.val_err(params.get('nR', {}))
 
+    # Background shape parameters vary by model -- c0/c1 for the Chebyshev,
+    # k0/k1 for the exponentiated Chebyshev, and so on for any future entry
+    # in fit_utils.BACKGROUND_MODELS. Whatever key in
+    # `params` isn't one of the known signal/yield names above IS a
+    # background parameter, so its row is built from whatever is actually
+    # there instead of a hardcoded pair.
+    SIGNAL_KEYS = {'mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR', 'n_sig', 'n_bkg'}
+    bkg_row = [(name, name, *plot_utils.val_err(params[name]), '.3f', '')
+               for name in params if name not in SIGNAL_KEYS]
+
     # Build summary text
-    # Expected format: 
+    # Expected format:
     #   (latex_symbol, plain_symbol, value, error, format string, unit)
     stats = [
         [(r'\mu', 'μ', mean, mean_err, '.2f', 'MeV')],
@@ -42,8 +50,7 @@ def build_text(params, chi2_per_ndof):
          (r'n_R', 'n_R', nR, nR_err, '.2f', '')],
         [(r'n_{sig}', 'n_sig', n_sig, n_sig_err, '.0f', '')],
         [(r'n_{bkg}', 'n_bkg', n_bkg, n_bkg_err, '.0f', '')],
-        [(r'c_0', 'c_0', c0, c0_err, '.2f', ''),
-         (r'c_1', 'c_1', c1, c1_err, '.2f', '')],
+        bkg_row,
     ]
     # Values which are not a value-error pair (e.g., chi2/ndof). Must provide
     # exact strings for desired LaTeX and terminal output.
