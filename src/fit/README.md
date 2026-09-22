@@ -293,6 +293,54 @@ past the last candidate. Those events are dropped and counted.
 > can be substituted.
 
 
+## Per-Dalitz-bin fits: the phase-space factor
+
+In a Dalitz bin, only part of the m(gamma mu+ mu-) window is kinematically
+reachable. In the mu+ mu- rest frame, with theta* the mu+ angle and
+beta = sqrt(1 - 4 m_mu^2 / m23),
+
+    m12 = m_mu^2 + (M^2 - m23) (1 - beta cos theta*) / 2
+
+(m12 = m^2(gamma mu+), m23 = m^2(mu+ mu-)), so cos theta* in [-1, 1] bounds
+the total mass M at each Dalitz point (`kinematics.m123_limits`). For a bin,
+`kinematics.phase_space_factor` gives f(M), the fraction of the bin reachable
+at mass M -- the same thing as sampling (m12, m23) uniformly in the bin and
+counting how often M is within those limits, but computed without MC noise.
+f is 1 where the whole bin is reachable and 0 where none of it is, which is
+what takes edge bins to zero at the ends of the mass window.
+
+`fit_dalitz.ipynb` multiplies both the DCB signal and the (plain Chebyshev)
+background by f in every bin (`fit_utils.make_dcb_cost(..., weight=)`), and
+fixes n_sig = 0 in bins with f(m_eta) = 0, which lie entirely outside the
+eta's Dalitz region. The background has no per-bin prior; mean/sigma keep
+theirs.
+
+The limits are an identity on the four-vectors, so the fitted mass must come
+from the same daughter momenta as m12/m23. The notebook rebuilds it from
+`prt_px/py/pz/e` (0 events outside their limits). `tag_dtf_m` differs from
+that by ~29 MeV RMS, so its edges are smeared, and `tag_m` puts ~1% of events
+outside their limits, where the model is exactly 0. The cost is resolution:
+sigma ~16.0 MeV rebuilt vs ~14.4 MeV with DTF. Fitting the DTF mass with an
+exact f would need the DTF-refitted daughter momenta in the ntuple.
+
+Per bin, the Chebyshev's [-1, 1] variable spans the bin's reachable mass
+range (where f > 0), not [xmin, xmax]: fit on only a slice of its range, its
+coefficients are near-degenerate and MIGRAD runs them off to infinity. So
+per-bin c0/c1 are not comparable to the global fit's. The plain Chebyshev can
+still go negative inside the reachable region; the fit floors it at
+`fit_utils.BKG_FLOOR`, and the notebook's positivity check flags any bin
+where that happened.
+
+The global fit carries a widened MC tail prior (`TAIL_PRIOR_PATH`): on the
+rebuilt mass the unconstrained tails run off to n ~ 50-150 and the fit is
+invalid. That MC fit was of `tag_dtf_m`, so it should be redone on the rebuilt
+mass.
+
+Known limitation: f assumes background is uniform across the bin. Near the
+low-m12 boundary (the i = 1 column) it isn't, and the data turn on more
+slowly than f predicts, which is where the worst per-bin chi2 values are.
+
+
 ## Fitting an arbitrary array
 
 The fit modules were written in a generic way so as to fit any numpy array of values:
