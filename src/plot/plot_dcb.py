@@ -2,9 +2,6 @@
 Plot DCB fit results from JSON file. Uses plot_mass_fit.py as a generic plotting
 utilty for any fit result from a JSON file. Here we provide custom text and
 formatting for the DCB + Chebyshev fit parameters.
-
-Usage:
-    python plot_dcb.py fit_result.json
 """
 
 import os
@@ -14,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'utils'))
 import plot_utils
 import plot_style
 
-from plot_mass_fit import plot_fit, plot_fit_data
+from plot_mass_fit import plot_fit_data
 
 def build_text(params, chi2_per_ndof):
     mean, mean_err   = plot_utils.val_err(params['mean'])
@@ -60,26 +57,6 @@ def build_text(params, chi2_per_ndof):
     )
     return plot_style.build_stats_text(stats, extra=extra)
 
-# Default configuration for plot_dcb.py, which can be overridden by the caller
-# (i.e., the driver script)
-DEFAULT_CONFIG = {
-    'description'    : 'Plot DCB fit results from JSON file',
-    'output'         : 'dcb_mass_fit.png',  # output filename
-    "xlim"           : (400, 700),
-    # "pull_ylim"      : (-3, 3),
-    'font'           : 'sans',   # "serif" (default, STIXGeneral) or "sans" (Inter)
-    'show_stats'     : True,   # set False to omit the stats box entirely
-    'build_text'     : build_text,
-}
-
-# This executes if this script is run from somewhere else.
-def plot_dcb(data, config=None):
-    """
-    Render a DCB fit plot: DEFAULT_CONFIG with any caller overrides layered on
-    top, which can override any of DEFAULT_CONFIG's keys.
-    """
-    plot_fit_data(data, {**DEFAULT_CONFIG, **(config or {})})
-
-# This executes if this script is run directly.
-if __name__ == '__main__':
-    plot_fit(DEFAULT_CONFIG)
+def plot_dcb(data, output, x_lim=None, title=None):
+    """Render a DCB fit plot."""
+    plot_fit_data(data, output, build_text, x_lim=x_lim, title=title)

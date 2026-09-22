@@ -180,4 +180,4 @@ with open(json_path, 'w') as f:
 print(f'[DONE] JSON saved to: {json_path}', file=sys.stderr)
 
 # Plot the fit results from plot pipeline
-plot_dcb(result, {'output': os.path.join(args.outdir, f'dcb_mass_fit{suffix}.png')})
+plot_dcb(result, os.path.join(args.outdir, f'dcb_mass_fit{suffix}.png'))

@@ -71,14 +71,13 @@ def build_stats_text(stats, extra=None):
         term_lines.append(extra[1])
     return '\n'.join(plot_lines), '\n'.join(term_lines)
 
-def add_stats_box(ax, plot_text, show=True):
+def add_stats_box(ax, plot_text):
     """
     Draw a boxed text annotation in `ax`'s upper-left corner. Does nothing and
-    returns None if show=False or plot_text is empty -- this is the
-    "statistics / no statistics" toggle. Returns the Text artist otherwise, so
+    returns None if plot_text is empty. Returns the Text artist otherwise, so
     the caller can measure it (see reserve_top_margin).
     """
-    if not show or not plot_text:
+    if not plot_text:
         return None
     return ax.text(0.02, 0.97, plot_text,
                     transform=ax.transAxes,
@@ -137,6 +136,13 @@ def format_y_axis(ax):
     current y-limit, so call this after the axis range is final (i.e. after
     reserve_top_margin).
     """
+    # Candidate counts are always non-negative integers, so tick positions
+    # should be too -- otherwise adjacent fractional ticks can round to the
+    # same displayed integer (e.g. a near-empty bin autoscaled to [0, 1]).
+    # nbins/steps match mpl's default AutoLocator, so normal-range plots keep
+    # the same tick choices as before; integer=True is the only real change.
+    ax.yaxis.set_major_locator(
+        mticker.MaxNLocator(nbins='auto', steps=[1, 2, 2.5, 5, 10], integer=True))
     ymax = ax.get_ylim()[1]
     if ymax < 1000:
         ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, pos: f'{v:.0f}'))
