@@ -49,9 +49,9 @@ and writes `dcb_mass_fit.png` / `gauss_mass_fit.png` into `--outdir`.
 `--max-events` caps how many events are read, for quick iteration on large
 files; omit it to read everything.
 
-The drivers only expose fit hyperparameters as flags -- plot styling (title,
-font, stats box, etc.) isn't driver-configurable; it comes from each plot
-script's `DEFAULT_CONFIG` (see "Overriding plot style" below).
+The drivers only expose fit hyperparameters as flags -- plot styling (font,
+colors, ticks, stats box, etc.) is fixed in `plot_mass_fit.py`/`plot_style.py`,
+not driver-configurable.
 
 ## Running a full fit, start to finish (eta2mumu / eta2mumugamma)
 

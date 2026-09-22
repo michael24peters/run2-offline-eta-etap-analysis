@@ -173,4 +173,4 @@ with open(json_path, 'w') as f:
 print(f'[done] JSON saved to: {json_path}', file=sys.stderr)
 
 # Plot the fit results from plot pipeline
-plot_gauss(result, {'output': os.path.join(args.outdir, f'gauss_mass_fit{suffix}.png')})
+plot_gauss(result, os.path.join(args.outdir, f'gauss_mass_fit{suffix}.png'))

@@ -286,7 +286,7 @@ mc_json_path = os.path.join(args.outdir, f'results_dcb_mc{suffix}.json')
 with open(mc_json_path, 'w') as f:
     json.dump(mc_result, f, indent=2)
 print(f'[DONE] MC JSON saved to: {mc_json_path}', file=sys.stderr)
-plot_dcb(mc_result, {'output': os.path.join(args.outdir, f'dcb_mass_fit_mc{suffix}.png')})
+plot_dcb(mc_result, os.path.join(args.outdir, f'dcb_mass_fit_mc{suffix}.png'))
 
 # --- 2. Fit data with the MC tail shape as a (widened) prior ------------------
 data_masses, data_selection_report = select_masses(args.data_infile, 'data')
@@ -313,4 +313,4 @@ data_json_path = os.path.join(args.outdir, f'results_dcb_data{suffix}.json')
 with open(data_json_path, 'w') as f:
     json.dump(data_result, f, indent=2)
 print(f'[DONE] data JSON saved to: {data_json_path}', file=sys.stderr)
-plot_dcb(data_result, {'output': os.path.join(args.outdir, f'dcb_mass_fit_data{suffix}.png')})
+plot_dcb(data_result, os.path.join(args.outdir, f'dcb_mass_fit_data{suffix}.png'))
