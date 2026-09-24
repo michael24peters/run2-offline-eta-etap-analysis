@@ -254,6 +254,7 @@ def fig_mass_slices(outdir, events):
         ax.hist2d(m12[sel], m23[sel], bins=(M12_EDGES.size - 1) * 6,
                   range=[[0, M12_EDGES[-1]], [0, M23_EDGES[-1]]],
                   cmap='Greys', cmin=1)
+        ax.plot(*dalitz_boundary(kinematics.M_ETA), color=C['reference'], ls='--', lw=1.2)
         for M_edge, ls in ((m_lo, ':'), (m_hi, '-')):
             ax.plot(*dalitz_boundary(M_edge), color=C['phase_space'], ls=ls, lw=1.4)
         ax.add_patch(Rectangle((a, lo), b - a, hi - lo, fill=False, ec=C['pull'], lw=2))
@@ -266,11 +267,13 @@ def fig_mass_slices(outdir, events):
     axes[0].set_ylabel(r'$m^2_{23}$ [GeV$^2$]')
     handles = [plt.Line2D([], [], color=C['phase_space'], ls=':', lw=1.4),
                plt.Line2D([], [], color=C['phase_space'], ls='-', lw=1.4),
+               plt.Line2D([], [], color=C['reference'], ls='--', lw=1.2),
                Rectangle((0, 0), 1, 1, fill=False, ec=C['pull'], lw=2)]
     fig.legend(handles, ['Dalitz boundary at the lower edge of the slice',
                          'Dalitz boundary at the upper edge of the slice',
+                         r'Dalitz boundary at $M = m_\eta$',
                          f'bin ({i},{j})'],
-               loc='lower center', ncol=3, frameon=False)
+               loc='lower center', ncol=4, frameon=False)
     fig.tight_layout(rect=(0, 0.07, 1, 1))
     out = os.path.join(outdir, 'mass_slices.png')
     fig.savefig(out, dpi=150); print(f'[DONE] Plot saved to {out}.')
