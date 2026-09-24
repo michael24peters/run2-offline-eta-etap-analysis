@@ -53,6 +53,7 @@ CONSTRUCTION_BIN, CONSTRUCTION_MASSES = (6, 8), [505.0, 520.0, 530.0, 540.0, 550
 UNIFORMITY_BIN = (1, 8)
 MASS_SLICES = [(475.0, 485.0), (525.0, 535.0), (545.0, 551.0), (640.0, 650.0)]
 WORKED_POINT = (0.020, 0.300)   # (m12, m23) [GeV^2] of the worked example
+STRIPS_MASS, STRIPS_N = 530.0, 20
 
 
 def style():
@@ -291,6 +292,45 @@ def fig_worked_example(outdir, events):
     fig.savefig(out, dpi=150); print(f'[DONE] Plot saved to {out}.')
 
 
+def fig_strips(outdir):
+    """How f is measured at one mass: the bin cut into horizontal strips,
+    each strip's covered length (violet), and the covered fraction per strip."""
+    i, j = CONSTRUCTION_BIN
+    (a, b), (lo, hi) = bin_ranges(i, j)
+    M = STRIPS_MASS
+    fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(13, 6), sharey=True,
+                                   gridspec_kw={'width_ratios': [1.4, 1]})
+    draw_bin_at_mass(ax0, i, j, M, margin=0.6)
+    # Redraw the bin as strips: covered part violet, rest white.
+    ax0.add_patch(Rectangle((a, lo), b - a, hi - lo, fc='white', ec='none', zorder=2))
+    edges = np.linspace(lo, hi, STRIPS_N + 1)
+    centres = 0.5 * (edges[:-1] + edges[1:])
+    M2, h = (M / 1000.0)**2, edges[1] - edges[0]
+    beta = np.sqrt(1 - 4 * MMU2 / centres)
+    s_lo = MMU2 + (M2 - centres) * (1 - beta) / 2
+    s_hi = MMU2 + (M2 - centres) * (1 + beta) / 2
+    left, right = np.maximum(s_lo, a), np.minimum(s_hi, b)
+    frac = np.clip(right - left, 0, None) / (b - a)
+    for y, l, r in zip(edges[:-1], left, right):
+        if r > l:
+            ax0.add_patch(Rectangle((l, y), r - l, h, fc=C['phase_space'], alpha=0.75,
+                                    ec='none', zorder=3))
+        ax0.add_patch(Rectangle((a, y), b - a, h, fill=False, ec=C['data'], lw=0.5, zorder=4))
+    ax0.add_patch(Rectangle((a, lo), b - a, hi - lo, fill=False, ec=C['data'], lw=1.6, zorder=5))
+    ax0.set_xlabel(r'$m^2_{12}$ [GeV$^2$]'); ax0.set_ylabel(r'$m^2_{23}$ [GeV$^2$]')
+
+    ax1.barh(centres, frac, height=0.85 * h, color=C['phase_space'], alpha=0.75)
+    ax1.axvline(frac.mean(), color=C['data'], ls='--', lw=1.4,
+                label=f'mean over strips = {frac.mean():.2f}')
+    ax1.set_xlim(0, 1.05)
+    ax1.set_xlabel('covered fraction of the strip')
+    ax1.legend(loc='upper right', fontsize=11)
+    plot_style.style_axes(ax1)
+    fig.tight_layout()
+    out = os.path.join(outdir, f'f_strips_{i}_{j}.png')
+    fig.savefig(out, dpi=150); print(f'[DONE] Plot saved to {out}.')
+
+
 def fig_mass_slices(outdir, events):
     """The candidates' Dalitz plot in narrow slices of M, each with the
     Dalitz boundaries at the slice's edges, and the construction bin outlined."""
@@ -375,6 +415,7 @@ def main():
     fig_f_at_meta_map(args.outdir)
     fig_edge_bins(args.outdir)
     fig_construction(args.outdir)
+    fig_strips(args.outdir)
     fig_factors(args.outdir)
     if args.results:
         with open(args.results) as fh:
