@@ -126,7 +126,6 @@ def fig_f_at_meta_map(outdir):
         ax.text(a - 0.002 if right else b + 0.002, hi - 0.002, f'({i},{j})',
                 color=C['data'], fontsize=10, va='top', ha='right' if right else 'left')
     ax.set_xlabel(M12_LABEL); ax.set_ylabel(M23_LABEL)
-    ax.set_title(r'Fraction of each bin reachable at $M = m_\eta$')
     ax.legend(loc='upper right', fontsize=10)
     plot_style.style_axes(ax)
     plot_style.save_plot(fig, os.path.join(outdir, 'f_at_meta_map.png'), dpi=150)
@@ -147,7 +146,6 @@ def fig_edge_bins(outdir):
                          r'rest of the $\eta$ Dalitz region',
                          'Dalitz bin'],
                loc='lower center', ncol=3, frameon=False)
-    fig.suptitle(r'Edge bins at $M = m_\eta$: $f$ is the violet fraction of each rectangle')
     fig.tight_layout(rect=(0, 0.05, 1, 1))
     fig.savefig(os.path.join(outdir, 'edge_bins.png'), dpi=150)
     print(f"[DONE] Plot saved to {os.path.join(outdir, 'edge_bins.png')}.")
@@ -175,8 +173,6 @@ def fig_construction(outdir):
     ax.set_xlabel(M_LABEL); ax.set_ylabel('f(M)')
     ax.legend(loc='lower right', fontsize=11)
     plot_style.style_axes(ax)
-    fig.suptitle(f'Building f(M) for bin ({i},{j}): at each mass, the fraction of the '
-                 'rectangle inside that mass\'s Dalitz region (violet)')
     fig.tight_layout()
     out = os.path.join(outdir, f'f_construction_{i}_{j}.png')
     fig.savefig(out, dpi=150); print(f'[DONE] Plot saved to {out}.')
@@ -195,7 +191,6 @@ def fig_factors(outdir):
         plot_style.style_axes(ax)
     for ax in axes[1]: ax.set_xlabel('M [MeV]')
     for ax in axes[:, 0]: ax.set_ylabel('f(M)')
-    fig.suptitle(r'Phase-space factor $f(M)$ for example bins (dashed: $m_\eta$)')
     plot_style.save_plot(fig, os.path.join(outdir, 'phase_space_factors.png'), dpi=150)
 
 
@@ -242,7 +237,6 @@ def fig_decomposition(outdir, results, i, j):
         ax.axvline(kinematics.M_ETA, color=C['reference'], ls='--', lw=1)
         plot_style.style_axes(ax)
     axes[-1].set_xlim(XMIN, XMAX); axes[-1].set_xlabel(M_LABEL)
-    axes[0].set_title(f'Bin ({i}, {j})')
     plot_style.save_plot(fig, os.path.join(outdir, f'decomposition_{i}_{j}.png'), dpi=150)
 
 
@@ -277,7 +271,6 @@ def fig_mass_slices(outdir, events):
                          'Dalitz boundary at the upper edge of the slice',
                          f'bin ({i},{j})'],
                loc='lower center', ncol=3, frameon=False)
-    fig.suptitle('Selected candidates in slices of $M$')
     fig.tight_layout(rect=(0, 0.07, 1, 1))
     out = os.path.join(outdir, 'mass_slices.png')
     fig.savefig(out, dpi=150); print(f'[DONE] Plot saved to {out}.')
