@@ -95,7 +95,8 @@ def phase_space_factor(M, m12_range, m23_range, n_m23=400):
     mmu2 = (M_MU / 1000.0)**2
     M2 = (np.asarray(M, float) / 1000.0)[:, None]**2
     s = np.linspace(*m23_range, n_m23)[None, :]
-    beta = np.sqrt(np.clip(1.0 - 4.0 * mmu2 / s, 0.0, None))
+    with np.errstate(divide='ignore'):   # m23 = 0 at the grid's bottom edge
+        beta = np.sqrt(np.clip(1.0 - 4.0 * mmu2 / s, 0.0, None))
     half = np.clip(M2 - s, 0.0, None) / 2.0
     lo, hi = mmu2 + half * (1.0 - beta), mmu2 + half * (1.0 + beta)
     a, b = m12_range
