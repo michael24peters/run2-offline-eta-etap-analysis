@@ -295,6 +295,9 @@ past the last candidate. Those events are dropped and counted.
 
 ## Per-Dalitz-bin fits: the phase-space factor
 
+Full write-up, with derivation, figures and a code walkthrough:
+[`phase-space-factor.md`](phase-space-factor.md).
+
 In a Dalitz bin, only part of the m(gamma mu+ mu-) window is kinematically
 reachable. In the mu+ mu- rest frame, with theta* the mu+ angle and
 beta = sqrt(1 - 4 m_mu^2 / m23),
