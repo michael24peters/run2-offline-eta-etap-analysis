@@ -31,6 +31,11 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     title: optional plot title (e.g. to identify one page of a multi-page
     PDF); omitted entirely when not given.
 
+    If `data` has a 'phase_space' entry ({'x': [...], 'f': [...]}, the
+    per-bin phase-space factor f(M) the fit multiplied its shapes by), it is
+    drawn in its own panel between the fit and the pulls, on the same mass
+    axis.
+
     Returns (fig, ax, ax_pull, plot_text, term_text).
     """
     # Extract histogram data
@@ -44,12 +49,27 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     # Font
     plot_utils.apply_font()
     plt.rcParams['font.size'] = 19
-    # Create figure with two panels
-    fig, (ax, ax_pull) = plt.subplots(
-        2, 1, figsize=(12, 12),
-        gridspec_kw={'height_ratios': [3, 1]},
-        sharex=True
-    )
+    # Create figure with two panels, or three with a phase-space factor
+    phase_space = data.get('phase_space')
+    if phase_space is None:
+        fig, (ax, ax_pull) = plt.subplots(
+            2, 1, figsize=(12, 12),
+            gridspec_kw={'height_ratios': [3, 1]},
+            sharex=True
+        )
+    else:
+        fig, (ax, ax_f, ax_pull) = plt.subplots(
+            3, 1, figsize=(12, 15),
+            gridspec_kw={'height_ratios': [3, 1, 1]},
+            sharex=True
+        )
+        ax_f.plot(phase_space['x'], phase_space['f'],
+                  color=plot_style.COLORS['phase_space'], linewidth=1.8)
+        ax_f.axvline(x=547.86, color=plot_style.COLORS['reference'], linestyle='--')
+        ax_f.set_ylim(-0.05, 1.1)
+        ax_f.set_yticks([0, 0.5, 1])
+        ax_f.set_ylabel('$f(M)$')
+        plot_style.style_axes(ax_f, minor_y=False)
     if title:
         ax.set_title(title)
 
