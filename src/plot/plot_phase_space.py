@@ -52,6 +52,7 @@ DECOMP_BINS = [(4, 4), (6, 8), (7, 2), (1, 13), (12, 7)]
 CONSTRUCTION_BIN, CONSTRUCTION_MASSES = (6, 8), [505.0, 520.0, 530.0, 540.0, 550.0]
 UNIFORMITY_BIN = (1, 8)
 MASS_SLICES = [(475.0, 485.0), (525.0, 535.0), (545.0, 551.0), (640.0, 650.0)]
+WORKED_POINT = (0.020, 0.300)   # (m12, m23) [GeV^2] of the worked example
 
 
 def style():
@@ -240,6 +241,56 @@ def fig_decomposition(outdir, results, i, j):
     plot_style.save_plot(fig, os.path.join(outdir, f'decomposition_{i}_{j}.png'), dpi=150)
 
 
+def fig_worked_example(outdir, events):
+    """The worked-example Dalitz point against D(M) at six masses, and the
+    masses of the candidates reconstructed near it."""
+    x, y = WORKED_POINT
+    m_min, m_max = (float(v) for v in kinematics.m123_limits(x, y))
+    masses = [kinematics.M_ETA, m_min, 620.0, 680.0, m_max, 760.0]
+    names = [r' ($m_\eta$)', r' ($M_\mathrm{min}$)', '', '', r' ($M_\mathrm{max}$)', '']
+    x0, x1, y0, y1 = 0.005, 0.040, 0.270, 0.320
+    fig = plt.figure(figsize=(18, 8.5))
+    gs = GridSpec(2, len(masses), height_ratios=[1.15, 1], figure=fig)
+    X, Y = np.meshgrid(np.linspace(x0, x1, 400), np.linspace(y0, y1, 400))
+    for k, (M, name) in enumerate(zip(masses, names)):
+        ax = fig.add_subplot(gs[0, k])
+        img = np.ones(X.shape + (4,))
+        img[inside_region(X, Y, M)] = matplotlib.colors.to_rgba('#e4e3df')
+        ax.imshow(img, origin='lower', extent=(x0, x1, y0, y1), aspect='auto',
+                  interpolation='nearest')
+        ax.plot(*dalitz_boundary(M), color=C['data'], lw=1.2)
+        ax.plot(x, y, 'o', color=C['pull'], ms=8, mec=C['data'], mew=0.8)
+        ax.set_xlim(x0, x1); ax.set_ylim(y0, y1)
+        ax.set_xticks([0.01, 0.02, 0.03])
+        ax.set_title(f'M = {M:.1f} MeV{name}', fontsize=12)
+        ax.set_xlabel(r'$m^2_{12}$ [GeV$^2$]', fontsize=10)
+        if k == 0: ax.set_ylabel(r'$m^2_{23}$ [GeV$^2$]', fontsize=10)
+        else: ax.tick_params(labelleft=False)
+        ax.tick_params(labelsize=9)
+        plot_style.style_axes(ax)
+
+    ev = np.load(events)
+    m12, m23, Mc = (ev[k].astype(float) for k in ('m12s', 'm23s', 'masses'))
+    near = (abs(m12 - x) < 0.001) & (abs(m23 - y) < 0.002)
+    ax = fig.add_subplot(gs[1, :])
+    lo_axis, hi_axis = 520.0, 780.0
+    ax.axvspan(m_min, m_max, color=C['phase_space'], alpha=0.15, lw=0,
+               label=fr'$[M_\mathrm{{min}}, M_\mathrm{{max}}]$ = [{m_min:.1f}, {m_max:.1f}] MeV')
+    ax.axvspan(XMAX, hi_axis, fc='none', ec=C['reference'], hatch='//', lw=0,
+               label='outside the mass window')
+    ax.hist(Mc[near], bins=np.arange(lo_axis, hi_axis + 1, 5), histtype='step',
+            color=C['data'], lw=1.8, label=f'{near.sum()} candidates near the point')
+    ax.axvline(kinematics.M_ETA, color=C['reference'], ls='--', label=r'$m_\eta$')
+    ax.set_xlim(lo_axis, hi_axis)
+    ax.set_xlabel(M_LABEL); ax.set_ylabel('Candidates / 5 MeV')
+    ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+    ax.legend(loc='upper right', fontsize=11)
+    plot_style.style_axes(ax)
+    fig.tight_layout()
+    out = os.path.join(outdir, 'worked_example.png')
+    fig.savefig(out, dpi=150); print(f'[DONE] Plot saved to {out}.')
+
+
 def fig_mass_slices(outdir, events):
     """The candidates' Dalitz plot in narrow slices of M, each with the
     Dalitz boundaries at the slice's edges, and the construction bin outlined."""
@@ -332,6 +383,7 @@ def main():
             fig_decomposition(args.outdir, results, i, j)
     if args.events:
         fig_mass_slices(args.outdir, args.events)
+        fig_worked_example(args.outdir, args.events)
         fig_uniformity(args.outdir, args.events, *UNIFORMITY_BIN)
     plt.close('all')
     print(f'[DONE] figures in {os.path.abspath(args.outdir)}')
