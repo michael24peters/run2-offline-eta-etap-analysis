@@ -17,6 +17,9 @@ COLORS = {
     'background': '#1baf7a',
     'pull':       '#eb6834',
     'reference':  '#898781',
+    # Dalitz phase-space factor f(M). Violet (dataviz reference categorical
+    # slot 7); validated all-pairs against fit/background/pull, light mode.
+    'phase_space': '#4a3aa7',
 }
 
 # LaTeX decay string for each channel, keyed by the channel segment of
