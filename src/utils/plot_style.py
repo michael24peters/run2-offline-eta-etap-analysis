@@ -130,6 +130,33 @@ def style_axes(ax, minor_y=True):
     for spine in ax.spines.values():
         spine.set_linewidth(2.0)
 
+def add_bin_index_axes(ax, x_edges, y_edges, x_label='bin i', y_label='bin j'):
+    """Secondary top/right axes giving each Dalitz bin's (i, j) grid index,
+    alongside the primary physical-value axes on the bottom/left -- so a bin
+    spotted on a Dalitz grid figure can be read off directly, in the same
+    (i, j) numbering used for e.g. per_bin_fits.pdf's page titles. Assumes
+    uniform bin edges, matching every Dalitz grid in this codebase
+    (np.linspace)."""
+    ax.tick_params(which='both', top=False, right=False)  # would collide with these
+    nx, ny = len(x_edges) - 1, len(y_edges) - 1
+    x0, dx = x_edges[0], (x_edges[-1] - x_edges[0]) / nx
+    y0, dy = y_edges[0], (y_edges[-1] - y_edges[0]) / ny
+
+    top = ax.secondary_xaxis('top', functions=(lambda x: (x - x0) / dx,
+                                                lambda i: x0 + i * dx))
+    top.set_xticks([i + 0.5 for i in range(nx)])
+    top.set_xticklabels([str(i) for i in range(nx)], fontsize=8)
+    top.set_xlabel(x_label, fontsize=9)
+    top.tick_params(length=3)
+
+    right = ax.secondary_yaxis('right', functions=(lambda y: (y - y0) / dy,
+                                                     lambda j: y0 + j * dy))
+    right.set_yticks([j + 0.5 for j in range(ny)])
+    right.set_yticklabels([str(j) for j in range(ny)], fontsize=8)
+    right.set_ylabel(y_label, fontsize=9)
+    right.tick_params(length=3)
+    return top, right
+
 def format_y_axis(ax):
     """
     Plain integer y-tick labels, offset by whatever power of ten keeps the
