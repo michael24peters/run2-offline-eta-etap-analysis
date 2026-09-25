@@ -117,7 +117,7 @@ def fig_f_at_meta_map(outdir):
     fig, ax = plt.subplots(figsize=(8, 6.5))
     mesh = ax.pcolormesh(M12_EDGES, M23_EDGES, f_eta.T, cmap='Purples',
                          vmin=0, vmax=1, edgecolors='white', linewidth=0.3)
-    fig.colorbar(mesh, ax=ax, label=r'$f(m_\eta)$')
+    fig.colorbar(mesh, ax=ax, label=r'$f(m_\eta)$', pad=0.13)
     bx, by = dalitz_boundary(kinematics.M_ETA)
     ax.plot(bx, by, color=C['data'], lw=1.4, label=r'$\eta$ Dalitz boundary')
     for (i, j) in EDGE_BINS:
@@ -130,6 +130,7 @@ def fig_f_at_meta_map(outdir):
     ax.set_xlabel(M12_LABEL); ax.set_ylabel(M23_LABEL)
     ax.legend(loc='upper right', fontsize=10)
     plot_style.style_axes(ax)
+    plot_style.add_bin_index_axes(ax, M12_EDGES, M23_EDGES)
     plot_style.save_plot(fig, os.path.join(outdir, 'f_at_meta_map.png'), dpi=150)
 
 
