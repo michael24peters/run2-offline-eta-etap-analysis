@@ -52,6 +52,7 @@ DECOMP_BINS = [(4, 4), (6, 8), (7, 2), (1, 13), (12, 7)]
 CONSTRUCTION_BIN, CONSTRUCTION_MASSES = (6, 8), [505.0, 520.0, 530.0, 540.0, 550.0]
 UNIFORMITY_BIN = (1, 8)
 MASS_SLICES = [(475.0, 485.0), (525.0, 535.0), (545.0, 551.0), (640.0, 650.0)]
+MASS_POINTS, MASS_HALF_WIDTH = [475.0, 530.0, 548.0, 645.0], 1.0   # [MeV]
 WORKED_POINT = (0.020, 0.300)   # (m12, m23) [GeV^2] of the worked example
 STRIPS_MASS, STRIPS_N = 530.0, 20
 
@@ -371,6 +372,44 @@ def fig_mass_slices(outdir, events):
     fig.savefig(out, dpi=150); print(f'[DONE] Plot saved to {out}.')
 
 
+def fig_mass_points(outdir, events):
+    """The candidates' Dalitz plot at single values of M, each with the
+    Dalitz boundary at that M, and the construction bin outlined. Candidates
+    are those within MASS_HALF_WIDTH of M."""
+    ev = np.load(events)
+    m12, m23, M = (ev[k].astype(float) for k in ('m12s', 'm23s', 'masses'))
+    i, j = CONSTRUCTION_BIN
+    (a, b), (lo, hi) = bin_ranges(i, j)
+    fig, axes = plt.subplots(1, len(MASS_POINTS), figsize=(5 * len(MASS_POINTS), 5.6),
+                             sharex=True, sharey=True)
+    for ax, M0 in zip(axes, MASS_POINTS):
+        sel = abs(M - M0) < MASS_HALF_WIDTH
+        ax.hist2d(m12[sel], m23[sel], bins=(M12_EDGES.size - 1) * 6,
+                  range=[[0, M12_EDGES[-1]], [0, M23_EDGES[-1]]],
+                  cmap='Greys', cmin=1)
+        ax.plot(*dalitz_boundary(kinematics.M_ETA), color=C['reference'], ls='--', lw=1.2)
+        ax.plot(*dalitz_boundary(M0), color=C['phase_space'], lw=1.4)
+        ax.add_patch(Rectangle((a, lo), b - a, hi - lo, fill=False, ec=C['pull'], lw=2))
+        in_bin = sel & (m12 >= a) & (m12 < b) & (m23 >= lo) & (m23 < hi)
+        ax.set_title(f'M = {M0:.0f} MeV\n'
+                     f'{sel.sum()} candidates with |M - {M0:.0f}| < {MASS_HALF_WIDTH:.0f} MeV,\n'
+                     f'{in_bin.sum()} of them in bin ({i},{j})', fontsize=12)
+        ax.set_xlim(0, M12_EDGES[-1]); ax.set_ylim(0, M23_EDGES[-1])
+        ax.set_xlabel(r'$m^2_{12}$ [GeV$^2$]')
+        plot_style.style_axes(ax)
+    axes[0].set_ylabel(r'$m^2_{23}$ [GeV$^2$]')
+    handles = [plt.Line2D([], [], color=C['phase_space'], lw=1.4),
+               plt.Line2D([], [], color=C['reference'], ls='--', lw=1.2),
+               Rectangle((0, 0), 1, 1, fill=False, ec=C['pull'], lw=2)]
+    fig.legend(handles, ['Dalitz boundary at the panel\'s M',
+                         r'Dalitz boundary at $M = m_\eta$',
+                         f'bin ({i},{j})'],
+               loc='lower center', ncol=3, frameon=False)
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
+    out = os.path.join(outdir, 'mass_points.png')
+    fig.savefig(out, dpi=150); print(f'[DONE] Plot saved to {out}.')
+
+
 def fig_uniformity(outdir, events, i, j):
     """How the bin's candidates are actually spread across it, and f
     computed from that spread instead of from area."""
@@ -425,6 +464,7 @@ def main():
             fig_decomposition(args.outdir, results, i, j)
     if args.events:
         fig_mass_slices(args.outdir, args.events)
+        fig_mass_points(args.outdir, args.events)
         fig_worked_example(args.outdir, args.events)
         fig_uniformity(args.outdir, args.events, *UNIFORMITY_BIN)
     plt.close('all')
