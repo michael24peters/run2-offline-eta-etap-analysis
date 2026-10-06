@@ -53,10 +53,11 @@ NOTE: `mc_idx_mom` is -1 for a particle with no mother, but passing in -1
 silently indexes backwards into the previous event, so make sure to AND with
 `valid(tree, 'mc_idx_mom')` to ignore invalid indices before traversal.
 
-The typical pipeline:
+The typical pipeline, with TOS_LINES = {'L0': [...], 'HLT1': [...], 'HLT2': [...]}
+(TOS on at least one line at every level, see tos_mask):
 
     tree, report = drop_malformed(read_branches(infile, BRANCHES))
-    tos, _       = tos_mask(tree, TRIGGERS)
+    tos, _       = tos_mask(tree, TOS_LINES)
     keep         = tos & reduce(tree, muon_ok, 'prt_idx_mom', how='all')
     best         = best_candidate_mask(tree, 'tag_dtf_chi2', keep)
     masses       = values(tree, 'tag_dtf_m', best)   # flat numpy, ready to fit
@@ -243,10 +244,15 @@ def align(tree, field, tag_ref='tag_dtf_m', fill_value=-1.0):
     return ak.unflatten(out, n_tag)
 
 
-def tos_mask(tree, triggers, tag_ref='tag_dtf_m'):
+def tos_mask(tree, levels, tag_ref='tag_dtf_m'):
     """
-    Per-candidate mask: True where the candidate is TOS for at least one of the
-    specified triggers.
+    Per-candidate mask: True where the candidate is TOS on at least one line at
+    every trigger level -- AND across levels, OR within a level.
+
+        levels = {'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],
+                  'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],
+                  'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1']}
+        TOS = (l0_tos0 | l0_tos1) & (hlt1_tos0 | hlt1_tos1) & (hlt2_tos0 | hlt2_tos1)
 
     The only cut-specific helper here, because it is valid to have an absent
     trigger line: a line that was never evaluated is stored as an empty list,
@@ -255,45 +261,62 @@ def tos_mask(tree, triggers, tag_ref='tag_dtf_m'):
 
     Arguments:
     ----------
-    tree     : awkward array, the event tree
-    triggers : list of str, the trigger branches to OR together
-    tag_ref  : str, the branch defining the candidate level
+    tree    : awkward array, the event tree
+    levels  : dict, trigger level -> list of that level's TOS branches
+    tag_ref : str, the branch defining the candidate level
 
     Returns:
     --------
-    (mask, report) : per-candidate boolean mask, and a dict recording which
-                     lines were actually available to drive the OR
+    (mask, report) : per-candidate boolean mask, and a dict keyed by level
+                     recording which lines were actually available to drive
+                     that level's OR and how many candidates pass
+
+    Report keys, per level:
+    -----------------------
+    requested                  : list of str, the level's TOS branches
+    always_evaluated           : branches present in every event
+    not_evaluated_in_events    : branch -> number of events where it was absent
+                                 and read as not fired
+    ignored                    : branches absent in every event, so contributing
+                                 nothing to the level's OR
+    candidates_tos             : int, candidates TOS at this level
+    candidates_tos_cumulative  : int, candidates TOS at this level and every
+                                 level before it
     """
+    if not isinstance(levels, dict):
+        raise TypeError("levels must be a dict of trigger level -> list of TOS "
+                        "branches, e.g. {'L0': [...], 'HLT1': [...], 'HLT2': [...]}")
+
     n_tag = ak.num(tree[tag_ref])
     n_events = len(tree)
-    not_evaluated, ignored = {}, []
-    mask = None
-    for trigger in triggers:
-        # An absent branch contributes nothing to the OR, so it should be
-        # reported if a line is absent everywhere and not contributing to the
-        # selection.
-        n_absent = int(ak.sum(ak.num(tree[trigger]) != n_tag))
-        if n_absent:
-            not_evaluated[trigger] = n_absent
-            if n_absent == n_events: ignored.append(trigger)
-        # Makes sure the trigger branch has one entry per candidate, filling
-        # absent lines with -1.0, which reads as not fired.
-        fired = align(tree, trigger, tag_ref) > 0.5
-        # Updates mask to True when a trigger has fired. Updates each trigger
-        # for mask in place so the final mask is True where any trigger has
-        # fired.
-        mask = fired if mask is None else (mask | fired)
+    mask = ak.ones_like(tree[tag_ref], dtype=bool)
+    report = {}
+    for level, triggers in levels.items():
+        if not triggers:
+            raise ValueError(f'trigger level {level!r} has no TOS branches')
+        not_evaluated, ignored = {}, []
+        level_tos = ak.zeros_like(tree[tag_ref], dtype=bool)
+        for trigger in triggers:
+            # An absent branch contributes nothing to the OR, so it should be
+            # reported if a line is absent everywhere and not contributing to
+            # the selection.
+            n_absent = int(ak.sum(ak.num(tree[trigger]) != n_tag))
+            if n_absent:
+                not_evaluated[trigger] = n_absent
+                if n_absent == n_events: ignored.append(trigger)
+            # Makes sure the trigger branch has one entry per candidate,
+            # filling absent lines with -1.0, which reads as not fired.
+            level_tos = level_tos | (align(tree, trigger, tag_ref) > 0.5)
+        mask = mask & level_tos
 
-    report = {
-        'requested': list(triggers),
-        # Lines fully available everywhere; these are the ones actually driving
-        # the OR in every event.
-        'always_evaluated': [t for t in triggers if t not in not_evaluated],
-        # branch -> number of events where it was absent and read as not fired
-        'not_evaluated_in_events': not_evaluated,
-        # Absent in every event, so contributing nothing to the selection
-        'ignored': ignored,
-    }
+        report[level] = {
+            'requested': list(triggers),
+            'always_evaluated': [t for t in triggers if t not in not_evaluated],
+            'not_evaluated_in_events': not_evaluated,
+            'ignored': ignored,
+            'candidates_tos': int(ak.sum(level_tos)),
+            'candidates_tos_cumulative': int(ak.sum(mask)),
+        }
     return mask, report
 
 
