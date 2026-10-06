@@ -1,8 +1,8 @@
 """
 Unit tests for the Dalitz phase-space factor: kinematics.m123_limits /
-kinematics.phase_space_factor, and the phase-space-weighted shapes in
-fit_utils (weighted_dcb_cdf, weighted_bkg_model, make_dcb_cost(weight=)).
-Toy data only, fixed RNG seeds.
+kinematics.phase_space_factor, the signal factor kinematics.kroll_wada_factor,
+and the phase-space-weighted shapes in fit_utils (weighted_dcb_cdf,
+weighted_bkg_model, make_dcb_cost(weight=)). Toy data only, fixed RNG seeds.
 """
 
 import os
@@ -19,6 +19,8 @@ import kinematics
 
 XMIN, XMAX = 420.0, 680.0
 MMU = kinematics.M_MU / 1000.0
+META = kinematics.M_ETA / 1000.0
+FF_LAMBDA = 0.71907
 
 
 def toy_decays(rng, n, M):
@@ -83,6 +85,69 @@ def test_phase_space_factor_bounds():
     f_in = kinematics.phase_space_factor(np.linspace(530, 565, 20),
                                          (0.090, 0.105), (0.1107, 0.1329))
     assert np.allclose(f_in, 1.0)
+
+
+def kroll_wada_toys(rng, n):
+    """(m12, m23, weight) for points uniform over the eta's Dalitz region,
+    weighted by the eta -> gamma mu+ mu- matrix element in invariant form,
+
+        |F(s)|^2 / s^2 [s ((t - m^2)^2 + (u - m^2)^2) + 2 m^2 (m_eta^2 - s)^2]
+
+    with s = m23, t = m12, u = m^2(gamma mu-) -- independent of the
+    (s, cos theta*) form that kroll_wada_factor integrates."""
+    mmu2, meta2 = MMU**2, META**2
+    s = rng.uniform(4 * mmu2, meta2, n)
+    t = rng.uniform(mmu2, (META - MMU)**2, n)
+    lo, hi = kinematics.m123_limits(t, s)
+    inside = (lo <= kinematics.M_ETA) & (kinematics.M_ETA <= hi)
+    s, t = s[inside], t[inside]
+    u = meta2 + 2 * mmu2 - s - t
+    ff2 = (1 - s / FF_LAMBDA**2)**-2
+    w = ff2 / s**2 * (s * ((t - mmu2)**2 + (u - mmu2)**2) + 2 * mmu2 * (meta2 - s)**2)
+    return t, s, w
+
+
+def test_kroll_wada_factor_matches_weighted_sampling():
+    """The semi-analytic signal factor equals the Monte Carlo recipe: eta
+    decays weighted by the matrix element, photon rescaled to mass M,
+    counted in the bin."""
+    rng = np.random.default_rng(4)
+    t, s, w = kroll_wada_toys(rng, 4000000)
+    M = np.linspace(440, 660, 12)
+    for m12_range, m23_range in [((0.015, 0.030), (0.2879, 0.3100)),
+                                 ((0.015, 0.030), (0.0886, 0.1107)),
+                                 ((0.105, 0.120), (0.0443, 0.0664)),
+                                 ((0.060, 0.075), (0.0886, 0.1107))]:
+        f = kinematics.kroll_wada_factor(M, m12_range, m23_range, FF_LAMBDA)
+        in_m23 = (m23_range[0] <= s) & (s < m23_range[1])
+        for m, f_m in zip(M, f):
+            M2 = (m / 1000)**2
+            t_m = MMU**2 + (t - MMU**2) * (M2 - s) / (META**2 - s)
+            in_bin = in_m23 & (M2 > s) & (m12_range[0] <= t_m) & (t_m < m12_range[1])
+            mc = np.sum(w * in_bin) / np.sum(w)
+            err = np.sqrt(np.sum((w * (in_bin - mc))**2)) / np.sum(w)
+            assert abs(f_m - mc) < 4 * err + 1e-4
+
+
+def test_kroll_wada_factor_normalisation():
+    """Bins tiling the plane hold all the signal for M >= m_eta, and at
+    m_eta the signal reaches exactly the bins the flat factor does."""
+    M = np.array([kinematics.M_ETA, 600.0])
+    m12_edges = np.linspace(0.0, 0.40, 21)
+    m23_edges = np.linspace(0.0, 0.32, 17)
+    total = sum(kinematics.kroll_wada_factor(M, m12_edges[i:i + 2], m23_edges[j:j + 2], FF_LAMBDA)
+                for i in range(20) for j in range(16))
+    assert np.allclose(total, 1.0, atol=1e-3)
+
+    m12_edges = np.linspace(0.0, 0.21, 15)
+    m23_edges = np.linspace(0.0, 0.31, 15)
+    for i in range(14):
+        for j in range(14):
+            f_sig = kinematics.kroll_wada_factor([kinematics.M_ETA], m12_edges[i:i + 2],
+                                                 m23_edges[j:j + 2], FF_LAMBDA)[0]
+            f_flat = kinematics.phase_space_factor([kinematics.M_ETA], m12_edges[i:i + 2],
+                                                   m23_edges[j:j + 2])[0]
+            assert (f_sig > 0) == (f_flat > 0), (i, j, f_sig, f_flat)
 
 
 def test_unit_weight_reproduces_the_unweighted_shapes():

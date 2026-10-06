@@ -88,8 +88,8 @@ def phase_space_factor(M, m12_range, m23_range, n_m23=400):
 
     1 where the whole bin is inside the Dalitz region of mass M, 0 where none
     of it is. Equivalent to sampling (m12, m23) uniformly in the bin and
-    counting how often M falls inside m123_limits(), but noise-free: at fixed
-    m23 the allowed m12 is an interval (see m123_limits), so its overlap with
+    counting how often M falls inside m123_limits(): at fixed
+    m23 the allowed m12 is an interval (m123_limits), so its overlap with
     the bin's m12 range is computed exactly and only m23 is gridded.
     """
     mmu2 = (M_MU / 1000.0)**2
@@ -102,3 +102,76 @@ def phase_space_factor(M, m12_range, m23_range, n_m23=400):
     a, b = m12_range
     overlap = np.clip(np.minimum(hi, b) - np.maximum(lo, a), 0.0, None)
     return overlap.mean(axis=1) / (b - a)
+
+
+def kroll_wada_s_density(s, ff_lambda):
+    """
+    Unnormalized m^2(mu+ mu-) spectrum dGamma/ds of eta -> gamma gamma* ->
+    gamma mu+ mu- (Kroll-Wada), s in GeV^2, with the pole form factor
+    F(s) = 1 / (1 - s / ff_lambda^2), ff_lambda in GeV:
+
+        dGamma/ds ~ |F(s)|^2 / s * (1 - s / m_eta^2)^3 * beta * (1 + 2 m_mu^2 / s)
+
+    0 outside [4 m_mu^2, m_eta^2].
+    """
+    mmu2 = (M_MU / 1000.0)**2
+    meta2 = (M_ETA / 1000.0)**2
+    s = np.asarray(s, float)
+    inside = (s > 4.0 * mmu2) & (s < meta2)
+    s_in = np.where(inside, s, meta2 / 2.0)
+    beta = np.sqrt(1.0 - 4.0 * mmu2 / s_in)
+    ff2 = (1.0 - s_in / ff_lambda**2)**-2
+    w = ff2 / s_in * (1.0 - s_in / meta2)**3 * beta * (1.0 + 2.0 * mmu2 / s_in)
+    return np.where(inside, w, 0.0)
+
+
+def kroll_wada_factor(M, m12_range, m23_range, ff_lambda, n_m23=400):
+    """
+    Fraction of eta -> gamma mu+ mu- signal at gamma mu+ mu- mass M (MeV,
+    array) that falls in the Dalitz bin m12_range x m23_range (GeV^2, m12 =
+    m^2(gamma mu+), m23 = m^2(mu+ mu-)). The signal counterpart of
+    phase_space_factor.
+
+    The signal density is the Kroll-Wada one (kroll_wada_s_density for s =
+    m23, ff_lambda in GeV), with the mu+ angle theta* in the mu+ mu- rest
+    frame distributed as
+
+        1 + cos^2 theta* + (4 m_mu^2 / s) sin^2 theta*.
+
+    A signal candidate at M != m_eta is a true eta decay with its photon
+    energy scaled by (M^2 - s) / (m_eta^2 - s). That leaves s and theta*
+    unchanged, and moves m12 along
+
+        m12 = m_mu^2 + (M^2 - s) (1 - beta cos theta*) / 2
+
+    (see m123_limits), so s stays below m_eta^2 at every M.
+
+    Summed over bins that tile the Dalitz plane, the factor is 1 for
+    M >= m_eta. The m12 overlap is integrated exactly, over cos theta*; m23
+    is sampled at the midpoints of n_m23 strips.
+    """
+    mmu2 = (M_MU / 1000.0)**2
+    meta2 = (M_ETA / 1000.0)**2
+
+    s_norm = np.linspace(4.0 * mmu2, meta2, 200001)
+    norm = np.trapezoid(kroll_wada_s_density(s_norm, ff_lambda), s_norm)
+
+    M2 = (np.asarray(M, float) / 1000.0)[:, None]**2
+    lo, hi = m23_range
+    s = (lo + (np.arange(n_m23) + 0.5) * (hi - lo) / n_m23)[None, :]
+    w = kroll_wada_s_density(s, ff_lambda) / norm
+
+    # cos theta* at the bin's m12 edges, clipped to [-1, 1].
+    valid = (s > 4.0 * mmu2) & (M2 > s)
+    s_in = np.where(s > 4.0 * mmu2, s, 1.0)
+    beta = np.sqrt(1.0 - 4.0 * mmu2 / s_in)
+    span = np.where(valid, M2 - s, 1.0)
+    a, b = m12_range
+    c_hi = np.clip((1.0 - 2.0 * (a - mmu2) / span) / beta, -1.0, 1.0)
+    c_lo = np.clip((1.0 - 2.0 * (b - mmu2) / span) / beta, -1.0, 1.0)
+
+    # Angular weight between c_lo and c_hi, as a fraction of [-1, 1].
+    A = 1.0 + 4.0 * mmu2 / s_in
+    ang = A * (c_hi - c_lo) + beta**2 * (c_hi**3 - c_lo**3) / 3.0
+    ang_frac = np.where(valid, ang / (8.0 / 3.0 * (1.0 + 2.0 * mmu2 / s_in)), 0.0)
+    return (hi - lo) * (w * ang_frac).mean(axis=1)
