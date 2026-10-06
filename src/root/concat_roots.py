@@ -14,24 +14,23 @@ import os
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('input_dir', help='Base path containing the ROOT files')
-parser.add_argument('output', nargs='?', default='combined_files.root',
-                    help='Output file (default: <input_path>/combined_files.root)')
+parser.add_argument('output', nargs='?', default=None,
+                    help='Output file (default: <input_dir>/combined_files.root)')
 args = parser.parse_args()
 
 # Convert input_path to properly formatted path
 input_dir = os.path.abspath(args.input_dir)
-# Same for output, if provided
-if args.output: output_path = os.path.abspath(args.output)
+# Output file is written to the input path if not specified
+output_path = os.path.abspath(args.output or os.path.join(input_dir, 'combined_files.root'))
 
 # Make sure the input path exists
 if not os.path.exists(input_dir):
     print(f'[ERROR] Input path {input_dir} does not exist.')
     exit(1)
-# Output file should be written to the input path if not specified
-output_path = os.path.join(input_dir, os.path.dirname(output_path))
-if not os.path.exists(output_path):
-    print(f'[INFO] Creating output directory {output_path}.')
-    os.makedirs(output_path, exist_ok=True)
+output_dir = os.path.dirname(output_path)
+if not os.path.exists(output_dir):
+    print(f'[INFO] Creating output directory {output_dir}.')
+    os.makedirs(output_dir, exist_ok=True)
 
 # Now find all ROOT files in this path and its subdirectories
 infiles = []
