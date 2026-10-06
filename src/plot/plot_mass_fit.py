@@ -34,7 +34,8 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     If `data` has a 'phase_space' entry ({'x': [...], 'f': [...]}, the
     per-bin phase-space factor f(M) the fit multiplied its shapes by), it is
     drawn in its own panel between the fit and the pulls, on the same mass
-    axis.
+    axis. An optional 'f_sig' in it is a separate signal factor (with 'f'
+    then the background's), drawn dashed in the same panel.
 
     Returns (fig, ax, ax_pull, plot_text, term_text).
     """
@@ -64,7 +65,13 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
             sharex=True
         )
         ax_f.plot(phase_space['x'], phase_space['f'],
-                  color=plot_style.COLORS['phase_space'], linewidth=1.8)
+                  color=plot_style.COLORS['phase_space'], linewidth=1.8,
+                  label='background (flat)')
+        if 'f_sig' in phase_space:
+            ax_f.plot(phase_space['x'], phase_space['f_sig'],
+                      color=plot_style.COLORS['phase_space'], linewidth=1.8,
+                      linestyle='--', label=r'signal ($\gamma\gamma^*$, peak 1)')
+            ax_f.legend(loc='center right', fontsize=12, frameon=False)
         ax_f.axvline(x=547.86, color=plot_style.COLORS['reference'], linestyle='--')
         ax_f.set_ylim(-0.05, 1.1)
         ax_f.set_yticks([0, 0.5, 1])
