@@ -382,6 +382,15 @@ Known limitation: f assumes background is uniform across the bin. Near the
 low-m12 boundary (the i = 1 column) it isn't, and the data turn on more
 slowly than f predicts, which is where the worst per-bin chi2 values are.
 
+`fit_dalitz_gg.ipynb` is the same fit with a separate signal factor,
+`kinematics.kroll_wada_factor`: the fraction of signal at mass M that lands
+in the bin under the eta -> gamma gamma* -> gamma mu+ mu- (Kroll-Wada)
+density, with the NA60 2016 pole form factor (`FF_LAMBDA`). A signal
+candidate at M != m_eta is modelled as a true eta decay with its photon
+energy rescaled, which keeps m23 and the muon angle in the dimuon frame, so
+signal never has m23 > m_eta^2. The background keeps the flat f. The f panel
+on its fit pages shows both factors, with the signal one scaled to peak 1.
+
 
 ## Fitting an arbitrary array
 
