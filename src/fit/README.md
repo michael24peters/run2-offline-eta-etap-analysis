@@ -185,13 +185,23 @@ METRIC_BRANCH   = 'tag_dtf_chi2'   # ranks candidates within an event
 DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']
 PNN_MU_MIN      = 0.95  # ProbNNMu minimum for selection
 MUON_PID        = 13
-TOS_TRIGGERS    = ['tag_l0_tos0', ...]   # ntuple-specific, so not in cut_utils
+TOS_LINES       = {'L0': [...], 'HLT1': [...], 'HLT2': [...]}   # ntuple-specific, so not in cut_utils
 ```
 
-Every cut is structured as a per-candidate boolean mask shaped like `tag_dtf_m`, so they combine with a plain `&` and adding one is a line or two. Most selection criteria (i.e., kinematic cuts) can be applied with `reduce()`:
+Every cut is structured as a per-candidate boolean mask shaped like `tag_dtf_m`, so they combine with a plain `&` and adding one is a line or two.
+
+TOS means the candidate is TOS on at least one line at every trigger level (AND across levels, OR within a level). `TOS_LINES` maps each level to its TOS branches, and `tos_mask()` takes that dict; a flat list of branches raises a `TypeError`. Every driver, notebook and plot script uses the same lines:
 
 ```python
-tos, tos_report = cut_utils.tos_mask(tree, TOS_TRIGGERS)
+TOS_LINES = {
+    'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
+    'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass
+    'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1'],   # Hlt2ExoticaPrmptDiMuonTurbo, Hlt2ExoticaDiMuonNoIPTurbo
+}
+``` Most selection criteria (i.e., kinematic cuts) can be applied with `reduce()`:
+
+```python
+tos, tos_report = cut_utils.tos_mask(tree, TOS_LINES)
 
 # every muon daughter passes the PID cut ("passes OR isn't a muon", so a
 # candidate with no muon daughters passes rather than fails)
@@ -262,8 +272,8 @@ always written with one entry per candidate. Two distinct cases:
 - *Absent* (empty list): the line was not evaluated for that event. Treated as
   "did not fire" and zero-filled by `_align_candidates()`. Reported as
   `[INFO] <branch>: not evaluated in N/M events`. If a branch is ever absent in
-  *all* events it contributes nothing to the TOS OR -- i.e. that trigger is
-  silently not part of the selection -- so it is escalated to `[WARN]`.
+  *all* events it contributes nothing to its level's OR, so it is escalated to
+  `[WARN]`; if every line of a level is absent, no candidate passes TOS.
 - *Partial* (fewer entries than candidates): there is no way to tell which
   candidate each entry belongs to, so `drop_malformed()` drops those events
   rather than assuming positional correspondence. Reported as
@@ -277,9 +287,38 @@ Measured on `ntuple/lhcb/.../20260716/combined_files.root`:
 | `eta2mumugamma` | 16.8% | 88.3% | 52.1% |
 
 So `eta2mumu` is clean, while `eta2mumugamma` loses ~17% of events to the
-ambiguity and runs with HLT2 contributing to the TOS OR only where it was
-actually evaluated. **Unresolved:** why the HLT2 branches are written per event
-rather than per candidate, and what a partial list is meant to signify.
+ambiguity, and a candidate passes the HLT2 level only where an HLT2 line was
+actually evaluated. Both the absent and the partial lists come from the
+`turboTISTOS` / `fill(key, None)` path described under "HLT2 TOS is 0 in every
+data ntuple" below.
+
+**HLT2 TOS is 0 in every data ntuple.** In `ntuple/lhcb/eta2mumugamma/{20260507,20260608,20260716}`
+every `tag_hlt2_tos*` entry is 0; in MC (`signal_20260716`) and in
+`eta2mumu/20260716` data they are filled. TOS therefore selects no eta2mumugamma
+data candidates until the data is reprocessed. Cause, from a local `ana.py` run
+on Leptons Turbo data: `~/ana/src/ntuple.py:turboTISTOS` reads the track of every
+candidate daughter, the photon has none, the exception is swallowed and the
+function returns `None`; `Ntuple.fill(key, None)` then calls `TTree::Fill()` in
+the middle of the candidate loop. That same path writes the ~5x partial copies of
+each event in `eta2mumugamma/20260716`. Data 20260507 also has HLT1 TOS 0
+everywhere.
+
+**Trigger branch numbering depends on the production.** `tag_<level>_tos<i>` is
+the i-th line of `l0Trgs` / `hlt1Trgs` / `hlt2Trgs` in the `~/ana/src/ntuple.py`
+that wrote the file, and that order has changed. `TOS_LINES` assumes the July
+2026 order or later:
+
+| ntuple | `tag_hlt2_tos0` | `tag_hlt2_tos1` | `tag_hlt2_tos2` |
+|---|---|---|---|
+| data 20260507, 20260608 | Hlt2ExoticaPrmptDiMuonTurbo | Hlt2ExoticaDisplDiMuon | Hlt2ExoticaDiMuonNoIPTurbo |
+| data and MC 20260716 | Hlt2ExoticaPrmptDiMuonTurbo | Hlt2ExoticaDiMuonNoIPTurbo | Hlt2ExoticaDisplDiMuon |
+| `ntuple.py` since 2026-08-05 | Hlt2ExoticaPrmptDiMuonTurbo | Hlt2ExoticaDiMuonNoIPTurbo | -- |
+| `ntuple.py` since 2026-10-05 (MC 20261006) | Hlt2ExoticaPrmptDiMuonTurbo | Hlt2ExoticaDiMuonNoIPTurbo | Hlt2Topo (TIS line) |
+
+L0 (`tos0` L0DiMuon, `tos1` L0Muon) and HLT1 (`tos0` Hlt1DiMuonNoIP, `tos1`
+Hlt1DiMuonLowMass) keep the same order in all of them. Since 2026-10-05 each
+level has further lines after those: L0 `tos2` L0Hadron (TIS line), HLT1
+`tos2` Hlt1MultiDiMuonNoIP and `tos3` Hlt1TrackMVA (TIS line).
 
 **Inconsistent `prt_*` lengths.** In a small fraction of events (~0.1% in MC)
 the `prt_*` branches disagree in length with `prt_idx_mom`, or an index points

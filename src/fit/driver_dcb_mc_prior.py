@@ -95,13 +95,19 @@ MUON_PID        = 13               # |pid| the pnn_mu cut applies to
 MOTHER_PID      = 221              # signal mother PID, for truth-matching (eta)
 DAUGHTER_PIDS   = [-13, 13]        # signal daughter PIDs, for truth-matching
 
-# Trigger-on-signal lines OR'd together by the TOS cut. These are a property of
-# this ntuple, not of the framework, so they live here rather than in cut_utils.
-TOS_TRIGGERS = ['tag_l0_tos0', 'tag_l0_tos1', 'tag_hlt1_tos0',
-                'tag_hlt1_tos1', 'tag_hlt2_tos0', 'tag_hlt2_tos1']
+# Trigger-on-signal lines per trigger level. The TOS cut requires the candidate
+# to be TOS on at least one line at every level (cut_utils.tos_mask). These are
+# a property of this ntuple, not of the framework, so they live here rather
+# than in cut_utils.
+TOS_LINES = {
+    'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
+    'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass
+    'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1'],   # Hlt2ExoticaPrmptDiMuonTurbo, Hlt2ExoticaDiMuonNoIPTurbo
+}
+TOS_BRANCHES = [branch for lines in TOS_LINES.values() for branch in lines]
 
 BRANCHES = ([MASS_BRANCH, METRIC_BRANCH, 'prt_idx_mom']
-            + DAUGHTER_FIELDS + TOS_TRIGGERS)
+            + DAUGHTER_FIELDS + TOS_BRANCHES)
 
 # MC-only branches for truth-matching. Not in BRANCHES since the data file has
 # no mc_* / prt_idx_gen branches -- read_branches() would fail on the data leg
@@ -178,7 +184,7 @@ def select_masses(infile, tag, truth_match=False):
     keep = ak.ones_like(tree[MASS_BRANCH], dtype=bool)
     tos_report = None
     if use_tos:
-        tos, tos_report = cut_utils.tos_mask(tree, TOS_TRIGGERS, tag_ref=MASS_BRANCH)
+        tos, tos_report = cut_utils.tos_mask(tree, TOS_LINES, tag_ref=MASS_BRANCH)
         keep = keep & tos
     if pnn_mu_min is not None:
         # A daughter of some other PID isn't subject to a muon cut, so it can
@@ -212,9 +218,12 @@ def select_masses(infile, tag, truth_match=False):
                    'dropped_partial_candidate_branch'):
         if drop_report[reason]:
             print(f'[INFO] [{tag}]   {reason}: {drop_report[reason]}', file=sys.stderr)
-    if tos_report and tos_report['ignored']:
-        print(f"[INFO] [{tag}] TOS lines absent in every event (contributing nothing): "
-              f"{tos_report['ignored']}", file=sys.stderr)
+    for level, r in (tos_report or {}).items():
+        print(f"[INFO] [{tag}] TOS at every level up to {level}: "
+              f"{r['candidates_tos_cumulative']} candidates", file=sys.stderr)
+        if r['ignored']:
+            print(f"[WARN] [{tag}] {level} TOS lines absent in every event "
+                  f"(contributing nothing): {r['ignored']}", file=sys.stderr)
 
     applied = ', '.join((['TOS'] if use_tos else [])
                         + ([f'pnn_mu>{pnn_mu_min}'] if pnn_mu_min is not None else [])) or 'none'
@@ -276,7 +285,7 @@ print(f'[INFO] MC tail shape (prior for data fit, x{args.tail_prior_factor:.0f} 
 
 mc_result['meta']['input_file'] = args.mc_infile
 mc_result['meta']['selection'] = {
-    'tos': not args.no_tos, 'pnn_mu_min': args.pnn_mu_min,
+    'tos': None if args.no_tos else TOS_LINES, 'pnn_mu_min': args.pnn_mu_min,
     'truth_match': not args.no_truth_match,
     'best_candidate': f'min {METRIC_BRANCH}',
 }
@@ -304,7 +313,7 @@ data_result['meta']['input_file'] = args.data_infile
 data_result['meta']['tail_prior_from'] = args.mc_infile
 data_result['meta']['tail_prior_factor'] = args.tail_prior_factor
 data_result['meta']['selection'] = {
-    'tos': not args.no_tos, 'pnn_mu_min': args.pnn_mu_min,
+    'tos': None if args.no_tos else TOS_LINES, 'pnn_mu_min': args.pnn_mu_min,
     'best_candidate': f'min {METRIC_BRANCH}',
 }
 data_result['selection_report'] = data_selection_report

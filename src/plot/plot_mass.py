@@ -36,7 +36,8 @@ parser.add_argument('--full-range', action='store_true', default=False,
 # Selection, matching driver_dcb.py / driver_gauss.py. Defaults to no additional
 # cut, so a bare run is a diagnostic overview of everything in the file.
 parser.add_argument('--tos', action='store_true', default=False,
-                    help='Require candidates to be TOS for at least one trigger')
+                    help='Require candidates to be TOS on at least one line at every '
+                         'trigger level (L0, HLT1, HLT2)')
 parser.add_argument('--pnn-mu-min', type=float, default=0.4,
                     help='Muon PID threshold (default: 0.4, the floor already applied '
                          'upstream in the ntuple, i.e. no additional cut)')
@@ -49,12 +50,17 @@ print(f'Reading from {args.input} and writing to {args.output}.')
 # selection variant runs over the same event sample and differs only by the cut.
 DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']
 MUON_PID = 13
-# Trigger lines are a property of this ntuple, not of cut_utils.
-TOS_TRIGGERS = ['tag_l0_tos0', 'tag_l0_tos1', 'tag_hlt1_tos0',
-                'tag_hlt1_tos1', 'tag_hlt2_tos0', 'tag_hlt2_tos1']
+# Trigger-on-signal lines per trigger level; TOS requires at least one line at
+# every level (cut_utils.tos_mask). A property of this ntuple, not of cut_utils.
+TOS_LINES = {
+    'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
+    'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass
+    'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1'],   # Hlt2ExoticaPrmptDiMuonTurbo, Hlt2ExoticaDiMuonNoIPTurbo
+}
+TOS_BRANCHES = [branch for lines in TOS_LINES.values() for branch in lines]
 tree = cut_utils.read_branches(
     args.input,
-    ['tag_dtf_m', 'tag_dtf_chi2', 'prt_idx_mom'] + DAUGHTER_FIELDS + TOS_TRIGGERS)
+    ['tag_dtf_m', 'tag_dtf_chi2', 'prt_idx_mom'] + DAUGHTER_FIELDS + TOS_BRANCHES)
 tree, _ = cut_utils.drop_malformed(tree)
 
 # Get lengths of arrays in tag_dtf_m to see how many candidates per event
@@ -80,7 +86,7 @@ print(f"{'─' * 48}")
 # passes every candidate and only --tos / a raised threshold narrow it.
 keep = ak.ones_like(tree['tag_dtf_m'], dtype=bool)
 if args.tos:
-    tos, _ = cut_utils.tos_mask(tree, TOS_TRIGGERS)
+    tos, _ = cut_utils.tos_mask(tree, TOS_LINES)
     keep = keep & tos
 if args.pnn_mu_min is not None:
     # "passes OR isn't a muon", reduced onto the candidate, so a candidate is cut

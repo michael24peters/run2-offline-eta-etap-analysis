@@ -33,9 +33,14 @@ VARIANTS = [
 
 DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']
 MUON_PID = 13
-# Trigger lines are a property of this ntuple, not of cut_utils.
-TOS_TRIGGERS = ['tag_l0_tos0', 'tag_l0_tos1', 'tag_hlt1_tos0',
-                'tag_hlt1_tos1', 'tag_hlt2_tos0', 'tag_hlt2_tos1']
+# Trigger-on-signal lines per trigger level; TOS requires at least one line at
+# every level (cut_utils.tos_mask). A property of this ntuple, not of cut_utils.
+TOS_LINES = {
+    'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
+    'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass
+    'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1'],   # Hlt2ExoticaPrmptDiMuonTurbo, Hlt2ExoticaDiMuonNoIPTurbo
+}
+TOS_BRANCHES = [branch for lines in TOS_LINES.values() for branch in lines]
 
 # IO
 parser = argparse.ArgumentParser(
@@ -53,11 +58,11 @@ print(f'Reading from {args.input} and writing to {args.output}.')
 # Read once, then apply each variant's mask to the same tree.
 tree = cut_utils.read_branches(
     args.input,
-    ['tag_dtf_m', 'tag_dtf_chi2', 'prt_idx_mom'] + DAUGHTER_FIELDS + TOS_TRIGGERS)
+    ['tag_dtf_m', 'tag_dtf_chi2', 'prt_idx_mom'] + DAUGHTER_FIELDS + TOS_BRANCHES)
 tree, _ = cut_utils.drop_malformed(tree)
 
 # The TOS mask doesn't depend on the variant, so build it once.
-tos, _ = cut_utils.tos_mask(tree, TOS_TRIGGERS)
+tos, _ = cut_utils.tos_mask(tree, TOS_LINES)
 
 samples = []
 for label, use_tos, pnn_mu_min, colour in VARIANTS:
