@@ -106,6 +106,26 @@ def fiducial_masks(tree, mother_pid, daughter_pids):
     }
 
 
+def fiducial_candidate_mask(tree, mother_pid, daughter_pids, target_ref):
+    '''Per reco candidate mask: True where every daughter's generator match is
+    a daughter of a signal decay mother_pid -> daughter_pids that is in
+    acceptance (fiducial_masks 'in_acceptance'). A daughter with no generator
+    match fails.
+
+    target_ref : any branch whose per-event length defines the candidate
+                 collection, passed through to cut_utils.reduce.
+    '''
+    in_acceptance = fiducial_masks(tree, mother_pid, daughter_pids)['in_acceptance']
+    # Generator particle -> its mother is an in-acceptance signal decay.
+    child_of_acc = (cut_utils.valid(tree, 'mc_idx_mom')
+                    & cut_utils.follow(tree, in_acceptance, 'mc_idx_mom'))
+    # Reco daughter -> its generator match is such a particle.
+    dtr_of_acc = (cut_utils.valid(tree, 'prt_idx_gen')
+                  & cut_utils.follow(tree, child_of_acc, 'prt_idx_gen'))
+    return cut_utils.reduce(tree, dtr_of_acc, 'prt_idx_mom', how='all',
+                            target_ref=target_ref)
+
+
 # -------------------------------------------------------------------------------
 
 if __name__ == '__main__':
