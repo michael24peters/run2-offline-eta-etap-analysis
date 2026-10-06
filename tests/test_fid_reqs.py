@@ -10,7 +10,7 @@ records with momenta chosen to sit just inside or just outside the acceptance
 import awkward as ak
 import numpy as np
 import pytest
-from conftest import kinematic_tree, IN, FWD, LOW_PT
+from conftest import kinematic_tree, make_tree, IN, FWD, LOW_PT
 
 import fid_reqs
 
@@ -265,3 +265,49 @@ def test_every_lost_decay_has_at_least_one_reason():
     explained = m['failed_muon'] | m['failed_gamma'] | m['failed_electron']
     assert int(ak.sum(lost)) == 2
     assert int(ak.sum(lost & ~explained)) == 0
+
+
+# --- fiducial_candidate_mask: reco candidates from in-acceptance decays ------
+
+def reco_on(gen, prt_idx_gen, prt_idx_mom, n_candidates):
+    """A one-event-per-row tree: the generator record `gen` (kinematic_tree
+    rows) plus reco daughters wired to generator particles by `prt_idx_gen`
+    and to candidates by `prt_idx_mom`."""
+    kin = kinematic_tree(gen)
+    rec = make_tree(prt_idx_gen=prt_idx_gen, prt_idx_mom=prt_idx_mom,
+                    tag_m=[[0.0] * n for n in n_candidates])
+    return ak.Array({**{f: kin[f] for f in kin.fields},
+                     **{f: rec[f] for f in rec.fields}})
+
+
+ETA_MUMUGAMMA_IN = [(221, -1, *IN), (-13, 0, *IN), (13, 0, *IN), (22, 0, *IN)]
+
+
+def test_candidate_from_in_acceptance_decay_passes():
+    tree = reco_on([ETA_MUMUGAMMA_IN], [[1, 2, 3]], [[0, 0, 0]], [1])
+    mask = fid_reqs.fiducial_candidate_mask(tree, 221, MUMUGAMMA, target_ref='tag_m')
+    assert mask.tolist() == [[True]]
+
+
+def test_candidate_from_decay_with_a_daughter_outside_fails():
+    """The decay is out of acceptance as a whole, so every candidate built
+    from it fails, including through its in-acceptance daughters."""
+    gen = [(221, -1, *IN), (-13, 0, *FWD), (13, 0, *IN), (22, 0, *IN)]
+    tree = reco_on([gen], [[1, 2, 3]], [[0, 0, 0]], [1])
+    mask = fid_reqs.fiducial_candidate_mask(tree, 221, MUMUGAMMA, target_ref='tag_m')
+    assert mask.tolist() == [[False]]
+
+
+def test_daughter_without_generator_match_fails():
+    tree = reco_on([ETA_MUMUGAMMA_IN], [[1, 2, -1]], [[0, 0, 0]], [1])
+    mask = fid_reqs.fiducial_candidate_mask(tree, 221, MUMUGAMMA, target_ref='tag_m')
+    assert mask.tolist() == [[False]]
+
+
+def test_candidate_with_a_stray_daughter_fails():
+    """Candidate 0 is the signal decay; candidate 1 swaps the photon for a
+    motherless stray."""
+    gen = ETA_MUMUGAMMA_IN + [(22, -1, *IN)]
+    tree = reco_on([gen], [[1, 2, 3, 1, 2, 4]], [[0, 0, 0, 1, 1, 1]], [2])
+    mask = fid_reqs.fiducial_candidate_mask(tree, 221, MUMUGAMMA, target_ref='tag_m')
+    assert mask.tolist() == [[True, False]]
