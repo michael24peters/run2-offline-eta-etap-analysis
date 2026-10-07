@@ -12,6 +12,10 @@ import numpy as np
 M_MU  = 105.6583755
 M_ETA = 547.862
 
+# Pole parameter [GeV] of the eta transition form factor F(s) = 1 / (1 - s /
+# FF_LAMBDA^2), from NA60 2016 (arXiv:1608.07898): Lambda^-2 = 1.934 GeV^-2.
+FF_LAMBDA = 1.934**-0.5
+
 
 def pt(px, py):
     """Transverse momentum."""
@@ -66,18 +70,17 @@ def m123_limits(m12s, m23s):
         m12s = m_mu^2 + (M^2 - m23s) (1 - beta cos theta*) / 2
 
     so cos theta* in [-1, 1] bounds M^2 between
-    m23s + 2 (m12s - m_mu^2) / (1 +/- beta). This is an identity on the
-    four-vectors, so it is exact only for a mass built from the same
-    daughter momenta as m12s/m23s (not a DTF-refitted mass).
+    m23s + 2 (m12s - m_mu^2) / (1 +/- beta).
     """
-    mmu2 = (M_MU / 1000.0)**2
+    m_mu2 = (M_MU / 1000.0)**2                  # m_mu^2 [GeV^2]
     m12s, m23s = np.asarray(m12s, float), np.asarray(m23s, float)
-    beta = np.sqrt(np.clip(1.0 - 4.0 * mmu2 / m23s, 0.0, None))
-    x = m12s - mmu2
+    # Muon speed in the mu+ mu- rest frame.
+    beta = np.sqrt(np.clip(1.0 - 4.0 * m_mu2 / m23s, 0.0, None))
+    m12_excess = m12s - m_mu2                   # m12 above its minimum, m_mu^2
     with np.errstate(divide='ignore', invalid='ignore'):
-        lo = np.sqrt(m23s + 2.0 * x / (1.0 + beta))
-        hi = np.sqrt(m23s + 2.0 * x / (1.0 - beta))
-    return lo * 1000.0, hi * 1000.0
+        m_min = np.sqrt(m23s + 2.0 * m12_excess / (1.0 + beta))
+        m_max = np.sqrt(m23s + 2.0 * m12_excess / (1.0 - beta))
+    return m_min * 1000.0, m_max * 1000.0
 
 
 def phase_space_factor(M, m12_range, m23_range, n_m23=400):
@@ -86,92 +89,101 @@ def phase_space_factor(M, m12_range, m23_range, n_m23=400):
     m^2(gamma mu+), m23 = m^2(mu+ mu-)) that is kinematically reachable by a
     gamma mu+ mu- system of invariant mass M (MeV, array).
 
-    1 where the whole bin is inside the Dalitz region of mass M, 0 where none
-    of it is. Equivalent to sampling (m12, m23) uniformly in the bin and
+    Every point of the bin counts equally (flat phase space); dalitz_factor
+    is the same fraction with points weighted by the eta Dalitz-decay
+    density. 1 where the whole bin is inside the Dalitz region of mass M, 0
+    where none of it is. Equivalent to sampling (m12, m23) uniformly in the bin and
     counting how often M falls inside m123_limits(): at fixed
     m23 the allowed m12 is an interval (m123_limits), so its overlap with
     the bin's m12 range is computed exactly and only m23 is gridded.
     """
-    mmu2 = (M_MU / 1000.0)**2
-    M2 = (np.asarray(M, float) / 1000.0)[:, None]**2
-    s = np.linspace(*m23_range, n_m23)[None, :]
-    with np.errstate(divide='ignore'):   # m23 = 0 at the grid's bottom edge
-        beta = np.sqrt(np.clip(1.0 - 4.0 * mmu2 / s, 0.0, None))
-    half = np.clip(M2 - s, 0.0, None) / 2.0
-    lo, hi = mmu2 + half * (1.0 - beta), mmu2 + half * (1.0 + beta)
-    a, b = m12_range
-    overlap = np.clip(np.minimum(hi, b) - np.maximum(lo, a), 0.0, None)
-    return overlap.mean(axis=1) / (b - a)
+    m_mu2 = (M_MU / 1000.0)**2                  # m_mu^2 [GeV^2]
+    M2 = (np.asarray(M, float) / 1000.0)[:, None]**2   # M^2 [GeV^2], one row per mass
+    q2 = np.linspace(*m23_range, n_m23)[None, :]       # m23 grid across the bin, one column per value
+
+    # m12 interval [lo12, hi12] of the Dalitz region of mass M at each q2.
+    with np.errstate(divide='ignore'):   # q2 = 0 at the grid's bottom edge
+        beta = np.sqrt(np.clip(1.0 - 4.0 * m_mu2 / q2, 0.0, None))   # muon speed in the mu+ mu- frame
+    half_span = np.clip(M2 - q2, 0.0, None) / 2.0
+    lo12, hi12 = m_mu2 + half_span * (1.0 - beta), m_mu2 + half_span * (1.0 + beta)
+
+    # Length of that interval inside the bin's m12 range, averaged over q2.
+    bin_lo12, bin_hi12 = m12_range
+    overlap12 = np.clip(np.minimum(hi12, bin_hi12) - np.maximum(lo12, bin_lo12), 0.0, None)
+    return overlap12.mean(axis=1) / (bin_hi12 - bin_lo12)
 
 
-def kroll_wada_s_density(s, ff_lambda):
+def dalitz_density(m12s, m23s):
     """
-    Unnormalized m^2(mu+ mu-) spectrum dGamma/ds of eta -> gamma gamma* ->
-    gamma mu+ mu- (Kroll-Wada), s in GeV^2, with the pole form factor
-    F(s) = 1 / (1 - s / ff_lambda^2), ff_lambda in GeV:
+    Unnormalized density of eta Dalitz decays, eta -> gamma gamma* ->
+    gamma mu+ mu-, over the Dalitz plot at the eta mass: |M|^2 for m12s =
+    m^2(gamma mu+) and m23s = q^2 = m^2(mu+ mu-) in GeV^2 (the Kroll-Wada
+    matrix element with the pole form factor F(q^2) = 1 / (1 - q^2 /
+    FF_LAMBDA^2)):
 
-        dGamma/ds ~ |F(s)|^2 / s * (1 - s / m_eta^2)^3 * beta * (1 + 2 m_mu^2 / s)
+        |F(q^2)|^2 / q^2 [(m_eta^2 - q^2)^2 (1 + 4 m_mu^2 / q^2) + (m13s - m12s)^2]
 
-    0 outside [4 m_mu^2, m_eta^2].
+    with m13s = m^2(gamma mu-) = m_eta^2 + 2 m_mu^2 - q^2 - m12s.
+    0 for q^2 <= 4 m_mu^2. Valid for q^2 < FF_LAMBDA^2.
     """
-    mmu2 = (M_MU / 1000.0)**2
-    meta2 = (M_ETA / 1000.0)**2
-    s = np.asarray(s, float)
-    inside = (s > 4.0 * mmu2) & (s < meta2)
-    s_in = np.where(inside, s, meta2 / 2.0)
-    beta = np.sqrt(1.0 - 4.0 * mmu2 / s_in)
-    ff2 = (1.0 - s_in / ff_lambda**2)**-2
-    w = ff2 / s_in * (1.0 - s_in / meta2)**3 * beta * (1.0 + 2.0 * mmu2 / s_in)
-    return np.where(inside, w, 0.0)
+    m_mu2 = (M_MU / 1000.0)**2                  # m_mu^2 [GeV^2]
+    m_eta2 = (M_ETA / 1000.0)**2                # m_eta^2 [GeV^2]
+    m12s, q2 = np.asarray(m12s, float), np.asarray(m23s, float)
+
+    # Below the dimuon threshold the density is 0; q2_safe stands in a 1
+    # there so the divisions below stay finite.
+    physical = q2 > 4.0 * m_mu2
+    q2_safe = np.where(physical, q2, 1.0)
+
+    form_factor2 = (1.0 - q2_safe / FF_LAMBDA**2)**-2      # |F(q^2)|^2
+    m13s = m_eta2 + 2.0 * m_mu2 - q2_safe - m12s           # m^2(gamma mu-)
+    density = form_factor2 / q2_safe * ((m_eta2 - q2_safe)**2 * (1.0 + 4.0 * m_mu2 / q2_safe)
+                                        + (m13s - m12s)**2)
+    return np.where(physical, density, 0.0)
 
 
-def kroll_wada_factor(M, m12_range, m23_range, ff_lambda, n_m23=400):
+def dalitz_factor(M, m12_range, m23_range, n_m23=400):
     """
-    Fraction of eta -> gamma mu+ mu- signal at gamma mu+ mu- mass M (MeV,
-    array) that falls in the Dalitz bin m12_range x m23_range (GeV^2, m12 =
-    m^2(gamma mu+), m23 = m^2(mu+ mu-)). The signal counterpart of
-    phase_space_factor.
+    Dalitz-decay counterpart of phase_space_factor: the fraction of the
+    Dalitz bin m12_range x m23_range (GeV^2, m12 = m^2(gamma mu+), m23 = q^2
+    = m^2(mu+ mu-)) that is kinematically reachable by a gamma mu+ mu- system
+    of invariant mass M (MeV, array), with each point of the bin weighted by
+    dalitz_density instead of counting equally:
 
-    The signal density is the Kroll-Wada one (kroll_wada_s_density for s =
-    m23, ff_lambda in GeV), with the mu+ angle theta* in the mu+ mu- rest
-    frame distributed as
+        f(M) = int_{bin and D(M)} density dA / int_{bin} density dA
 
-        1 + cos^2 theta* + (4 m_mu^2 / s) sin^2 theta*.
-
-    A signal candidate at M != m_eta is a true eta decay with its photon
-    energy scaled by (M^2 - s) / (m_eta^2 - s). That leaves s and theta*
-    unchanged, and moves m12 along
-
-        m12 = m_mu^2 + (M^2 - s) (1 - beta cos theta*) / 2
-
-    (see m123_limits), so s stays below m_eta^2 at every M.
-
-    Summed over bins that tile the Dalitz plane, the factor is 1 for
-    M >= m_eta. The m12 overlap is integrated exactly, over cos theta*; m23
-    is sampled at the midpoints of n_m23 strips.
+    phase_space_factor is the same ratio with density = 1. 1 where the whole
+    bin is inside the Dalitz region of mass M, 0 where none of it is. At
+    fixed q^2 the density is quadratic in m12, so the m12 integral is exact;
+    q^2 is sampled at the midpoints of n_m23 strips.
     """
-    mmu2 = (M_MU / 1000.0)**2
-    meta2 = (M_ETA / 1000.0)**2
+    m_mu2 = (M_MU / 1000.0)**2                  # m_mu^2 [GeV^2]
+    m_eta2 = (M_ETA / 1000.0)**2                # m_eta^2 [GeV^2]
+    M2 = (np.asarray(M, float) / 1000.0)[:, None]**2   # M^2 [GeV^2], one row per mass
+    bin_lo23, bin_hi23 = m23_range
+    bin_lo12, bin_hi12 = m12_range
+    # Midpoints of n_m23 strips across the bin's q2 range, one column per strip.
+    q2 = (bin_lo23 + (np.arange(n_m23) + 0.5) * (bin_hi23 - bin_lo23) / n_m23)[None, :]
 
-    s_norm = np.linspace(4.0 * mmu2, meta2, 200001)
-    norm = np.trapezoid(kroll_wada_s_density(s_norm, ff_lambda), s_norm)
+    # m12 interval of the Dalitz region of mass M at each q2, clipped to the
+    # bin's m12 range: [reach_lo12, reach_hi12] is the reachable part of the bin.
+    beta = np.sqrt(np.clip(1.0 - 4.0 * m_mu2 / q2, 0.0, None))   # muon speed in the mu+ mu- frame
+    half_span = np.clip(M2 - q2, 0.0, None) / 2.0
+    reach_lo12 = np.clip(m_mu2 + half_span * (1.0 - beta), bin_lo12, bin_hi12)
+    reach_hi12 = np.clip(m_mu2 + half_span * (1.0 + beta), bin_lo12, bin_hi12)
 
-    M2 = (np.asarray(M, float) / 1000.0)[:, None]**2
-    lo, hi = m23_range
-    s = (lo + (np.arange(n_m23) + 0.5) * (hi - lo) / n_m23)[None, :]
-    w = kroll_wada_s_density(s, ff_lambda) / norm
+    # dalitz_density at fixed q2, written as q2_weight * (base_term + 4 (m12 - mid12)^2).
+    physical = q2 > 4.0 * m_mu2
+    q2_safe = np.where(physical, q2, 1.0)       # stand-in 1 below threshold, where q2_weight is 0
+    q2_weight = np.where(physical, (1.0 - q2_safe / FF_LAMBDA**2)**-2 / q2_safe, 0.0)   # |F|^2 / q^2
+    base_term = (m_eta2 - q2_safe)**2 * (1.0 + 4.0 * m_mu2 / q2_safe)   # part not depending on m12
+    mid12 = (m_eta2 + 2.0 * m_mu2 - q2_safe) / 2.0   # m12 where m13 = m12 (cos theta* = 0)
 
-    # cos theta* at the bin's m12 edges, clipped to [-1, 1].
-    valid = (s > 4.0 * mmu2) & (M2 > s)
-    s_in = np.where(s > 4.0 * mmu2, s, 1.0)
-    beta = np.sqrt(1.0 - 4.0 * mmu2 / s_in)
-    span = np.where(valid, M2 - s, 1.0)
-    a, b = m12_range
-    c_hi = np.clip((1.0 - 2.0 * (a - mmu2) / span) / beta, -1.0, 1.0)
-    c_lo = np.clip((1.0 - 2.0 * (b - mmu2) / span) / beta, -1.0, 1.0)
-
-    # Angular weight between c_lo and c_hi, as a fraction of [-1, 1].
-    A = 1.0 + 4.0 * mmu2 / s_in
-    ang = A * (c_hi - c_lo) + beta**2 * (c_hi**3 - c_lo**3) / 3.0
-    ang_frac = np.where(valid, ang / (8.0 / 3.0 * (1.0 + 2.0 * mmu2 / s_in)), 0.0)
-    return (hi - lo) * (w * ang_frac).mean(axis=1)
+    # m12 integral of the density over the reachable part and over the whole bin.
+    reach_integral = q2_weight * (base_term * (reach_hi12 - reach_lo12)
+                                  + 4.0 / 3.0 * ((reach_hi12 - mid12)**3 - (reach_lo12 - mid12)**3))
+    bin_integral = q2_weight * (base_term * (bin_hi12 - bin_lo12)
+                                + 4.0 / 3.0 * ((bin_hi12 - mid12)**3 - (bin_lo12 - mid12)**3))
+    bin_total = bin_integral.sum(axis=1)
+    return np.where(bin_total > 0,
+                    reach_integral.sum(axis=1) / np.where(bin_total > 0, bin_total, 1.0), 0.0)
