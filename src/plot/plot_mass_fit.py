@@ -70,7 +70,7 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
         if 'f_sig' in phase_space:
             ax_f.plot(phase_space['x'], phase_space['f_sig'],
                       color=plot_style.COLORS['phase_space'], linewidth=1.8,
-                      linestyle='--', label=r'signal ($\gamma\gamma^*$, peak 1)')
+                      linestyle='--', label='signal (Dalitz decay)')
             ax_f.legend(loc='center right', fontsize=12, frameon=False)
         ax_f.axvline(x=547.86, color=plot_style.COLORS['reference'], linestyle='--')
         ax_f.set_ylim(-0.05, 1.1)

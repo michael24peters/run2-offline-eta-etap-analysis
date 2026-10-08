@@ -382,14 +382,44 @@ Known limitation: f assumes background is uniform across the bin. Near the
 low-m12 boundary (the i = 1 column) it isn't, and the data turn on more
 slowly than f predicts, which is where the worst per-bin chi2 values are.
 
-`fit_dalitz_gg.ipynb` is the same fit with a separate signal factor,
-`kinematics.kroll_wada_factor`: the fraction of signal at mass M that lands
-in the bin under the eta -> gamma gamma* -> gamma mu+ mu- (Kroll-Wada)
-density, with the NA60 2016 pole form factor (`FF_LAMBDA`). A signal
-candidate at M != m_eta is modelled as a true eta decay with its photon
-energy rescaled, which keeps m23 and the muon angle in the dimuon frame, so
-signal never has m23 > m_eta^2. The background keeps the flat f. The f panel
-on its fit pages shows both factors, with the signal one scaled to peak 1.
+### Script pipeline: flat vs Dalitz-decay signal factor
+
+The same per-bin fit as `fit_dalitz.ipynb`, split into three scripts, with a
+choice of signal factor:
+
+```
+python src/fit/driver_dalitz.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
+    --outdir OUT [--tos-levels L0 HLT1 HLT2] [--pnn-mu-min X] [--max-events N]
+python src/fit/fit_dalitz_bins.py OUT/dalitz_events.npz \
+    --binning grid|q2 --signal-factor flat|dalitz [--tail-prior PATH]
+python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_<binning>_<signal-factor>.json
+python src/plot/plot_yield_ratio.py OUT/dalitz_fit_<binning>_flat.json OUT/dalitz_fit_<binning>_dalitz.json
+python src/plot/plot_signal_factor.py [--outdir out/signal_factor]
+```
+
+- `driver_dalitz.py`: read ROOT -> TOS (default L0, HLT1 and HLT2) -> best
+  candidate (min `tag_dtf_chi2`) -> `dalitz_events.npz`
+  (m12, m23, mass rebuilt from the daughters, every event) and
+  `selection.json` (cutflow).
+- `fit_dalitz_bins.py`: global DCB + Chebyshev fit (tail prior from the
+  truth-matched rebuilt-mass MC fit by default), then one fit per bin ->
+  `dalitz_fit_<binning>_<signal-factor>.json`. `grid` is the 14 x 14 grid;
+  `q2` is 14 strips in m23 = q^2, each over every m12. The background factor is
+  always `kinematics.phase_space_factor` (flat). The signal factor is either
+  the same (`flat`) or `kinematics.dalitz_factor` (`dalitz`): the fraction of
+  the bin reachable at M with each point weighted by
+  `kinematics.dalitz_density`, the eta -> gamma gamma* -> gamma mu+ mu-
+  (Kroll-Wada) density with the NA60 2016 pole form factor (`FF_LAMBDA`).
+  Bins with signal factor 0 at m_eta have n_sig fixed to 0.
+- `plot_dalitz_bins.py`: global fit, yield maps (grid) or yield vs q^2 (q2),
+  and per-bin fit pages (PDF; a few bins also as PNG).
+- `plot_yield_ratio.py`: n_sig(dalitz)/n_sig(flat) per bin, plus a table.
+- `plot_signal_factor.py`: the density, both factors for example bins and
+  strips, and how their difference shrinks with bin size. No data.
+
+With `--tos-levels L0 HLT1` in the driver, and `--signal-factor flat --binning
+grid` with the 20260903 tail prior in the fit, the scripts reproduce
+`fit_dalitz.ipynb` (L0 + HLT1 TOS, 20260608 data) bin for bin.
 
 
 ## Fitting an arbitrary array
