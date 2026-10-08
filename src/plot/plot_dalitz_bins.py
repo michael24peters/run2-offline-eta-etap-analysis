@@ -1,16 +1,15 @@
 """
 plot_dalitz_bins.py
 
-Figures from one fit_dalitz_bins.py results JSON, written next to it with the
+Figures from one fit_dalitz_bins.py results JSON, written next to it, with the
 JSON's name (without .json) as prefix:
 
-    <prefix>_global_fit.png               the global DCB + Chebyshev fit
-    <prefix>_signal_yield.png             n_sig per bin                 (grid)
-    <prefix>_bkg_yield.png                n_bkg per bin                 (grid)
-    <prefix>_q2_yield.png                 n_sig per q^2 strip           (q2)
-    <prefix>_per_bin_fits.pdf             one page per bin, in order of i then j
-    <prefix>_per_bin_fits_horizontal.pdf  the same in order of j then i (grid)
-    <prefix>_per_bin_png/fit_i_j.png      the PNG_BINS pages as single figures
+    global_fit.png               the global DCB + Chebyshev fit (the same for
+                                 every results JSON of one events file)
+    <prefix>_signal_yield.png    n_sig per bin                 (grid)
+    <prefix>_bkg_yield.png       n_bkg per bin                 (grid)
+    <prefix>_q2_yield.png        n_sig per q^2 strip           (q2)
+    <prefix>_per_bin_fits.pdf    one page per bin, in order of i then j
 
 Usage:
     python src/plot/plot_dalitz_bins.py RESULTS.json
@@ -37,9 +36,6 @@ from plot_dcb import plot_dcb
 from plot_mass_fit import build_fit_figure
 from plot_phase_space import dalitz_boundary
 
-# Bins also written as single PNGs, per binning.
-PNG_BINS = {'grid': [(4, 4), (6, 8), (7, 2), (1, 13), (1, 8), (12, 7)],
-            'q2': [(0, 2), (0, 4), (0, 8), (0, 12)]}
 SIGNAL_KEYS = {'mean', 'sigma', 'n_sig', 'n_bkg'}
 C = plot_style.COLORS
 
@@ -64,7 +60,7 @@ bins = {(b['i'], b['j']): b for b in dalitz['bins']}
 
 # --- Global fit --------------------------------------------------------------
 
-plot_dcb(result, f'{prefix}_global_fit.png')
+plot_dcb(result, os.path.join(os.path.dirname(os.path.abspath(args.results)), 'global_fit.png'))
 
 # --- Yields ------------------------------------------------------------------
 
@@ -136,17 +132,10 @@ def make_build_text(n_cand):
     return build_text
 
 
-n_i, n_j = len(m12_edges) - 1, len(m23_edges) - 1
-bin_orders = {f'{prefix}_per_bin_fits.pdf': [(i, j) for i in range(n_i) for j in range(n_j)]}
-if binning == 'grid':
-    bin_orders[f'{prefix}_per_bin_fits_horizontal.pdf'] = [(i, j) for j in range(n_j)
-                                                           for i in range(n_i)]
-png_dir = f'{prefix}_per_bin_png'
-first_pdf = next(iter(bin_orders))
-
-for pdf_path, bin_order in bin_orders.items():
-    with PdfPages(pdf_path) as pdf:
-        for i, j in bin_order:
+pdf_path = f'{prefix}_per_bin_fits.pdf'
+with PdfPages(pdf_path) as pdf:
+    for i in range(len(m12_edges) - 1):
+        for j in range(len(m23_edges) - 1):
             b = bins[(i, j)]
             counts = np.array(b['counts'], dtype=float)
             title = (f'Bin ({i}, {j}): m12=[{b["m12_range"][0]:.4f}, {b["m12_range"][1]:.4f}], '
@@ -178,13 +167,6 @@ for pdf_path, bin_order in bin_orders.items():
                 }
                 fig, ax, ax_pull, _, _ = build_fit_figure(
                     data, make_build_text(b['n_cand']), x_lim=(xmin, xmax), title=title)
-                # Single-figure copy, without the title.
-                if pdf_path == first_pdf and (i, j) in PNG_BINS[binning]:
-                    os.makedirs(png_dir, exist_ok=True)
-                    ax.set_title('')
-                    fig.tight_layout()
-                    fig.savefig(os.path.join(png_dir, f'fit_{i}_{j}.png'), dpi=100)
-                    ax.set_title(title)
             else:
                 # Data-only page in the fit pages' style, with the reason there is no fit.
                 plot_utils.apply_font()
@@ -223,4 +205,4 @@ for pdf_path, bin_order in bin_orders.items():
             fig.tight_layout()
             pdf.savefig(fig)
             plt.close(fig)
-    print(f'[DONE] {pdf_path}')
+print(f'[DONE] {pdf_path}')

@@ -393,8 +393,6 @@ python src/fit/driver_dalitz.py ntuple/lhcb/eta2mumugamma/20261006/combined_file
 python src/fit/fit_dalitz_bins.py OUT/dalitz_events.npz \
     --binning grid|q2 --signal-factor flat|dalitz [--tail-prior PATH]
 python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_<binning>_<signal-factor>.json
-python src/plot/plot_yield_ratio.py OUT/dalitz_fit_<binning>_flat.json OUT/dalitz_fit_<binning>_dalitz.json
-python src/plot/plot_signal_factor.py [--outdir out/signal_factor]
 ```
 
 - `driver_dalitz.py`: read ROOT -> TOS (default L0, HLT1 and HLT2) -> best
@@ -411,11 +409,8 @@ python src/plot/plot_signal_factor.py [--outdir out/signal_factor]
   `kinematics.dalitz_density`, the eta -> gamma gamma* -> gamma mu+ mu-
   (Kroll-Wada) density with the NA60 2016 pole form factor (`FF_LAMBDA`).
   Bins with signal factor 0 at m_eta have n_sig fixed to 0.
-- `plot_dalitz_bins.py`: global fit, yield maps (grid) or yield vs q^2 (q2),
-  and per-bin fit pages (PDF; a few bins also as PNG).
-- `plot_yield_ratio.py`: n_sig(dalitz)/n_sig(flat) per bin, plus a table.
-- `plot_signal_factor.py`: the density, both factors for example bins and
-  strips, and how their difference shrinks with bin size. No data.
+- `plot_dalitz_bins.py`: global fit (`global_fit.png`), yield maps (grid) or
+  yield vs q^2 (q2), and the per-bin fit pages (`*_per_bin_fits.pdf`).
 
 With `--tos-levels L0 HLT1` in the driver, and `--signal-factor flat --binning
 grid` with the 20260903 tail prior in the fit, the scripts reproduce
