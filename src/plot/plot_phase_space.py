@@ -10,7 +10,7 @@ Usage:
         [--events  out/eta2mumugamma/turbo/20260922/dalitz_events.npz] \
         [--outdir  out/phase_space_factor]
 
-Pure kinematics (always made): f(m_eta) map, edge-bin zooms, the step-by-step
+Pure kinematics (always made): f(m_eta) map, the step-by-step
 construction of f for one bin, and f(M) for a set of example bins.
 With --results: per-bin decompositions (what f and renormalization do to the
 signal and background shapes). With --events: the within-bin uniformity
@@ -46,7 +46,6 @@ M23_LABEL = r'$m^2_{23} = m^2(\mu^+\mu^-)$ [GeV$^2$]'
 M_LABEL = r'$M = m(\gamma\mu^+\mu^-)$ [MeV]'
 
 # Example bins, (i, j) = (m12 index, m23 index).
-EDGE_BINS = [(1, 13), (2, 12), (2, 4), (7, 8), (7, 2), (12, 5)]
 FACTOR_BINS = [(4, 4), (6, 8), (7, 2), (1, 13), (1, 4), (12, 7)]
 DECOMP_BINS = [(4, 4), (6, 8), (7, 2), (1, 13), (12, 7)]
 CONSTRUCTION_BIN, CONSTRUCTION_MASSES = (6, 8), [505.0, 520.0, 530.0, 540.0, 550.0]
@@ -121,38 +120,11 @@ def fig_f_at_meta_map(outdir):
     fig.colorbar(mesh, ax=ax, label=r'$f(m_\eta)$', pad=0.13)
     bx, by = dalitz_boundary(kinematics.M_ETA)
     ax.plot(bx, by, color=C['data'], lw=1.4, label=r'$\eta$ Dalitz boundary')
-    for (i, j) in EDGE_BINS:
-        (a, b), (lo, hi) = bin_ranges(i, j)
-        ax.add_patch(Rectangle((a, lo), b - a, hi - lo, fill=False,
-                               ec=C['pull'], lw=1.8))
-        right = b > 0.17   # label on the left near the plot's right edge
-        ax.text(a - 0.002 if right else b + 0.002, hi - 0.002, f'({i},{j})',
-                color=C['data'], fontsize=10, va='top', ha='right' if right else 'left')
     ax.set_xlabel(M12_LABEL); ax.set_ylabel(M23_LABEL)
     ax.legend(loc='upper right', fontsize=10)
     plot_style.style_axes(ax)
     plot_style.add_bin_index_axes(ax, M12_EDGES, M23_EDGES)
     plot_style.save_plot(fig, os.path.join(outdir, 'f_at_meta_map.png'), dpi=150)
-
-
-def fig_edge_bins(outdir):
-    fig, axes = plt.subplots(2, 3, figsize=(14, 9))
-    for ax, (i, j) in zip(axes.flat, EDGE_BINS):
-        draw_bin_at_mass(ax, i, j, kinematics.M_ETA)
-        ax.set_title(fr'Bin ({i},{j}):  $f(m_\eta)$ = {f_of(kinematics.M_ETA, i, j)[0]:.2f}',
-                     fontsize=12)
-        ax.set_xlabel(r'$m^2_{12}$ [GeV$^2$]'); ax.set_ylabel(r'$m^2_{23}$ [GeV$^2$]')
-        ax.tick_params(labelsize=9)
-    handles = [Rectangle((0, 0), 1, 1, fc=C['phase_space'], alpha=0.75),
-               Rectangle((0, 0), 1, 1, fc='#e4e3df'),
-               Rectangle((0, 0), 1, 1, fill=False, ec=C['data'], lw=1.6)]
-    fig.legend(handles, [r'part of the bin reachable at $M = m_\eta$',
-                         r'rest of the $\eta$ Dalitz region',
-                         'Dalitz bin'],
-               loc='lower center', ncol=3, frameon=False)
-    fig.tight_layout(rect=(0, 0.05, 1, 1))
-    fig.savefig(os.path.join(outdir, 'edge_bins.png'), dpi=150)
-    print(f"[DONE] Plot saved to {os.path.join(outdir, 'edge_bins.png')}.")
 
 
 def fig_construction(outdir):
@@ -453,7 +425,6 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
     style()
     fig_f_at_meta_map(args.outdir)
-    fig_edge_bins(args.outdir)
     fig_construction(args.outdir)
     fig_strips(args.outdir)
     fig_factors(args.outdir)
