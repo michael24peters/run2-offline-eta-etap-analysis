@@ -125,6 +125,10 @@ def phase_space_factor(M, m12_range, m23_range, n_m23=400):
     lo12 = m_mu2 + half_span * (1.0 - beta)  # cos theta* = +1: mu+ along the photon
     hi12 = m_mu2 + half_span * (1.0 + beta)  # cos theta* = -1: mu+ against the photon
 
+    # TODO: the ntuple keeps only photons with pT > 500 MeV (~/ana/src/ana.py), which empties the
+    # part of D(M) where the photon is soft in the mu+ mu- frame, E*_gamma = (M^2 - q2) / (2 sqrt(q2))
+    # -> 0, i.e. near a bin's lowest reachable masses; this factor counts that part as populated.
+    # The loss depends on the photon's lab boost, not only on (M, m12, m23): a turn-on from data.
     # At each (M, q2): the length of [lo12, hi12] inside the bin's m12 range,
     # 0 where they do not overlap. Averaged over the q2 values and divided by
     # the bin's m12 width, this is (reachable area) / (bin area).
@@ -222,6 +226,7 @@ def dalitz_factor(M, m12_range, m23_range, n_m23=400):
     bin_integral = q2_weight * (base_term * (bin_hi12 - bin_lo12)
                                 + 4.0 / 3.0 * ((bin_hi12 - mid12)**3 - (bin_lo12 - mid12)**3))
 
+    # TODO: the photon pT > 500 MeV loss noted in phase_space_factor applies here too.
     # Sum over the q2 strips (the strip width cancels in the ratio). A bin
     # entirely below threshold has bin_total 0 and factor 0.
     bin_total = bin_integral.sum(axis=1)
