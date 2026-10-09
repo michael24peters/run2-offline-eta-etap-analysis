@@ -80,6 +80,7 @@ parser.add_argument('--outdir', default=None,
                     help="Output directory (default: the events file's directory)")
 args = parser.parse_args()
 outdir = args.outdir or os.path.dirname(os.path.abspath(args.events))
+os.makedirs(outdir, exist_ok=True)
 
 # --- Inputs ------------------------------------------------------------------
 

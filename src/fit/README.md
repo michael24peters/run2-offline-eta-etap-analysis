@@ -63,16 +63,16 @@ Confirms the selection gives a clean peak and gives a rough sigma to seed the DC
 
 eta2mumu:
 ```
-python src/fit/driver_gauss.py ntuple/lhcb/eta2mumu/20260716/combined_files.root \
+python src/fit/driver_gauss.py ntuple/lhcb/eta2mumu/20261006/combined_files.root \
     --outdir out/eta2mumu/turbo/$(date +%Y%m%d) \
     --pnn-mu-min 0.95 \
     --mean-init 547.862 \
     --sigma-init 5.0
 ```
 
-eta2mumugamma -- use `20260608`, not `20260716` (the `20260716` eta2mumugamma production writes each event ~5x, TBD why):
+eta2mumugamma:
 ```
-python src/fit/driver_gauss.py ntuple/lhcb/eta2mumugamma/20260608/combined_files.root \
+python src/fit/driver_gauss.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
     --outdir out/eta2mumugamma/turbo/$(date +%Y%m%d) \
     --xmin 450 --xmax 650 \
     --pnn-mu-min 0.95 \
@@ -86,14 +86,14 @@ Read the `[INFO] ... mean=...  σ=...` line on stderr and look at `gauss_mass_fi
 
 Same file, same selection flags, `--sigma-init` set to whatever stage 1 reported:
 ```
-python src/fit/driver_dcb.py ntuple/lhcb/eta2mumu/20260716/combined_files.root \
+python src/fit/driver_dcb.py ntuple/lhcb/eta2mumu/20261006/combined_files.root \
     --outdir out/eta2mumu/turbo/$(date +%Y%m%d) \
     --pnn-mu-min 0.95 \
     --sigma-init <σ from step 1> \
     --alphaL-init 1.5 --nL-init 2.0 --alphaR-init 1.5 --nR-init 2.0
 ```
 ```
-python src/fit/driver_dcb.py ntuple/lhcb/eta2mumugamma/20260608/combined_files.root \
+python src/fit/driver_dcb.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
     --outdir out/eta2mumugamma/turbo/$(date +%Y%m%d) \
     --xmin 450 --xmax 650 \
     --pnn-mu-min 0.95 \
