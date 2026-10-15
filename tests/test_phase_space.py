@@ -127,7 +127,7 @@ def test_dalitz_factor_matches_weighted_sampling():
         weight = dalitz_weight(m12, m23)
         m_min, m_max = kinematics.m123_limits(m12, m23)
         f = kinematics.dalitz_factor(M, m12_range, m23_range)
-        for m, f_m in zip(M, f):
+        for m, f_m in zip(M, f, strict=True):
             reachable = (m_min <= m) & (m <= m_max)
             mc = np.sum(weight * reachable) / np.sum(weight)
             err = np.sqrt(np.sum((weight * (reachable - mc))**2)) / np.sum(weight)

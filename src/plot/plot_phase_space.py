@@ -158,7 +158,7 @@ def fig_construction(outdir):
 def fig_factors(outdir):
     Mg = np.linspace(XMIN, XMAX, 1500)
     fig, axes = plt.subplots(2, 3, figsize=(14, 7.5), sharex=True, sharey=True)
-    for ax, (i, j) in zip(axes.flat, FACTOR_BINS):
+    for ax, (i, j) in zip(axes.flat, FACTOR_BINS, strict=True):
         f = f_of(Mg, i, j)
         ax.plot(Mg, f, color=C['phase_space'], lw=2)
         ax.axvline(kinematics.M_ETA, color=C['reference'], ls='--')
@@ -199,7 +199,7 @@ def fig_decomposition(outdir, results, i, j):
     axes[0].plot(xg, wg, color=C['phase_space'], lw=2, label='$f(M)$')
     axes[0].set_ylim(-0.05, 1.1); axes[0].set_ylabel('$f(M)$')
     axes[0].legend(loc='lower right', fontsize=11)
-    for ax, (name, color, alone, label, renorm) in zip(axes[1:], shapes):
+    for ax, (name, color, alone, label, renorm) in zip(axes[1:], shapes, strict=True):
         kept = fit_utils._trapz(wg * alone, xg)
         ax.plot(xg, alone, color=color, ls='--', lw=1.6, label=f'{label} alone (area 1)')
         ax.plot(xg, wg * alone, color=color, ls=':', lw=2,
@@ -228,7 +228,7 @@ def fig_worked_example(outdir, events):
     fig = plt.figure(figsize=(18, 8.5))
     gs = GridSpec(2, len(masses), height_ratios=[1.15, 1], figure=fig)
     X, Y = np.meshgrid(np.linspace(x0, x1, 400), np.linspace(y0, y1, 400))
-    for k, (M, name) in enumerate(zip(masses, names)):
+    for k, (M, name) in enumerate(zip(masses, names, strict=True)):
         ax = fig.add_subplot(gs[0, k])
         img = np.ones(X.shape + (4,))
         img[inside_region(X, Y, M)] = matplotlib.colors.to_rgba('#e4e3df')
@@ -286,7 +286,7 @@ def fig_strips(outdir):
     s_hi = MMU2 + (M2 - centres) * (1 + beta) / 2
     left, right = np.maximum(s_lo, a), np.minimum(s_hi, b)
     frac = np.clip(right - left, 0, None) / (b - a)
-    for y, x_left, x_right in zip(edges[:-1], left, right):
+    for y, x_left, x_right in zip(edges[:-1], left, right, strict=True):
         if x_right > x_left:
             ax0.add_patch(Rectangle((x_left, y), x_right - x_left, h, fc=C['phase_space'],
                                     alpha=0.75, ec='none', zorder=3))
@@ -315,7 +315,7 @@ def fig_mass_slices(outdir, events):
     (a, b), (lo, hi) = bin_ranges(i, j)
     fig, axes = plt.subplots(1, len(MASS_SLICES), figsize=(5 * len(MASS_SLICES), 5.6),
                              sharex=True, sharey=True)
-    for ax, (m_lo, m_hi) in zip(axes, MASS_SLICES):
+    for ax, (m_lo, m_hi) in zip(axes, MASS_SLICES, strict=True):
         sel = (M >= m_lo) & (M < m_hi)
         ax.hist2d(m12[sel], m23[sel], bins=(M12_EDGES.size - 1) * 6,
                   range=[[0, M12_EDGES[-1]], [0, M23_EDGES[-1]]],
@@ -355,7 +355,7 @@ def fig_mass_points(outdir, events):
     (a, b), (lo, hi) = bin_ranges(i, j)
     fig, axes = plt.subplots(1, len(MASS_POINTS), figsize=(5 * len(MASS_POINTS), 5.6),
                              sharex=True, sharey=True)
-    for ax, M0 in zip(axes, MASS_POINTS):
+    for ax, M0 in zip(axes, MASS_POINTS, strict=True):
         sel = abs(M - M0) < MASS_HALF_WIDTH
         ax.hist2d(m12[sel], m23[sel], bins=(M12_EDGES.size - 1) * 6,
                   range=[[0, M12_EDGES[-1]], [0, M23_EDGES[-1]]],
