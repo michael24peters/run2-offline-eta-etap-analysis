@@ -131,7 +131,7 @@ for name, pid in DAUGHTERS.items():
 # Dalitz variables and the gamma mu+ mu- mass from the same four-vectors.
 m12s = kinematics.invariant_mass2(*p4['gamma'], *p4['mu+'])
 m23s = kinematics.invariant_mass2(*p4['mu+'], *p4['mu-'])
-gamma_mup = [a + b for a, b in zip(p4['gamma'], p4['mu+'])]
+gamma_mup = [a + b for a, b in zip(p4['gamma'], p4['mu+'], strict=True)]
 masses = np.sqrt(np.clip(kinematics.invariant_mass2(*gamma_mup, *p4['mu-']), 0.0, None)) * GEV
 
 # A Dalitz point needs m^2 > 0 on both axes.

@@ -279,7 +279,7 @@ tail_values, tail_cov = fit_utils.build_prior(m_mc, TAIL_PARAMS,
 
 print(f'[INFO] MC tail shape (prior for data fit, x{args.tail_prior_factor:.0f} '
       f'widened stdev): ' + ', '.join(
-    f'{p}={v:.4f}±{m_mc.errors[p]:.4f}' for p, v in zip(TAIL_PARAMS, tail_values)
+    f'{p}={v:.4f}±{m_mc.errors[p]:.4f}' for p, v in zip(TAIL_PARAMS, tail_values, strict=True)
 ), file=sys.stderr)
 
 mc_result['meta']['input_file'] = args.mc_infile
