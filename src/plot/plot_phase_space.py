@@ -8,7 +8,7 @@ Usage:
     python src/plot/plot_phase_space.py \
         [--results out/eta2mumugamma/turbo/20260922/dalitz_fit_results.json] \
         [--events  out/eta2mumugamma/turbo/20260922/dalitz_events.npz] \
-        [--outdir  out/phase_space_factor]
+        [--outdir  out/phase-space-factor]
 
 Pure kinematics (always made): f(m_eta) map, the step-by-step
 construction of f for one bin, and f(M) for a set of example bins.
@@ -420,7 +420,7 @@ def main():
     parser.add_argument('--events', default=None,
                         help='dalitz_events.npz, for the uniformity figure')
     parser.add_argument('--outdir', default=os.path.join(_here, '..', '..', 'out',
-                                                         'phase_space_factor'))
+                                                         'phase-space-factor'))
     args = parser.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
     style()
