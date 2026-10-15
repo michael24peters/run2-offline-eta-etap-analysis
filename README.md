@@ -1,10 +1,7 @@
 # anaroot
 
 LHCb analysis of η → μμ(γ): background classification, mass fits, and Dalitz
-analysis. Fit methodology and the motivation behind the choice of signal/
-background functions are documented separately (LaTeX writeup); this repo is
-inline-documented (each script has a `"""usage docstring"""` at the top) and
-isn't meant to duplicate that.
+analysis.
 
 ## Layout
 
