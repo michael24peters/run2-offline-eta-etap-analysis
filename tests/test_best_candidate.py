@@ -112,7 +112,7 @@ def test_ineligible_candidate_never_wins_even_if_best(cands, eligible):
     rival -- but it was cut, so it must not compete. This is the whole reason
     `eligible` goes IN rather than being ANDed afterwards."""
     best = cut_utils.best_candidate_mask(cands, 'tag_dtf_chi2', eligible)
-    assert best[0][1] == False
+    assert not best[0][1]
 
 
 def test_cutting_the_globally_best_candidate_keeps_the_event():

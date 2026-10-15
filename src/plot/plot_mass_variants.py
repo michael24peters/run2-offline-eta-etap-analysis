@@ -15,7 +15,6 @@ Usage:
 import argparse
 import sys
 import os
-import awkward as ak
 import matplotlib.pyplot as plt
 # Add the "utils" directory to the Python path so we can import the project modules.
 _here = os.path.dirname(os.path.abspath(__file__))

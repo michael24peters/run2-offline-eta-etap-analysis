@@ -12,8 +12,6 @@ import numpy as np
 from scipy.special import erf
 from iminuit import Minuit
 from iminuit.cost import ExtendedBinnedNLL
-# Constraint-based fitting
-from iminuit.cost import NormalConstraint
 
 def _trapz(y, x):
     """Trapezoidal integration"""

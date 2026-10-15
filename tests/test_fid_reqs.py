@@ -8,8 +8,6 @@ records with momenta chosen to sit just inside or just outside the acceptance
 """
 
 import awkward as ak
-import numpy as np
-import pytest
 from conftest import kinematic_tree, make_tree, IN, FWD, LOW_PT
 
 import fid_reqs

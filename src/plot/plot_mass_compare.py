@@ -19,7 +19,6 @@ _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
 import cut_utils
-import plot_utils
 
 
 # IO

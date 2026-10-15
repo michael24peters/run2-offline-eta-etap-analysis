@@ -285,10 +285,10 @@ def fig_strips(outdir):
     s_hi = MMU2 + (M2 - centres) * (1 + beta) / 2
     left, right = np.maximum(s_lo, a), np.minimum(s_hi, b)
     frac = np.clip(right - left, 0, None) / (b - a)
-    for y, l, r in zip(edges[:-1], left, right):
-        if r > l:
-            ax0.add_patch(Rectangle((l, y), r - l, h, fc=C['phase_space'], alpha=0.75,
-                                    ec='none', zorder=3))
+    for y, x_left, x_right in zip(edges[:-1], left, right):
+        if x_right > x_left:
+            ax0.add_patch(Rectangle((x_left, y), x_right - x_left, h, fc=C['phase_space'],
+                                    alpha=0.75, ec='none', zorder=3))
         ax0.add_patch(Rectangle((a, y), b - a, h, fill=False, ec=C['data'], lw=0.5, zorder=4))
     ax0.add_patch(Rectangle((a, lo), b - a, hi - lo, fill=False, ec=C['data'], lw=1.6, zorder=5))
     ax0.set_xlabel(r'$m^2_{12}$ [GeV$^2$]'); ax0.set_ylabel(r'$m^2_{23}$ [GeV$^2$]')

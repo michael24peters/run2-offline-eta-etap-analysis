@@ -34,14 +34,14 @@ if not os.path.exists(output_dir):
 
 # Now find all ROOT files in this path and its subdirectories
 infiles = []
-print(f'[INFO] Searching for ROOT files...')
+print('[INFO] Searching for ROOT files...')
 for root, _, files in os.walk(input_dir):
     for file in files:
         # Only add ROOT files that are not the output file (to avoid recursion)
         if file.endswith('.root') and not file.startswith('combined_files'):
             infiles.append(os.path.join(root, file))
 
-print(f'[INFO] Concatenating files:')
+print('[INFO] Concatenating files:')
 for infile in infiles:
     print(f'[INFO]  - {infile}')
 print(f'[INFO] Into single output file: {output_path}')

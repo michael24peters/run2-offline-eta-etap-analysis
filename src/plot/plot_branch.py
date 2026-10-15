@@ -9,7 +9,6 @@ Usage:
 '''
 
 import argparse
-import sys
 import os
 import uproot
 import matplotlib.pyplot as plt
@@ -25,7 +24,7 @@ def plot_branch(input, branch_name, n_evts=-1, output='branch_plot.png'):
     # Check if input is a ROOT file or just an array of numbers
     if input.endswith('.root'):
         # Open the ROOT file and get the branch data from the tree
-        print(f'[INFO] Opening ROOT file...')
+        print('[INFO] Opening ROOT file...')
         tree = uproot.open(input)['tree']
         # Load the branch as a numpy array
         print(f'[INFO] Loading branch {branch_name}...')
@@ -41,7 +40,7 @@ def plot_branch(input, branch_name, n_evts=-1, output='branch_plot.png'):
         print(f'[INFO] Using first {n_evts} entries for plotting.')
     # Convert branch_data from array of arrays to a flat array
     branch_data = np.concatenate(branch_data)
-    print(f'[INFO] Plotting histogram...')
+    print('[INFO] Plotting histogram...')
     # Provide warning if the branch_data is probably too large to plot
     if len(branch_data) > 1e6:
         print(f'[WARNING] Branch data has {len(branch_data)} entries, which '
@@ -51,7 +50,7 @@ def plot_branch(input, branch_name, n_evts=-1, output='branch_plot.png'):
     plt.ylabel('Counts')
     plt.title(f'{branch_name} distribution')
     plt.grid(True, alpha=0.3)
-    print(f'[INFO] Saving plot...')
+    print('[INFO] Saving plot...')
     plt.savefig(output, dpi=300)
     print(f'[INFO] Saved plot to {output}.')
 
