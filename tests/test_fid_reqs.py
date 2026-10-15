@@ -8,10 +8,9 @@ records with momenta chosen to sit just inside or just outside the acceptance
 """
 
 import awkward as ak
-from conftest import kinematic_tree, make_tree, IN, FWD, LOW_PT
 
 import fid_reqs
-
+from conftest import FWD, IN, LOW_PT, kinematic_tree, make_tree
 
 MUMUGAMMA = [-13, 13, 22]
 MUMU = [-13, 13]

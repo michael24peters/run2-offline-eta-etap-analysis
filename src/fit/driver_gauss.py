@@ -15,10 +15,10 @@ Usage:
                           [--mean-init 548] [--sigma-init 5]
 """
 
-import sys
-import os
-import json
 import argparse
+import json
+import os
+import sys
 
 import awkward as ak
 
@@ -29,8 +29,8 @@ sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'fit'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
 import cut_utils
-import kinematics
 import fit_utils
+import kinematics
 from fit_gauss import fit_gauss
 from plot_gauss import plot_gauss
 

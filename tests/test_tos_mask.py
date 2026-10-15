@@ -8,10 +8,9 @@ event is stored as an empty list and reads as "did not fire".
 
 import awkward as ak
 import pytest
-from conftest import make_tree
 
 import cut_utils
-
+from conftest import make_tree
 
 LEVELS = {
     'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],

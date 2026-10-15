@@ -17,10 +17,10 @@ Usage:
                        [--alphaR-init 1.5] [--nR-init 2]
 """
 
-import sys
-import os
-import json
 import argparse
+import json
+import os
+import sys
 
 import awkward as ak
 
@@ -31,8 +31,8 @@ sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'fit'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
 import cut_utils
-import kinematics
 import fit_utils
+import kinematics
 from fit_dcb import fit_dcb
 from plot_dcb import plot_dcb
 

@@ -41,9 +41,9 @@ One event, eta -> mu+ mu- gamma, small enough to read by eye.
 import awkward as ak
 import numpy as np
 import pytest
-from conftest import make_tree
 
 import cut_utils
+from conftest import make_tree
 
 
 @pytest.fixture

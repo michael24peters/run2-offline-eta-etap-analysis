@@ -10,9 +10,11 @@ Usage:
 
 import argparse
 import os
-import uproot
+
 import matplotlib.pyplot as plt
 import numpy as np
+import uproot
+
 
 def plot_branch(input, branch_name, n_evts=-1, output='branch_plot.png'):
     # Create output directory if it doesn't exist

@@ -13,9 +13,11 @@ Usage:
 """
 
 import argparse
-import sys
 import os
+import sys
+
 import matplotlib.pyplot as plt
+
 # Add the "utils" directory to the Python path so we can import the project modules.
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))

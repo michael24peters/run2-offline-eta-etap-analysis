@@ -10,9 +10,11 @@ Usage:
 import argparse
 import os
 import sys
+
 import awkward as ak
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+
 # Project imports
 # Ensure utils/cut_utils.py is importable
 _here = os.path.dirname(os.path.abspath(__file__))

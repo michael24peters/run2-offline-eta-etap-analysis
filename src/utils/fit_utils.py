@@ -8,10 +8,12 @@ the time anything here is called, the data is a flat array of values.
 """
 
 import math
+
 import numpy as np
-from scipy.special import erf
 from iminuit import Minuit
 from iminuit.cost import ExtendedBinnedNLL
+from scipy.special import erf
+
 
 def _trapz(y, x):
     """Trapezoidal integration"""

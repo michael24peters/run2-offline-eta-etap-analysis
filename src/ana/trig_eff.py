@@ -35,8 +35,8 @@ import numpy as np
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'root'))
-import cut_utils
 import bkg_utils
+import cut_utils
 from fid_reqs import fiducial_candidate_mask
 
 TAG_REF    = 'tag_m'

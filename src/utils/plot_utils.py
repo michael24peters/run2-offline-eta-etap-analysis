@@ -11,6 +11,7 @@ import json
 
 import matplotlib.pyplot as plt
 
+
 def apply_font():
     """Set up the Inter font, falling back to the default sans-serif if it's
     not installed."""

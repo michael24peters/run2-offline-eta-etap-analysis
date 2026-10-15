@@ -8,10 +8,9 @@ so they are written as narratives rather than API coverage.
 """
 
 import awkward as ak
-from conftest import make_tree
 
 import cut_utils
-
+from conftest import make_tree
 
 # --- mis-identification ------------------------------------------------------
 

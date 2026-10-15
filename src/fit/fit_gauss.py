@@ -9,8 +9,9 @@ ROOT files, applying selection, and reducing to one candidate per event all
 happen upstream in driver_gauss.py via cut_utils.
 """
 
-import sys
 import os
+import sys
+
 import numpy as np
 from iminuit.cost import NormalConstraint
 

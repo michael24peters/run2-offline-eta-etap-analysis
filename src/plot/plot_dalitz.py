@@ -10,13 +10,16 @@ Usage:
 import argparse
 import os
 import sys
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
 import uproot
+
 # Ensure utils/kinematics.py is importable
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 '..', 'utils'))
 from kinematics import invariant_mass2
+
 
 def parse_args():
 

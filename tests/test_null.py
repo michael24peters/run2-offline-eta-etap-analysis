@@ -19,10 +19,10 @@ interchangeable:
 import awkward as ak
 import numpy as np
 import pytest
-from conftest import make_tree, IN
 
 import cut_utils
 import fid_reqs
+from conftest import IN, make_tree
 
 
 @pytest.fixture

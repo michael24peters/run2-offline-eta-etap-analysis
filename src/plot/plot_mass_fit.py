@@ -7,12 +7,12 @@ Library for plotting fit results from JSON files.
 import os
 import sys
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'utils'))
-import plot_utils
 import plot_style
+import plot_utils
 
 
 def build_fit_figure(data, build_text, x_lim=None, title=None):
