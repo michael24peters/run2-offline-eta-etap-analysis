@@ -145,16 +145,18 @@ for i in range(len(m12_edges) - 1):
         if n_cand <= MIN_CANDIDATES:
             continue
 
-        # Factors on FACTOR_GRID, as fit_utils's (masses, factor) weights.
-        bkg_weight = (FACTOR_GRID, kinematics.phase_space_factor(FACTOR_GRID, m12_range, m23_range))
-        sig_weight = (FACTOR_GRID, signal_factor(FACTOR_GRID, m12_range, m23_range))
-        no_signal = bool(np.interp(kinematics.M_ETA, *sig_weight) == 0.0)
+        # Each component's factor on FACTOR_GRID, as fit_utils's (masses, factor).
+        bkg_factor_grid = (FACTOR_GRID,
+                           kinematics.phase_space_factor(FACTOR_GRID, m12_range, m23_range))
+        sig_factor_grid = (FACTOR_GRID, signal_factor(FACTOR_GRID, m12_range, m23_range))
+        no_signal = bool(np.interp(kinematics.M_ETA, *sig_factor_grid) == 0.0)
 
         # Extended binned likelihood of f_sig * DCB + f_bkg * Chebyshev, plus the prior.
-        sig_cdf = fit_utils.weighted_dcb_cdf(sig_weight)
-        bkg_cdf = fit_utils.weighted_cheb_cdf(bkg_weight)
+        sig_cdf = fit_utils.weighted_dcb_cdf(sig_factor_grid)
+        bkg_cdf = fit_utils.weighted_cheb_cdf(bkg_factor_grid)
         cost = (fit_utils.make_dcb_cost(counts, mass_edges, XMIN, XMAX,
-                                        signal_weight=sig_weight, bkg_weight=bkg_weight)
+                                        signal_factor_grid=sig_factor_grid,
+                                        bkg_factor_grid=bkg_factor_grid)
                 + NormalConstraint(PRIOR_PARAMS, (seed['mean'], seed['sigma']), error=prior_cov))
 
         # Start from the global signal shape, half signal and half background,
@@ -189,9 +191,9 @@ for i in range(len(m12_edges) - 1):
         pulls = np.where(filled, (counts - bin_fit) / np.sqrt(np.where(filled, counts, 1.0)), 0.0)
 
         # True where the raw Chebyshev goes negative at some reachable mass.
-        reachable = bkg_weight[1] > 0
+        reachable = bkg_factor_grid[1] > 0
         bkg_negative = bool(np.any(fit_utils.cheb_bkg_unnorm(
-            FACTOR_GRID[reachable], *fit_utils.reachable_range(bkg_weight), *bkg_values) < 0))
+            FACTOR_GRID[reachable], *fit_utils.reachable_range(bkg_factor_grid), *bkg_values) < 0))
 
         entry.update({
             'n_sig': round(float(values['n_sig']), 2),
@@ -211,8 +213,8 @@ for i in range(len(m12_edges) - 1):
             'bin_sig': np.round(bin_sig, 4).tolist(),
             'bin_bkg': np.round(bin_bkg, 4).tolist(),
             'pulls': np.round(pulls, 4).tolist(),
-            'f_sig': np.round(np.interp(PLOT_GRID, *sig_weight), 6).tolist(),
-            'f_bkg': np.round(np.interp(PLOT_GRID, *bkg_weight), 6).tolist(),
+            'f_sig': np.round(np.interp(PLOT_GRID, *sig_factor_grid), 6).tolist(),
+            'f_bkg': np.round(np.interp(PLOT_GRID, *bkg_factor_grid), 6).tolist(),
         })
 
 # --- Summary -----------------------------------------------------------------

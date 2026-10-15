@@ -3,7 +3,7 @@ Unit tests for the Dalitz phase-space factor: kinematics.m123_limits /
 kinematics.phase_space_factor, the Dalitz-decay factor
 kinematics.dalitz_factor and its density kinematics.dalitz_density, and the
 phase-space-weighted shapes in fit_utils (weighted_dcb_cdf,
-weighted_cheb_cdf/pdf, make_dcb_cost(signal_weight=, bkg_weight=)). Toy data
+weighted_cheb_cdf/pdf, make_dcb_cost(signal_factor_grid=, bkg_factor_grid=)). Toy data
 only, fixed RNG seeds.
 """
 
@@ -171,22 +171,22 @@ def test_dalitz_factor_approaches_phase_space_factor_for_small_bins():
             assert max_diffs[2] < 0.015, (q2_0, m12_0, max_diffs)
 
 
-def test_unit_weight_reproduces_the_unweighted_shapes():
-    weight = fit_utils.make_weight(np.ones_like, XMIN, XMAX)
+def test_unit_factor_reproduces_the_unweighted_shapes():
+    factor_grid = fit_utils.sample_factor(np.ones_like, XMIN, XMAX)
     x = np.linspace(XMIN, XMAX, 50)
     dcb_args = (547.9, 12.0, 1.5, 2.0, 1.5, 2.0)
-    assert np.allclose(fit_utils.weighted_dcb_cdf(weight)(x, XMIN, XMAX, *dcb_args),
+    assert np.allclose(fit_utils.weighted_dcb_cdf(factor_grid)(x, XMIN, XMAX, *dcb_args),
                        fit_utils.dcb_cdf(x, XMIN, XMAX, *dcb_args), atol=1e-4)
-    assert np.allclose(fit_utils.weighted_cheb_cdf(weight)(x, XMIN, XMAX, 0.3, -0.2),
+    assert np.allclose(fit_utils.weighted_cheb_cdf(factor_grid)(x, XMIN, XMAX, 0.3, -0.2),
                        fit_utils.cheb_cdf(x, XMIN, XMAX, 0.3, -0.2), atol=1e-4)
 
 
 def test_weighted_background_is_zero_where_forbidden():
     m12_range, m23_range = (0.015, 0.030), (0.2879, 0.3100)
-    weight = fit_utils.make_weight(
+    factor_grid = fit_utils.sample_factor(
         lambda M: kinematics.phase_space_factor(M, m12_range, m23_range), XMIN, XMAX)
-    weighted_cdf = fit_utils.weighted_cheb_cdf(weight)
-    weighted_pdf = fit_utils.weighted_cheb_pdf(weight)
+    weighted_cdf = fit_utils.weighted_cheb_cdf(factor_grid)
+    weighted_pdf = fit_utils.weighted_cheb_pdf(factor_grid)
     # f = 0 below ~541 MeV in this bin, so no background probability there,
     # even for a Chebyshev that is negative somewhere (floored, not flipped).
     for c0, c1 in [(0.0, 0.0), (1.5, 0.0)]:
@@ -199,19 +199,19 @@ def test_weighted_background_is_zero_where_forbidden():
 def test_weighted_fit_recovers_background_toy():
     """Background drawn from f * Chebyshev in an edge bin: the weighted cost
     fits it back with the signal yield fixed at 0 (as for a bin with
-    f(m_eta) = 0), including the zero-weight signal component."""
+    f(m_eta) = 0), including the zero-factor_grid signal component."""
     rng = np.random.default_rng(3)
     m12_range, m23_range = (0.015, 0.030), (0.0886, 0.1107)
-    weight = fit_utils.make_weight(
+    factor_grid = fit_utils.sample_factor(
         lambda M: kinematics.phase_space_factor(M, m12_range, m23_range), XMIN, XMAX)
-    xg, wg = weight
-    shape = fit_utils.cheb_bkg_unnorm(xg, XMIN, XMAX, -0.5, 0.1) * wg
-    cdf = np.concatenate([[0], np.cumsum(0.5 * (shape[1:] + shape[:-1]) * np.diff(xg))])
-    vals = np.interp(rng.uniform(0, cdf[-1], 3000), cdf, xg)
+    masses, factor = factor_grid
+    shape = fit_utils.cheb_bkg_unnorm(masses, XMIN, XMAX, -0.5, 0.1) * factor
+    cdf = np.concatenate([[0], np.cumsum(0.5 * (shape[1:] + shape[:-1]) * np.diff(masses))])
+    vals = np.interp(rng.uniform(0, cdf[-1], 3000), cdf, masses)
     counts, edges = np.histogram(vals, bins=80, range=(XMIN, XMAX))
 
     cost = fit_utils.make_dcb_cost(counts.astype(float), edges, XMIN, XMAX,
-                                   signal_weight=weight, bkg_weight=weight)
+                                   signal_factor_grid=factor_grid, bkg_factor_grid=factor_grid)
     init = dict(mean=547.9, sigma=12.0, alphaL=1.5, nL=2.0, alphaR=1.5, nR=2.0,
                 n_sig=0.0, n_bkg=3000.0, c0=0.0, c1=0.0)
     m = fit_utils.run_fit(cost, init, dict(n_bkg=(0, None)),
@@ -220,9 +220,9 @@ def test_weighted_fit_recovers_background_toy():
     assert m.values['n_bkg'] == pytest.approx(3000, rel=0.05)
     # Only ~40% of the window is reachable here, so c0/c1 are individually
     # degenerate; compare the fitted shape to the true one instead.
-    fit_cdf = fit_utils.weighted_cheb_cdf(weight)(edges, XMIN, XMAX,
+    fit_cdf = fit_utils.weighted_cheb_cdf(factor_grid)(edges, XMIN, XMAX,
                                                   m.values['c0'], m.values['c1'])
-    assert np.max(np.abs(fit_cdf - np.interp(edges, xg, cdf / cdf[-1]))) < 0.03
+    assert np.max(np.abs(fit_cdf - np.interp(edges, masses, cdf / cdf[-1]))) < 0.03
 
 
 def edge_bin_factor(M):
@@ -231,17 +231,19 @@ def edge_bin_factor(M):
 
 
 @pytest.mark.parametrize('weighted', ['signal', 'bkg'])
-def test_each_weight_changes_only_its_own_component(weighted):
-    """With the other component's yield at 0, a cost weighted on one side
+def test_each_factor_changes_only_its_own_component(weighted):
+    """With the other component's yield at 0, a cost with a factor on one side
     equals the unweighted cost; with this component's yield at 0 it differs."""
-    weight = fit_utils.make_weight(edge_bin_factor, XMIN, XMAX)
+    factor_grid = fit_utils.sample_factor(edge_bin_factor, XMIN, XMAX)
     rng = np.random.default_rng(4)
     counts, edges = np.histogram(rng.normal(547.9, 15.0, 2000), bins=80, range=(XMIN, XMAX))
     counts = counts.astype(float)
     if weighted == 'signal':
-        cost_weighted = fit_utils.make_dcb_cost(counts, edges, XMIN, XMAX, signal_weight=weight)
+        cost_weighted = fit_utils.make_dcb_cost(counts, edges, XMIN, XMAX,
+                                                signal_factor_grid=factor_grid)
     else:
-        cost_weighted = fit_utils.make_dcb_cost(counts, edges, XMIN, XMAX, bkg_weight=weight)
+        cost_weighted = fit_utils.make_dcb_cost(counts, edges, XMIN, XMAX,
+                                                bkg_factor_grid=factor_grid)
     cost_unweighted = fit_utils.make_dcb_cost(counts, edges, XMIN, XMAX)
 
     # Parameter order: mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1.

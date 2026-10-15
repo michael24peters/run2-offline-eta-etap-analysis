@@ -177,37 +177,38 @@ def fig_decomposition(outdir, results, i, j):
     g = results['fit']['parameters']
     entry = next(b for b in results['dalitz']['bins'] if (b['i'], b['j']) == (i, j))
     dcb = [g[p]['value'] for p in ('mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR')]
-    weight = fit_utils.make_weight(lambda M: f_of(M, i, j), XMIN, XMAX)
-    xg, wg = weight
+    factor_grid = fit_utils.sample_factor(lambda M: f_of(M, i, j), XMIN, XMAX)
+    masses, factor = factor_grid
     c = (entry['c0'], entry['c1'])
 
-    cheb = np.clip(fit_utils.cheb_bkg_unnorm(xg, *fit_utils.reachable_range(weight), *c), 0, None)
-    cheb /= fit_utils._trapz(cheb, xg)
-    dcb_alone = fit_utils.dcb_pdf(xg, XMIN, XMAX, *dcb)
+    cheb_range = fit_utils.reachable_range(factor_grid)
+    cheb = np.clip(fit_utils.cheb_bkg_unnorm(masses, *cheb_range, *c), 0, None)
+    cheb /= fit_utils._trapz(cheb, masses)
+    dcb_alone = fit_utils.dcb_pdf(masses, XMIN, XMAX, *dcb)
     shapes = [
         ('Background', C['background'], cheb, 'Chebyshev',
-         fit_utils.weighted_cheb_pdf(weight)(xg, XMIN, XMAX, *c)),
+         fit_utils.weighted_cheb_pdf(factor_grid)(masses, XMIN, XMAX, *c)),
         ('Signal', C['fit'], dcb_alone, 'DCB',
-         fit_utils.weighted_dcb_pdf(weight)(xg, XMIN, XMAX, *dcb)),
+         fit_utils.weighted_dcb_pdf(factor_grid)(masses, XMIN, XMAX, *dcb)),
     ]
     # A bin whose n_sig is fixed to 0 has no signal shape to show.
     if entry.get('n_sig_fixed_zero'):
         shapes = shapes[:1]
     fig, axes = plt.subplots(len(shapes) + 1, 1, figsize=(10, 4 + 3.5 * len(shapes)),
                              sharex=True, gridspec_kw={'height_ratios': [1] + [2] * len(shapes)})
-    axes[0].plot(xg, wg, color=C['phase_space'], lw=2, label='$f(M)$')
+    axes[0].plot(masses, factor, color=C['phase_space'], lw=2, label='$f(M)$')
     axes[0].set_ylim(-0.05, 1.1); axes[0].set_ylabel('$f(M)$')
     axes[0].legend(loc='lower right', fontsize=11)
     for ax, (name, color, alone, label, renorm) in zip(axes[1:], shapes, strict=True):
-        kept = fit_utils._trapz(wg * alone, xg)
-        ax.plot(xg, alone, color=color, ls='--', lw=1.6, label=f'{label} alone (area 1)')
-        ax.plot(xg, wg * alone, color=color, ls=':', lw=2,
+        kept = fit_utils._trapz(factor * alone, masses)
+        ax.plot(masses, alone, color=color, ls='--', lw=1.6, label=f'{label} alone (area 1)')
+        ax.plot(masses, factor * alone, color=color, ls=':', lw=2,
                 label=fr'$f \times$ {label}, before renormalizing (area {kept:.2f})')
-        ax.plot(xg, renorm, color=color, lw=2.2,
+        ax.plot(masses, renorm, color=color, lw=2.2,
                 label=fr'$f \times$ {label}, renormalized (area 1)')
         ax.set_ylabel(f'{name} pdf [1/MeV]')
         ax.set_ylim(0, 1.45 * max(alone.max(), renorm.max()))   # headroom for the legend
-        ax.legend(loc='upper left' if xg[np.argmax(renorm)] > 560 else 'upper right',
+        ax.legend(loc='upper left' if masses[np.argmax(renorm)] > 560 else 'upper right',
                   fontsize=10)
     for ax in axes:
         ax.axvline(kinematics.M_ETA, color=C['reference'], ls='--', lw=1)
