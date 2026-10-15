@@ -398,21 +398,24 @@ def make_gauss_cost(counts, bin_edges, xmin, xmax, bkg='cheb2'):
     return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf, name=param_names)
 
 
-def make_dcb_cost(counts, bin_edges, xmin, xmax, bkg='cheb2', weight=None):
+def make_dcb_cost(counts, bin_edges, xmin, xmax, bkg='cheb2',
+                  signal_weight=None, bkg_weight=None):
     """
     ExtendedBinnedNLL cost for DCB signal + a pluggable background (`bkg`, a
     BACKGROUND_MODELS key; default 'cheb2' matches prior behavior).
     Free parameters: mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, then
     the background model's own parameters (c0, c1 for 'cheb2').
 
-    weight : optional (xg, wg) from make_weight(); multiplies BOTH the signal
-             and background shapes by it (see "Phase-space weighting").
+    signal_weight : optional (xg, wg) from make_weight(); multiplies the
+                    signal shape by it (see "Phase-space weighting").
+    bkg_weight    : the same for the background shape.
     """
     model = BACKGROUND_MODELS[bkg]
     signal_cdf = dcb_cdf
-    if weight is not None:
-        model = weighted_bkg_model(model, weight)
-        signal_cdf = weighted_dcb_cdf(weight)
+    if signal_weight is not None:
+        signal_cdf = weighted_dcb_cdf(signal_weight)
+    if bkg_weight is not None:
+        model = weighted_bkg_model(model, bkg_weight)
     signal_params = ('mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR')
     scaled_cdf, param_names = _make_scaled_cdf(signal_params, signal_cdf, model, xmin, xmax)
     return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf, name=param_names)

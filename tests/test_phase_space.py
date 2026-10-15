@@ -3,7 +3,8 @@ Unit tests for the Dalitz phase-space factor: kinematics.m123_limits /
 kinematics.phase_space_factor, the Dalitz-decay factor
 kinematics.dalitz_factor and its density kinematics.dalitz_density, and the
 phase-space-weighted shapes in fit_utils (weighted_dcb_cdf,
-weighted_bkg_model, make_dcb_cost(weight=)). Toy data only, fixed RNG seeds.
+weighted_bkg_model, make_dcb_cost(signal_weight=, bkg_weight=)). Toy data
+only, fixed RNG seeds.
 """
 
 import os
@@ -210,8 +211,8 @@ def test_weighted_fit_recovers_background_toy():
     vals = np.interp(rng.uniform(0, cdf[-1], 3000), cdf, xg)
     counts, edges = np.histogram(vals, bins=80, range=(XMIN, XMAX))
 
-    cost = fit_utils.make_dcb_cost(counts.astype(float), edges, XMIN, XMAX,
-                                   bkg='cheb2', weight=weight)
+    cost = fit_utils.make_dcb_cost(counts.astype(float), edges, XMIN, XMAX, bkg='cheb2',
+                                   signal_weight=weight, bkg_weight=weight)
     init = dict(mean=547.9, sigma=12.0, alphaL=1.5, nL=2.0, alphaR=1.5, nR=2.0,
                 n_sig=0.0, n_bkg=3000.0, c0=0.0, c1=0.0)
     m = fit_utils.run_fit(cost, init, dict(n_bkg=(0, None)),
@@ -223,3 +224,31 @@ def test_weighted_fit_recovers_background_toy():
     wmodel = fit_utils.weighted_bkg_model(fit_utils.BACKGROUND_MODELS['cheb2'], weight)
     fit_cdf = wmodel.cdf(edges, XMIN, XMAX, m.values['c0'], m.values['c1'])
     assert np.max(np.abs(fit_cdf - np.interp(edges, xg, cdf / cdf[-1]))) < 0.03
+
+
+def edge_bin_factor(M):
+    """Phase-space factor of an edge bin that reaches only part of the window."""
+    return kinematics.phase_space_factor(M, (0.015, 0.030), (0.0886, 0.1107))
+
+
+@pytest.mark.parametrize('weighted', ['signal', 'bkg'])
+def test_each_weight_changes_only_its_own_component(weighted):
+    """With the other component's yield at 0, a cost weighted on one side
+    equals the unweighted cost; with this component's yield at 0 it differs."""
+    weight = fit_utils.make_weight(edge_bin_factor, XMIN, XMAX)
+    rng = np.random.default_rng(4)
+    counts, edges = np.histogram(rng.normal(547.9, 15.0, 2000), bins=80, range=(XMIN, XMAX))
+    counts = counts.astype(float)
+    if weighted == 'signal':
+        cost_weighted = fit_utils.make_dcb_cost(counts, edges, XMIN, XMAX, signal_weight=weight)
+    else:
+        cost_weighted = fit_utils.make_dcb_cost(counts, edges, XMIN, XMAX, bkg_weight=weight)
+    cost_unweighted = fit_utils.make_dcb_cost(counts, edges, XMIN, XMAX)
+
+    # Parameter order: mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1.
+    dcb_params = (547.9, 15.0, 1.5, 2.0, 1.5, 2.0)
+    signal_only = (*dcb_params, 2000.0, 0.0, 0.2, -0.1)
+    bkg_only = (*dcb_params, 0.0, 2000.0, 0.2, -0.1)
+    untouched, touched = (bkg_only, signal_only) if weighted == 'signal' else (signal_only, bkg_only)
+    assert cost_weighted(*untouched) == pytest.approx(cost_unweighted(*untouched), rel=1e-12)
+    assert cost_weighted(*touched) != pytest.approx(cost_unweighted(*touched), rel=1e-3)
