@@ -92,7 +92,7 @@ parser.add_argument('--nL-init', type=float, default=2.0, help='Initial left tai
 parser.add_argument('--alphaR-init', type=float, default=1.5, help='Initial right tail α_R')
 parser.add_argument('--nR-init', type=float, default=2.0, help='Initial right tail n_R')
 parser.add_argument('--bkg-model', default='cheb2', choices=list(fit_utils.BACKGROUND_MODELS),
-                    help='Background shape (default: cheb2, prior behavior). See '
+                    help='Background shape (default: cheb2). See '
                          'fit_utils.BACKGROUND_MODELS for what each one is.')
 args = parser.parse_args()
 

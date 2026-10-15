@@ -26,8 +26,7 @@ def build_text(params, chi2_per_ndof):
     nR, nR_err         = plot_utils.val_err(params.get('nR', {}))
 
     # Background shape parameters vary by model -- c0/c1 for the Chebyshev,
-    # k0/k1 for the exponentiated Chebyshev, and so on for any future entry
-    # in fit_utils.BACKGROUND_MODELS. Whatever key in
+    # and so on for any future entry in fit_utils.BACKGROUND_MODELS. Whatever key in
     # `params` isn't one of the known signal/yield names above IS a
     # background parameter, so its row is built from whatever is actually
     # there instead of a hardcoded pair.

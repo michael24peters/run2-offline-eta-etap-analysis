@@ -86,7 +86,7 @@ parser.add_argument('--nbins', type=int, default=80, help='Number of histogram b
 parser.add_argument('--mean-init', type=float, default=kinematics.M_ETA, help='Initial mean [MeV]')
 parser.add_argument('--sigma-init', type=float, default=5.0, help='Initial sigma [MeV]')
 parser.add_argument('--bkg-model', default='cheb2', choices=list(fit_utils.BACKGROUND_MODELS),
-                    help='Background shape (default: cheb2, prior behavior). See '
+                    help='Background shape (default: cheb2). See '
                          'fit_utils.BACKGROUND_MODELS for what each one is.')
 args = parser.parse_args()
 

@@ -185,20 +185,17 @@ def toy_bkg_from_model(rng, n, bkg_model, oversample=5):
     return np.array(out[:n])
 
 
-@pytest.mark.parametrize('bkg_model', ['cheb2', 'cheb_exp'])
+@pytest.mark.parametrize('bkg_model', list(fit_utils.BACKGROUND_MODELS))
 def test_background_pdf_integrates_to_one_and_is_nonnegative(bkg_model):
     """Every registered background's pdf must be a real, non-negative density
-    over [XMIN, XMAX] across a spread of its own parameter values -- 'cheb2'
-    can dip negative in principle (that's the whole reason 'cheb_exp' exists)
-    but not at these mild parameter values, so it's included too."""
+    over [XMIN, XMAX] across a spread of its own parameter values ('cheb2'
+    can dip negative in principle, but not at these mild parameter values)."""
     model = fit_utils.BACKGROUND_MODELS[bkg_model]
     xg = np.linspace(XMIN, XMAX, 3000)
     default = model.init
     variants = [default]
     if bkg_model == 'cheb2':
         variants.append({'c0': 0.3, 'c1': -0.2})
-    elif bkg_model == 'cheb_exp':
-        variants += [{'k0': 3.0, 'k1': -2.0}, {'k0': -1.0, 'k1': -3.0}]
     for variant in variants:
         params = [variant[p] for p in model.param_names]
         y = model.pdf(xg, XMIN, XMAX, *params)
@@ -206,7 +203,7 @@ def test_background_pdf_integrates_to_one_and_is_nonnegative(bkg_model):
         assert fit_utils._trapz(y, xg) == pytest.approx(1.0, abs=1e-3)
 
 
-@pytest.mark.parametrize('bkg_model', ['cheb2', 'cheb_exp'])
+@pytest.mark.parametrize('bkg_model', list(fit_utils.BACKGROUND_MODELS))
 def test_make_gauss_cost_recovers_toy_params_for_each_bkg_model(bkg_model):
     """make_gauss_cost(..., bkg=bkg_model) must build a cost Minuit can
     actually fit, for every registered model -- proof the dynamically-named
@@ -229,7 +226,7 @@ def test_make_gauss_cost_recovers_toy_params_for_each_bkg_model(bkg_model):
     assert m.values['mean'] == pytest.approx(547.9, abs=1.0)
 
 
-@pytest.mark.parametrize('bkg_model', ['cheb2', 'cheb_exp'])
+@pytest.mark.parametrize('bkg_model', list(fit_utils.BACKGROUND_MODELS))
 def test_fit_dcb_bkg_model_roundtrips_through_json(bkg_model):
     """fit_dcb(bkg_model=...) must record meta.background_model, name the
     background parameters in the result JSON after that model's own

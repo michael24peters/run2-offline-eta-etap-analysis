@@ -35,9 +35,7 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
     xmin, xmax, nbins : float, float, int : The range and number of bins for the
              histogram.
     mean_init, sigma_init : float : Initial values for the Gaussian parameters.
-    bkg_model : one of fit_utils.BACKGROUND_MODELS's keys ('cheb2' (default,
-             prior behavior), 'cheb_exp'). See fit_utils.py for what each
-             shape is and why.
+    bkg_model : a fit_utils.BACKGROUND_MODELS key (default 'cheb2').
     bkg_init : optional dict overriding the chosen model's default initial
              values for its own parameters (e.g. {'c0': 0.3} for 'cheb2'),
              merged over fit_utils.BACKGROUND_MODELS[bkg_model].init. These

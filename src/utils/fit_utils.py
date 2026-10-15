@@ -96,49 +96,6 @@ def cheb_cdf(x, xmin, xmax, c0, c1):
                     - _cheb_antideriv(u_lo, c0, c1)) / norm
 
 
-# --- Chebyshev x exponential (positive-by-construction background) ---
-#
-# pdf(x) ~ exp(k0*u + k1*(2u^2 - 1)), u the same normalized [-1, 1] Chebyshev
-# variable as above, i.e., the same Chebyshev polynomial as above, exponentiated.
-# Always > 0 everywhere by construction (it's an exp), so it can never produce
-# the negative-background dips the plain Chebyshev can.
-# k1 < 0 (concave) decays toward zero at BOTH edges; a k0-dominant, k1~0
-# shape decays at just one edge -- sign/magnitude of (k0, k1) determine which.
-
-def _grid_norm_cdf(xg, fg):
-    """Cumulative-trapezoid CDF over a grid, normalized to [0, 1]. Shared by
-    every background model below that has no closed-form CDF."""
-    cdf_grid = np.zeros_like(fg)
-    cdf_grid[1:] = np.cumsum(0.5 * (fg[:-1] + fg[1:]) * np.diff(xg))
-    return cdf_grid / cdf_grid[-1]
-
-
-def _chebexp_unnorm(u, k0, k1):
-    return np.exp(k0 * u + k1 * (2.0 * u**2 - 1.0))
-
-
-def chebexp_bkg_unnorm(x, xmin, xmax, k0, k1):
-    """Unnormalized exponentiated Chebyshev."""
-    return _chebexp_unnorm(_xtilde(x, xmin, xmax), k0, k1)
-
-
-def chebexp_bkg_pdf(x, xmin, xmax, k0, k1, n_grid=1000):
-    """Normalized exponentiated-Chebyshev background PDF."""
-    xg = np.linspace(xmin, xmax, n_grid)
-    fg = _chebexp_unnorm(_xtilde(xg, xmin, xmax), k0, k1)
-    norm = _trapz(fg, xg)
-    ux = _xtilde(np.asarray(x, float), xmin, xmax)
-    return _chebexp_unnorm(ux, k0, k1) / norm
-
-
-def chebexp_cdf(x, xmin, xmax, k0, k1, n_grid=1000):
-    """Exponentiated-Chebyshev CDF normalized to [0, 1] over [xmin, xmax]."""
-    xg = np.linspace(xmin, xmax, n_grid)
-    fg = _chebexp_unnorm(_xtilde(xg, xmin, xmax), k0, k1)
-    cdf_grid = _grid_norm_cdf(xg, fg)
-    return np.interp(np.asarray(x, float), xg, cdf_grid)
-
-
 # --- Gaussian ---
 
 def gauss_pdf(x, xmin, xmax, mean, sigma):
@@ -271,9 +228,6 @@ BACKGROUND_MODELS = {
     'cheb2': BackgroundModel(
         'cheb2', ('c0', 'c1'), cheb_bkg_pdf, cheb_cdf,
         init={'c0': 0.0, 'c1': 0.0}, unnorm=cheb_bkg_unnorm),
-    'cheb_exp': BackgroundModel(
-        'cheb_exp', ('k0', 'k1'), chebexp_bkg_pdf, chebexp_cdf,
-        init={'k0': 0.0, 'k1': 0.0}, unnorm=chebexp_bkg_unnorm),
 }
 
 
@@ -389,7 +343,7 @@ def _make_scaled_cdf(signal_param_names, signal_cdf, bkg_model, xmin, xmax):
 
 def make_gauss_cost(counts, bin_edges, xmin, xmax, bkg='cheb2'):
     """ExtendedBinnedNLL cost for Gaussian signal + a pluggable background
-    (`bkg`, a BACKGROUND_MODELS key; default 'cheb2' matches prior behavior).
+    (`bkg`, a BACKGROUND_MODELS key; default 'cheb2').
     Free parameters: mean, sigma, n_sig, n_bkg, then the background model's
     own parameters (c0, c1 for 'cheb2').
     """
@@ -402,7 +356,7 @@ def make_dcb_cost(counts, bin_edges, xmin, xmax, bkg='cheb2',
                   signal_weight=None, bkg_weight=None):
     """
     ExtendedBinnedNLL cost for DCB signal + a pluggable background (`bkg`, a
-    BACKGROUND_MODELS key; default 'cheb2' matches prior behavior).
+    BACKGROUND_MODELS key; default 'cheb2').
     Free parameters: mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, then
     the background model's own parameters (c0, c1 for 'cheb2').
 
