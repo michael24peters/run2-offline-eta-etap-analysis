@@ -25,11 +25,8 @@ def build_text(params, chi2_per_ndof):
     alphaR, alphaR_err = plot_utils.val_err(params.get('alphaR', {}))
     nR, nR_err         = plot_utils.val_err(params.get('nR', {}))
 
-    # Background shape parameters vary by model -- c0/c1 for the Chebyshev,
-    # and so on for any future entry in fit_utils.BACKGROUND_MODELS. Whatever key in
-    # `params` isn't one of the known signal/yield names above IS a
-    # background parameter, so its row is built from whatever is actually
-    # there instead of a hardcoded pair.
+    # Whatever key in `params` isn't one of the known signal/yield names
+    # above is a background parameter (c0, c1).
     SIGNAL_KEYS = {'mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR', 'n_sig', 'n_bkg'}
     bkg_row = [(name, name, *plot_utils.val_err(params[name]), '.3f', '')
                for name in params if name not in SIGNAL_KEYS]

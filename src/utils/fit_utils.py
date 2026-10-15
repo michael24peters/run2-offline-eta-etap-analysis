@@ -53,6 +53,11 @@ def make_histogram(values, xmin, xmax, nbins):
 
 # --- Chebyshev ---
 
+# Background parameters, in the order the cost functions take them, and their
+# default initial values (a flat background).
+BKG_PARAMS = ('c0', 'c1')
+BKG_INIT = {'c0': 0.0, 'c1': 0.0}
+
 def _xtilde(x, xmin, xmax):
     """
     Define parameterized, normalized [-1, 1] variable for the Chebyshev
@@ -201,36 +206,6 @@ def dcb_window_yield(p, e, xmin, xmax, window):
     return p['n_sig'] * frac, e['n_sig'] * frac
 
 
-# --- Pluggable background models ---
-#
-# A BackgroundModel bundles a background shape's own parameter names with its
-# pdf/cdf and default init/limits, so `make_gauss_cost`/`make_dcb_cost` below
-# can swap the background out via a `bkg=` name instead of having it
-# hardcoded. Registering a future shape (or, per arXiv:1408.6865, eventually
-# profiling the choice itself) means adding one entry here -- nothing about
-# the signal side, or about existing entries, needs to change.
-
-class BackgroundModel:
-    def __init__(self, name, param_names, pdf, cdf, init, limits=None,
-                 unnorm=None):
-        self.name = name
-        self.param_names = tuple(param_names)
-        self.pdf = pdf
-        self.cdf = cdf
-        # unnorm(x, xmin, xmax, *params): the shape before normalization, for
-        # reweighting by a phase-space factor (see weighted_bkg_model).
-        self.unnorm = unnorm
-        self.init = dict(init)
-        self.limits = dict(limits or {})
-
-
-BACKGROUND_MODELS = {
-    'cheb2': BackgroundModel(
-        'cheb2', ('c0', 'c1'), cheb_bkg_pdf, cheb_cdf,
-        init={'c0': 0.0, 'c1': 0.0}, unnorm=cheb_bkg_unnorm),
-}
-
-
 # --- Phase-space weighting ---
 #
 # In a Dalitz bin, only part of the fit window's mass range is kinematically
@@ -287,29 +262,41 @@ def weighted_dcb_pdf(weight):
     return pdf
 
 
-def weighted_bkg_model(model, weight):
-    """A BackgroundModel whose shape is f(M) * max(model's shape, BKG_FLOOR),
-    same parameter names/init/limits as `model`.
-
-    The base shape's own [-1, 1] variable spans only the reachable range
-    (where f > 0), not the whole fit window: its shape only matters there,
-    and a Chebyshev constrained on a small slice of its range has
-    near-degenerate coefficients that MIGRAD runs off to infinity along. So
-    c0/c1 here are relative to that range. The returned model's `unnorm` is
-    the base shape in those same coordinates (for positivity checks)."""
+def reachable_range(weight):
+    """(lo, hi): the masses spanned where the weight is > 0, or the whole grid
+    if it is nowhere > 0."""
     xg, wg = weight
     reach = xg[wg > 0]
-    lo, hi = (reach.min(), reach.max()) if reach.size else (xg[0], xg[-1])
-    if hi <= lo: lo, hi = xg[0], xg[-1]
-    def unnorm(x, xmin, xmax, *params):
-        return model.unnorm(x, lo, hi, *params)
-    def shape(*params):
-        return np.clip(unnorm(xg, None, None, *params), BKG_FLOOR, None) * wg
-    return BackgroundModel(
-        f'{model.name}*f', model.param_names,
-        pdf=lambda x, xmin, xmax, *p: _weighted_pdf(x, xg, shape(*p)),
-        cdf=lambda x, xmin, xmax, *p: _weighted_cdf(x, xg, shape(*p)),
-        init=model.init, limits=model.limits, unnorm=unnorm)
+    if reach.size == 0 or reach.max() <= reach.min():
+        return xg[0], xg[-1]
+    return reach.min(), reach.max()
+
+
+# The weighted Chebyshev's own [-1, 1] variable spans only reachable_range,
+# not the whole fit window: its shape only matters there, and a Chebyshev
+# constrained on a small slice of its range has near-degenerate coefficients
+# that MIGRAD runs off to infinity along. So c0/c1 here are relative to that
+# range; cheb_bkg_unnorm(x, *reachable_range(weight), c0, c1) is the base
+# shape in the same coordinates (for positivity checks).
+
+def weighted_cheb_cdf(weight):
+    """cheb_cdf-compatible CDF of f(M) * max(Chebyshev(M), BKG_FLOOR)."""
+    xg, wg = weight
+    lo, hi = reachable_range(weight)
+    def cdf(x, xmin, xmax, c0, c1):
+        fg = np.clip(cheb_bkg_unnorm(xg, lo, hi, c0, c1), BKG_FLOOR, None) * wg
+        return _weighted_cdf(x, xg, fg)
+    return cdf
+
+
+def weighted_cheb_pdf(weight):
+    """cheb_bkg_pdf-compatible PDF of f(M) * max(Chebyshev(M), BKG_FLOOR)."""
+    xg, wg = weight
+    lo, hi = reachable_range(weight)
+    def pdf(x, xmin, xmax, c0, c1):
+        fg = np.clip(cheb_bkg_unnorm(xg, lo, hi, c0, c1), BKG_FLOOR, None) * wg
+        return _weighted_pdf(x, xg, fg)
+    return pdf
 
 
 # --- iminuit cost functions ---
@@ -318,60 +305,53 @@ def weighted_bkg_model(model, weight):
 # function passed to it must return the expected cumulative count at each
 # bin edge, cdf[i] = expected events with x < xe[i] (so cdf[0] ~ 0,
 # cdf[-1] ~ n_sig + n_bkg) -- exactly `signal_cdf(...)*n_sig +
-# bkg_cdf(...)*n_bkg`. Its parameter list varies with the chosen background
-# model, so it's a `*args` function whose signature iminuit can't infer by
+# bkg_cdf(...)*n_bkg`. Its parameter list varies with the signal model, so
+# it's a `*args` function whose signature iminuit can't infer by
 # introspection; `_make_scaled_cdf` returns the matching parameter names
 # alongside it, for ExtendedBinnedNLL's own `name=` argument.
 
-def _make_scaled_cdf(signal_param_names, signal_cdf, bkg_model, xmin, xmax):
+def _make_scaled_cdf(signal_param_names, signal_cdf, bkg_cdf, xmin, xmax):
     """Returns (scaled_cdf, param_names). scaled_cdf(xe, *params) -> expected
     cumulative count; param_names is signal_param_names + ('n_sig', 'n_bkg')
-    + bkg_model.param_names, in the order scaled_cdf expects them."""
+    + BKG_PARAMS, in the order scaled_cdf expects them."""
     n_sig_params = len(signal_param_names)
-    param_names = (tuple(signal_param_names) + ('n_sig', 'n_bkg')
-                   + bkg_model.param_names)
+    param_names = tuple(signal_param_names) + ('n_sig', 'n_bkg') + BKG_PARAMS
 
     def scaled_cdf(xe, *args):
         sig_args = args[:n_sig_params]
         n_sig, n_bkg = args[n_sig_params], args[n_sig_params + 1]
         bkg_args = args[n_sig_params + 2:]
         return (signal_cdf(xe, xmin, xmax, *sig_args) * n_sig
-                + bkg_model.cdf(xe, xmin, xmax, *bkg_args) * n_bkg)
+                + bkg_cdf(xe, xmin, xmax, *bkg_args) * n_bkg)
 
     return scaled_cdf, param_names
 
 
-def make_gauss_cost(counts, bin_edges, xmin, xmax, bkg='cheb2'):
-    """ExtendedBinnedNLL cost for Gaussian signal + a pluggable background
-    (`bkg`, a BACKGROUND_MODELS key; default 'cheb2').
-    Free parameters: mean, sigma, n_sig, n_bkg, then the background model's
-    own parameters (c0, c1 for 'cheb2').
+def make_gauss_cost(counts, bin_edges, xmin, xmax):
+    """ExtendedBinnedNLL cost for Gaussian signal + Chebyshev background.
+    Free parameters: mean, sigma, n_sig, n_bkg, c0, c1.
     """
-    model = BACKGROUND_MODELS[bkg]
-    scaled_cdf, param_names = _make_scaled_cdf(('mean', 'sigma'), gauss_cdf, model, xmin, xmax)
+    scaled_cdf, param_names = _make_scaled_cdf(('mean', 'sigma'), gauss_cdf, cheb_cdf, xmin, xmax)
     return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf, name=param_names)
 
 
-def make_dcb_cost(counts, bin_edges, xmin, xmax, bkg='cheb2',
-                  signal_weight=None, bkg_weight=None):
+def make_dcb_cost(counts, bin_edges, xmin, xmax, signal_weight=None, bkg_weight=None):
     """
-    ExtendedBinnedNLL cost for DCB signal + a pluggable background (`bkg`, a
-    BACKGROUND_MODELS key; default 'cheb2').
-    Free parameters: mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, then
-    the background model's own parameters (c0, c1 for 'cheb2').
+    ExtendedBinnedNLL cost for DCB signal + Chebyshev background.
+    Free parameters: mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1.
 
     signal_weight : optional (xg, wg) from make_weight(); multiplies the
                     signal shape by it (see "Phase-space weighting").
     bkg_weight    : the same for the background shape.
     """
-    model = BACKGROUND_MODELS[bkg]
     signal_cdf = dcb_cdf
     if signal_weight is not None:
         signal_cdf = weighted_dcb_cdf(signal_weight)
+    bkg_cdf = cheb_cdf
     if bkg_weight is not None:
-        model = weighted_bkg_model(model, bkg_weight)
+        bkg_cdf = weighted_cheb_cdf(bkg_weight)
     signal_params = ('mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR')
-    scaled_cdf, param_names = _make_scaled_cdf(signal_params, signal_cdf, model, xmin, xmax)
+    scaled_cdf, param_names = _make_scaled_cdf(signal_params, signal_cdf, bkg_cdf, xmin, xmax)
     return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf, name=param_names)
 
 
@@ -379,16 +359,14 @@ def _dcb_sym_cdf(xe, xmin, xmax, mean, sigma, alpha, n):
     return dcb_cdf(xe, xmin, xmax, mean, sigma, alpha, n, alpha, n)
 
 
-def make_dcb_sym_cost(counts, bin_edges, xmin, xmax, bkg='cheb2'):
+def make_dcb_sym_cost(counts, bin_edges, xmin, xmax):
     """
-    ExtendedBinnedNLL cost for symmetric DCB (α_R ≡ α_L, n_R ≡ n_L) + a
-    pluggable background (`bkg`, a BACKGROUND_MODELS key).
-    Free parameters: mean, sigma, alpha, n, n_sig, n_bkg, then the
-    background model's own parameters (8 vs 10 for 'cheb2').
+    ExtendedBinnedNLL cost for symmetric DCB (α_R ≡ α_L, n_R ≡ n_L) +
+    Chebyshev background.
+    Free parameters: mean, sigma, alpha, n, n_sig, n_bkg, c0, c1 (8 vs 10).
     """
-    model = BACKGROUND_MODELS[bkg]
     signal_params = ('mean', 'sigma', 'alpha', 'n')
-    scaled_cdf, param_names = _make_scaled_cdf(signal_params, _dcb_sym_cdf, model, xmin, xmax)
+    scaled_cdf, param_names = _make_scaled_cdf(signal_params, _dcb_sym_cdf, cheb_cdf, xmin, xmax)
     return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf, name=param_names)
 
 

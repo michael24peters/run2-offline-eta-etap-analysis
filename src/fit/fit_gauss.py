@@ -24,7 +24,7 @@ import kinematics
 
 def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
               mean_init=kinematics.M_ETA, sigma_init=5.0,
-              bkg_model='cheb2', bkg_init=None,
+              bkg_init=None,
               mean_prior=None, sigma_prior=None, fixed_params=None):
     """
     Run the Gaussian + background fit and return (result, m).
@@ -35,10 +35,8 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
     xmin, xmax, nbins : float, float, int : The range and number of bins for the
              histogram.
     mean_init, sigma_init : float : Initial values for the Gaussian parameters.
-    bkg_model : a fit_utils.BACKGROUND_MODELS key (default 'cheb2').
-    bkg_init : optional dict overriding the chosen model's default initial
-             values for its own parameters (e.g. {'c0': 0.3} for 'cheb2'),
-             merged over fit_utils.BACKGROUND_MODELS[bkg_model].init. These
+    bkg_init : optional dict overriding the Chebyshev's default initial
+             values (e.g. {'c0': 0.3}), merged over fit_utils.BKG_INIT. These
              still float in stage 2 -- for holding a background parameter
              fixed instead, use fixed_params.
     mean_prior, sigma_prior : optional (value, error). Adds
@@ -51,7 +49,6 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
     m      : the final iminuit.Minuit object.
     """
     values = np.asarray(values, dtype=float)
-    model = fit_utils.BACKGROUND_MODELS[bkg_model]
 
     # Get histogram of values in the window.
     centers, edges, counts, errors = fit_utils.make_histogram(
@@ -61,7 +58,7 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
           file=sys.stderr)
 
     # Fit
-    cost = fit_utils.make_gauss_cost(counts, edges, xmin, xmax, bkg=bkg_model)
+    cost = fit_utils.make_gauss_cost(counts, edges, xmin, xmax)
     if mean_prior is not None:
         cost = cost + NormalConstraint('mean', mean_prior[0], error=mean_prior[1])
     if sigma_prior is not None:
@@ -72,19 +69,18 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
         sigma = sigma_init,
         n_sig = n_total * 0.5,
         n_bkg = n_total * 0.5,
-        **{**model.init, **(bkg_init or {})},
+        **{**fit_utils.BKG_INIT, **(bkg_init or {})},
     )
     if fixed_params:
         init.update(fixed_params)
     limits = dict(
         n_sig=(0.0, None),
         n_bkg=(0.0, None),
-        **model.limits,
     )
 
     # Stage 1: fit with the background params fixed at their initial values.
     # Stage 2: float them, starting from stage 1's result.
-    stage1 = fit_utils.run_fit(cost, init, limits, fixed=list(model.param_names))
+    stage1 = fit_utils.run_fit(cost, init, limits, fixed=list(fit_utils.BKG_PARAMS))
     init2 = dict(init, mean=stage1.values['mean'], sigma=stage1.values['sigma'],
                  n_sig=stage1.values['n_sig'], n_bkg=stage1.values['n_bkg'])
     m = fit_utils.run_fit(cost, init2, limits)
@@ -99,7 +95,7 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
     bw = (xmax - xmin) / nbins
 
     sig_cdf_edges = fit_utils.gauss_cdf(edges, xmin, xmax, p['mean'], p['sigma'])
-    bkg_cdf_edges = model.cdf(edges, xmin, xmax, *(p[n] for n in model.param_names))
+    bkg_cdf_edges = fit_utils.cheb_cdf(edges, xmin, xmax, p['c0'], p['c1'])
     bin_sig = np.diff(sig_cdf_edges) * p['n_sig']
     bin_bkg = np.diff(bkg_cdf_edges) * p['n_bkg']
     bin_fit = bin_sig + bin_bkg
@@ -121,7 +117,7 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
     # Smooth curves for plotting
     x_curve   = np.linspace(xmin, xmax, 200)
     curve_sig = fit_utils.gauss_pdf(x_curve, xmin, xmax, p['mean'], p['sigma']) * p['n_sig'] * bw
-    curve_bkg = model.pdf(x_curve, xmin, xmax, *(p[n] for n in model.param_names)) * p['n_bkg'] * bw
+    curve_bkg = fit_utils.cheb_bkg_pdf(x_curve, xmin, xmax, p['c0'], p['c1']) * p['n_bkg'] * bw
     curve_fit = curve_sig + curve_bkg
 
     # Build JSON
@@ -129,7 +125,6 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
         'meta': {
             'n_input': int(values.size),
             'model': 'gauss',
-            'background_model': bkg_model,
             'xmin': xmin,
             'xmax': xmax,
             'nbins': nbins,
@@ -153,7 +148,7 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
                           'error': round(float(e['n_bkg']), 2)},
                 **{name: {'value': round(float(p[name]), 6),
                           'error': round(float(e[name]), 6)}
-                   for name in model.param_names},
+                   for name in fit_utils.BKG_PARAMS},
             },
         },
         'histogram': {

@@ -3,7 +3,7 @@ Unit tests for the Dalitz phase-space factor: kinematics.m123_limits /
 kinematics.phase_space_factor, the Dalitz-decay factor
 kinematics.dalitz_factor and its density kinematics.dalitz_density, and the
 phase-space-weighted shapes in fit_utils (weighted_dcb_cdf,
-weighted_bkg_model, make_dcb_cost(signal_weight=, bkg_weight=)). Toy data
+weighted_cheb_cdf/pdf, make_dcb_cost(signal_weight=, bkg_weight=)). Toy data
 only, fixed RNG seeds.
 """
 
@@ -177,22 +177,21 @@ def test_unit_weight_reproduces_the_unweighted_shapes():
     dcb_args = (547.9, 12.0, 1.5, 2.0, 1.5, 2.0)
     assert np.allclose(fit_utils.weighted_dcb_cdf(weight)(x, XMIN, XMAX, *dcb_args),
                        fit_utils.dcb_cdf(x, XMIN, XMAX, *dcb_args), atol=1e-4)
-    model = fit_utils.BACKGROUND_MODELS['cheb2']
-    wmodel = fit_utils.weighted_bkg_model(model, weight)
-    assert np.allclose(wmodel.cdf(x, XMIN, XMAX, 0.3, -0.2),
-                       model.cdf(x, XMIN, XMAX, 0.3, -0.2), atol=1e-4)
+    assert np.allclose(fit_utils.weighted_cheb_cdf(weight)(x, XMIN, XMAX, 0.3, -0.2),
+                       fit_utils.cheb_cdf(x, XMIN, XMAX, 0.3, -0.2), atol=1e-4)
 
 
 def test_weighted_background_is_zero_where_forbidden():
     m12_range, m23_range = (0.015, 0.030), (0.2879, 0.3100)
     weight = fit_utils.make_weight(
         lambda M: kinematics.phase_space_factor(M, m12_range, m23_range), XMIN, XMAX)
-    wmodel = fit_utils.weighted_bkg_model(fit_utils.BACKGROUND_MODELS['cheb2'], weight)
+    weighted_cdf = fit_utils.weighted_cheb_cdf(weight)
+    weighted_pdf = fit_utils.weighted_cheb_pdf(weight)
     # f = 0 below ~541 MeV in this bin, so no background probability there,
     # even for a Chebyshev that is negative somewhere (floored, not flipped).
     for c0, c1 in [(0.0, 0.0), (1.5, 0.0)]:
-        assert wmodel.cdf(np.array([535.0]), XMIN, XMAX, c0, c1)[0] == 0.0
-        y = wmodel.pdf(np.linspace(XMIN, XMAX, 500), XMIN, XMAX, c0, c1)
+        assert weighted_cdf(np.array([535.0]), XMIN, XMAX, c0, c1)[0] == 0.0
+        y = weighted_pdf(np.linspace(XMIN, XMAX, 500), XMIN, XMAX, c0, c1)
         assert np.all(y >= 0)
         assert fit_utils._trapz(y, np.linspace(XMIN, XMAX, 500)) == pytest.approx(1, abs=1e-2)
 
@@ -211,7 +210,7 @@ def test_weighted_fit_recovers_background_toy():
     vals = np.interp(rng.uniform(0, cdf[-1], 3000), cdf, xg)
     counts, edges = np.histogram(vals, bins=80, range=(XMIN, XMAX))
 
-    cost = fit_utils.make_dcb_cost(counts.astype(float), edges, XMIN, XMAX, bkg='cheb2',
+    cost = fit_utils.make_dcb_cost(counts.astype(float), edges, XMIN, XMAX,
                                    signal_weight=weight, bkg_weight=weight)
     init = dict(mean=547.9, sigma=12.0, alphaL=1.5, nL=2.0, alphaR=1.5, nR=2.0,
                 n_sig=0.0, n_bkg=3000.0, c0=0.0, c1=0.0)
@@ -221,8 +220,8 @@ def test_weighted_fit_recovers_background_toy():
     assert m.values['n_bkg'] == pytest.approx(3000, rel=0.05)
     # Only ~40% of the window is reachable here, so c0/c1 are individually
     # degenerate; compare the fitted shape to the true one instead.
-    wmodel = fit_utils.weighted_bkg_model(fit_utils.BACKGROUND_MODELS['cheb2'], weight)
-    fit_cdf = wmodel.cdf(edges, XMIN, XMAX, m.values['c0'], m.values['c1'])
+    fit_cdf = fit_utils.weighted_cheb_cdf(weight)(edges, XMIN, XMAX,
+                                                  m.values['c0'], m.values['c1'])
     assert np.max(np.abs(fit_cdf - np.interp(edges, xg, cdf / cdf[-1]))) < 0.03
 
 

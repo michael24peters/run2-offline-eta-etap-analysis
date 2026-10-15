@@ -37,7 +37,7 @@ import os
 import sys
 
 import numpy as np
-from iminuit.cost import ExtendedBinnedNLL, NormalConstraint
+from iminuit.cost import NormalConstraint
 
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
@@ -49,7 +49,6 @@ from fit_dcb import TAIL_PARAMS, fit_dcb
 
 XMIN, XMAX, MASS_NBINS = 420.0, 680.0, 80      # mass window [MeV] and its histogram bins
 MEAN_INIT, SIGMA_INIT = kinematics.M_ETA, 10.0  # global-fit seeds [MeV]
-BKG_MODEL = 'cheb2'
 
 M12_RANGE = (0.0, 0.21)   # m^2(gamma mu+) range of the grid [GeV^2]
 M23_RANGE = (0.0, 0.31)   # m^2(mu+ mu-) range of the grid and strips [GeV^2]
@@ -107,7 +106,7 @@ tail_prior = fit_utils.build_prior(mc_fit, TAIL_PARAMS, factor=TAIL_PRIOR_FACTOR
 
 result, global_fit = fit_dcb(masses, xmin=XMIN, xmax=XMAX, nbins=MASS_NBINS,
                              mean_init=MEAN_INIT, sigma_init=SIGMA_INIT,
-                             bkg_model=BKG_MODEL, tail_prior=tail_prior)
+                             tail_prior=tail_prior)
 result['meta'].update(selection['meta'])
 result['meta']['tail_prior'] = {'path': args.tail_prior, 'factor': TAIL_PRIOR_FACTOR}
 result['selection_report'] = selection['selection_report']
@@ -122,7 +121,6 @@ print(f"[INFO] global fit valid={global_fit.valid}  mean={seed['mean']:.3f}  "
 
 # --- Per-bin fits ------------------------------------------------------------
 
-bkg_model_base = fit_utils.BACKGROUND_MODELS[BKG_MODEL]
 signal_factor = SIGNAL_FACTORS[args.signal_factor]
 bins = []
 for i in range(len(m12_edges) - 1):
@@ -154,10 +152,9 @@ for i in range(len(m12_edges) - 1):
 
         # Extended binned likelihood of f_sig * DCB + f_bkg * Chebyshev, plus the prior.
         sig_cdf = fit_utils.weighted_dcb_cdf(sig_weight)
-        bkg_model = fit_utils.weighted_bkg_model(bkg_model_base, bkg_weight)
-        scaled_cdf, param_names = fit_utils._make_scaled_cdf(SIGNAL_PARAMS, sig_cdf, bkg_model,
-                                                             XMIN, XMAX)
-        cost = (ExtendedBinnedNLL(counts, mass_edges, scaled_cdf, name=param_names)
+        bkg_cdf = fit_utils.weighted_cheb_cdf(bkg_weight)
+        cost = (fit_utils.make_dcb_cost(counts, mass_edges, XMIN, XMAX,
+                                        signal_weight=sig_weight, bkg_weight=bkg_weight)
                 + NormalConstraint(PRIOR_PARAMS, (seed['mean'], seed['sigma']), error=prior_cov))
 
         # Start from the global signal shape, half signal and half background,
@@ -165,10 +162,9 @@ for i in range(len(m12_edges) - 1):
         init = dict(seed,
                     n_sig=0.0 if no_signal else 0.5 * n_cand,
                     n_bkg=n_cand if no_signal else 0.5 * n_cand,
-                    **bkg_model_base.init)
+                    **fit_utils.BKG_INIT)
         limits = dict(sigma=(0.0, None), alphaL=(0.0, None), alphaR=(0.0, None),
-                      nL=(0.0, None), nR=(0.0, None), n_sig=(0.0, None), n_bkg=(0.0, None),
-                      **bkg_model_base.limits)
+                      nL=(0.0, None), nR=(0.0, None), n_sig=(0.0, None), n_bkg=(0.0, None))
         # Tails held at the global fit's values; with no signal, its yield and shape too.
         fixed = list(TAIL_PARAMS)
         if no_signal:
@@ -180,10 +176,10 @@ for i in range(len(m12_edges) - 1):
 
         # Expected counts per mass bin for each component.
         values, errors = fit.values, fit.errors
-        bkg_values = [values[name] for name in bkg_model.param_names]
+        bkg_values = [values[name] for name in fit_utils.BKG_PARAMS]
         bin_sig = np.diff(sig_cdf(mass_edges, XMIN, XMAX,
                                   *(values[name] for name in SIGNAL_PARAMS))) * values['n_sig']
-        bin_bkg = np.diff(bkg_model.cdf(mass_edges, XMIN, XMAX, *bkg_values)) * values['n_bkg']
+        bin_bkg = np.diff(bkg_cdf(mass_edges, XMIN, XMAX, *bkg_values)) * values['n_bkg']
         bin_fit = bin_sig + bin_bkg
 
         # Neyman chi2 and pulls: the data as the variance, empty mass bins skipped.
@@ -194,8 +190,8 @@ for i in range(len(m12_edges) - 1):
 
         # True where the raw Chebyshev goes negative at some reachable mass.
         reachable = bkg_weight[1] > 0
-        bkg_negative = bool(np.any(bkg_model.unnorm(FACTOR_GRID[reachable], XMIN, XMAX,
-                                                    *bkg_values) < 0))
+        bkg_negative = bool(np.any(fit_utils.cheb_bkg_unnorm(
+            FACTOR_GRID[reachable], *fit_utils.reachable_range(bkg_weight), *bkg_values) < 0))
 
         entry.update({
             'n_sig': round(float(values['n_sig']), 2),
@@ -206,8 +202,8 @@ for i in range(len(m12_edges) - 1):
             'mean_err': round(float(errors['mean']), 4),
             'sigma': round(float(values['sigma']), 4),
             'sigma_err': round(float(errors['sigma']), 4),
-            **{name: round(float(values[name]), 6) for name in bkg_model.param_names},
-            **{f'{name}_err': round(float(errors[name]), 6) for name in bkg_model.param_names},
+            **{name: round(float(values[name]), 6) for name in fit_utils.BKG_PARAMS},
+            **{f'{name}_err': round(float(errors[name]), 6) for name in fit_utils.BKG_PARAMS},
             'chi2': round(chi2, 4),
             'ndof': ndof,
             'chi2_per_ndof': round(chi2 / ndof, 6) if ndof > 0 else None,
@@ -253,7 +249,6 @@ result['dalitz'] = {
     'mass_window': {'xmin': XMIN, 'xmax': XMAX, 'nbins': MASS_NBINS},
     'factor_masses': PLOT_GRID.tolist(),
     'min_candidates': MIN_CANDIDATES,
-    'background_model': BKG_MODEL,
     'prior': {'params': list(PRIOR_PARAMS), 'factor': SIGNAL_PRIOR_FACTOR},
     'fixed_in_per_bin_fit': list(TAIL_PARAMS),
     'n_sig_fixed_zero_rule': 'signal factor at m_eta == 0',

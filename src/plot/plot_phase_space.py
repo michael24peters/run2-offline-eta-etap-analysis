@@ -179,15 +179,14 @@ def fig_decomposition(outdir, results, i, j):
     dcb = [g[p]['value'] for p in ('mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR')]
     weight = fit_utils.make_weight(lambda M: f_of(M, i, j), XMIN, XMAX)
     xg, wg = weight
-    wmodel = fit_utils.weighted_bkg_model(fit_utils.BACKGROUND_MODELS['cheb2'], weight)
     c = (entry['c0'], entry['c1'])
 
-    cheb = np.clip(wmodel.unnorm(xg, XMIN, XMAX, *c), 0, None)
+    cheb = np.clip(fit_utils.cheb_bkg_unnorm(xg, *fit_utils.reachable_range(weight), *c), 0, None)
     cheb /= fit_utils._trapz(cheb, xg)
     dcb_alone = fit_utils.dcb_pdf(xg, XMIN, XMAX, *dcb)
     shapes = [
         ('Background', C['background'], cheb, 'Chebyshev',
-         wmodel.pdf(xg, XMIN, XMAX, *c)),
+         fit_utils.weighted_cheb_pdf(weight)(xg, XMIN, XMAX, *c)),
         ('Signal', C['fit'], dcb_alone, 'DCB',
          fit_utils.weighted_dcb_pdf(weight)(xg, XMIN, XMAX, *dcb)),
     ]

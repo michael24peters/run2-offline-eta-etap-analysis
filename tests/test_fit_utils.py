@@ -2,9 +2,8 @@
 Unit tests for cut_utils's fitting counterpart, src/utils/fit_utils.py.
 
 Covers shared infrastructure: run_fit's optional limits/seeds, that
-fit_gauss()/fit_dcb() hand back the fitted Minuit object, the pluggable
-background models (BACKGROUND_MODELS / bkg= on the cost builders / bkg_model=
-on fit_gauss()/fit_dcb()), and build_prior(). All toy data, no ROOT files, a
+fit_gauss()/fit_dcb() hand back the fitted Minuit object, the Chebyshev
+background (pdf, cost and result JSON), and build_prior(). All toy data, no ROOT files, a
 fixed RNG seed -- consistent with the house style in conftest.py.
 """
 
@@ -166,83 +165,51 @@ def test_fit_gauss_sigma_prior_pulls_the_fit():
     assert abs(constrained_sigma - 5.0) < abs(free_sigma - 5.0)
 
 
-# --- Pluggable background models ----------------------------------------------
+# --- Chebyshev background ---------------------------------------------------
 
-def toy_bkg_from_model(rng, n, bkg_model, oversample=5):
-    """Rejection-sample n values from a BACKGROUND_MODELS entry's own pdf over
-    [XMIN, XMAX], at its default init -- matched toy data for a model whose
-    density isn't flat, so a fit seeded at that same default init converges
-    quickly instead of fighting a mismatched toy background."""
-    model = fit_utils.BACKGROUND_MODELS[bkg_model]
-    params = [model.init[p] for p in model.param_names]
-    xg = np.linspace(XMIN, XMAX, 2000)
-    ymax = model.pdf(xg, XMIN, XMAX, *params).max() * 1.05
-    out = []
-    while len(out) < n:
-        x = rng.uniform(XMIN, XMAX, n * oversample)
-        y = rng.uniform(0.0, ymax, n * oversample)
-        out.extend(x[y < model.pdf(x, XMIN, XMAX, *params)])
-    return np.array(out[:n])
-
-
-@pytest.mark.parametrize('bkg_model', list(fit_utils.BACKGROUND_MODELS))
-def test_background_pdf_integrates_to_one_and_is_nonnegative(bkg_model):
-    """Every registered background's pdf must be a real, non-negative density
-    over [XMIN, XMAX] across a spread of its own parameter values ('cheb2'
-    can dip negative in principle, but not at these mild parameter values)."""
-    model = fit_utils.BACKGROUND_MODELS[bkg_model]
+def test_background_pdf_integrates_to_one_and_is_nonnegative():
+    """The Chebyshev pdf is a real, non-negative density over [XMIN, XMAX] at
+    its default and at mild coefficients (it can dip negative in principle,
+    but not at these values)."""
     xg = np.linspace(XMIN, XMAX, 3000)
-    default = model.init
-    variants = [default]
-    if bkg_model == 'cheb2':
-        variants.append({'c0': 0.3, 'c1': -0.2})
-    for variant in variants:
-        params = [variant[p] for p in model.param_names]
-        y = model.pdf(xg, XMIN, XMAX, *params)
+    for c0, c1 in [(fit_utils.BKG_INIT['c0'], fit_utils.BKG_INIT['c1']), (0.3, -0.2)]:
+        y = fit_utils.cheb_bkg_pdf(xg, XMIN, XMAX, c0, c1)
         assert (y >= 0).all()
         assert fit_utils._trapz(y, xg) == pytest.approx(1.0, abs=1e-3)
 
 
-@pytest.mark.parametrize('bkg_model', list(fit_utils.BACKGROUND_MODELS))
-def test_make_gauss_cost_recovers_toy_params_for_each_bkg_model(bkg_model):
-    """make_gauss_cost(..., bkg=bkg_model) must build a cost Minuit can
-    actually fit, for every registered model -- proof the dynamically-named
-    signature (_make_scaled_cdf / ExtendedBinnedNLL's name=) works end to
-    end, not just that describe() parses it."""
+def test_make_gauss_cost_recovers_toy_params():
+    """make_gauss_cost builds a cost Minuit can actually fit -- proof the
+    dynamically-named signature (_make_scaled_cdf / ExtendedBinnedNLL's
+    name=) works end to end, not just that describe() parses it."""
     rng = np.random.default_rng(10)
-    model = fit_utils.BACKGROUND_MODELS[bkg_model]
     sig = rng.normal(547.9, 8.0, 2000)
-    bkg = toy_bkg_from_model(rng, 6000, bkg_model)
+    bkg = rng.uniform(XMIN, XMAX, 6000)
     counts, edges = np.histogram(np.concatenate([sig, bkg]), bins=60, range=(XMIN, XMAX))
     counts = counts.astype(float)
 
-    cost = fit_utils.make_gauss_cost(counts, edges, XMIN, XMAX, bkg=bkg_model)
-    init = dict(mean=547.9, sigma=8.0, n_sig=2000.0, n_bkg=6000.0, **model.init)
-    limits = dict(n_sig=(0.0, None), n_bkg=(0.0, None), **model.limits)
+    cost = fit_utils.make_gauss_cost(counts, edges, XMIN, XMAX)
+    init = dict(mean=547.9, sigma=8.0, n_sig=2000.0, n_bkg=6000.0, **fit_utils.BKG_INIT)
+    limits = dict(n_sig=(0.0, None), n_bkg=(0.0, None))
     m = fit_utils.run_fit(cost, init, limits)
 
     assert m.valid
-    assert set(m.parameters) == {'mean', 'sigma', 'n_sig', 'n_bkg', *model.param_names}
+    assert set(m.parameters) == {'mean', 'sigma', 'n_sig', 'n_bkg', *fit_utils.BKG_PARAMS}
     assert m.values['mean'] == pytest.approx(547.9, abs=1.0)
 
 
-@pytest.mark.parametrize('bkg_model', list(fit_utils.BACKGROUND_MODELS))
-def test_fit_dcb_bkg_model_roundtrips_through_json(bkg_model):
-    """fit_dcb(bkg_model=...) must record meta.background_model, name the
-    background parameters in the result JSON after that model's own
-    param_names, and a LoadedFit built from that JSON must expose them under
-    the same names (so plot_dcb.py / a later per-bin fit reading this JSON
-    back doesn't need to guess which shape produced it)."""
+def test_fit_dcb_bkg_params_roundtrip_through_json():
+    """fit_dcb's result JSON names the background parameters c0, c1, and a
+    LoadedFit built from that JSON exposes them under the same names (so
+    plot_dcb.py / a later per-bin fit reading this JSON back finds them)."""
     rng = np.random.default_rng(11)
-    model = fit_utils.BACKGROUND_MODELS[bkg_model]
     sig = rng.normal(547.9, 8.0, 2000)
-    bkg = toy_bkg_from_model(rng, 6000, bkg_model)
+    bkg = rng.uniform(XMIN, XMAX, 6000)
     vals = np.concatenate([sig, bkg])
 
-    result, m = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60, bkg_model=bkg_model)
+    result, m = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60)
 
-    assert result['meta']['background_model'] == bkg_model
-    for name in model.param_names:
+    for name in fit_utils.BKG_PARAMS:
         assert name in result['fit']['parameters']
         # JSON values are round()ed to 6 decimals -- an absolute, not relative,
         # tolerance, so a value near 0 needs abs= rather than approx()'s default
@@ -251,7 +218,7 @@ def test_fit_dcb_bkg_model_roundtrips_through_json(bkg_model):
             m.values[name], abs=1e-5)
 
     loaded = fit_utils.LoadedFit(result['fit'])
-    for name in model.param_names:
+    for name in fit_utils.BKG_PARAMS:
         assert name in loaded.values
 
 

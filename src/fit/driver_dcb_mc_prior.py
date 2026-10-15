@@ -117,9 +117,6 @@ parser.add_argument('--alphaL-init', type=float, default=1.5, help='Initial left
 parser.add_argument('--nL-init', type=float, default=2.0, help='Initial left tail n_L')
 parser.add_argument('--alphaR-init', type=float, default=1.5, help='Initial right tail α_R')
 parser.add_argument('--nR-init', type=float, default=2.0, help='Initial right tail n_R')
-parser.add_argument('--bkg-model', default='cheb2', choices=list(fit_utils.BACKGROUND_MODELS),
-                    help='Background shape for both fits (default: cheb2); see '
-                         'fit_utils.BACKGROUND_MODELS')
 parser.add_argument('--tail-prior-factor', type=float, default=5.0,
                     help='Stdev multiplier applied to the MC tail-parameter covariance '
                          'before it constrains the data fit (default: 5.0). Larger = looser '
@@ -217,8 +214,7 @@ suffix = f'_{args.label}' if args.label else ''
 
 # --- 1. Fit MC to get the tail-shape prior ------------------------------------
 # Truth-matched MC has no background: n_bkg is fixed to 0 and the background
-# shape parameters at the model's init values (bkg_model_mc.init).
-bkg_model_mc = fit_utils.BACKGROUND_MODELS[args.bkg_model]
+# shape parameters at their init values (fit_utils.BKG_INIT).
 mc_masses, mc_selection_report = select_masses(args.mc_infile, 'mc',
                                                 truth_match=not args.no_truth_match)
 mc_result, m_mc = fit_dcb(
@@ -227,8 +223,7 @@ mc_result, m_mc = fit_dcb(
     mean_init=args.mean_init, sigma_init=args.sigma_init,
     alphaL_init=args.alphaL_init, nL_init=args.nL_init,
     alphaR_init=args.alphaR_init, nR_init=args.nR_init,
-    bkg_model=args.bkg_model,
-    fixed_params={'n_bkg': 0.0, **bkg_model_mc.init},
+    fixed_params={'n_bkg': 0.0, **fit_utils.BKG_INIT},
 )
 
 tail_values, tail_cov = fit_utils.build_prior(m_mc, TAIL_PARAMS,
@@ -261,7 +256,6 @@ data_result, m_data = fit_dcb(
     mean_init=args.mean_init, sigma_init=args.sigma_init,
     alphaL_init=tail_values[0], nL_init=tail_values[1],
     alphaR_init=tail_values[2], nR_init=tail_values[3],
-    bkg_model=args.bkg_model,
     tail_prior=(tail_values, tail_cov),
 )
 

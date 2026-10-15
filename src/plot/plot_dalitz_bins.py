@@ -56,7 +56,7 @@ xmin, xmax, nbins = (dalitz['mass_window'][key] for key in ('xmin', 'xmax', 'nbi
 mass_edges = np.linspace(xmin, xmax, nbins + 1)
 mass_centers = 0.5 * (mass_edges[:-1] + mass_edges[1:])
 mass_bin_width = (xmax - xmin) / nbins
-bkg_names = fit_utils.BACKGROUND_MODELS[dalitz['background_model']].param_names
+bkg_names = fit_utils.BKG_PARAMS
 bins = {(b['i'], b['j']): b for b in dalitz['bins']}
 
 # --- Global fit --------------------------------------------------------------
