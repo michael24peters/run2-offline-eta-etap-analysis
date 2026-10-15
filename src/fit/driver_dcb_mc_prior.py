@@ -66,7 +66,6 @@ import os
 import json
 import argparse
 
-import numpy as np
 import awkward as ak
 
 # Add the "utils", "plot" and "fit" directories to the Python path so we can

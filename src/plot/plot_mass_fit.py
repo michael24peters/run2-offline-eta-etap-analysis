@@ -127,7 +127,7 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     # Get text from build_text, with error handling for compatibility
     try:
         plot_text, term_text = build_text(params, chi2_per_ndof)
-    except:
+    except ValueError:
         plot_text = build_text(params, chi2_per_ndof)
         term_text = None
 

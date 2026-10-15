@@ -8,8 +8,6 @@ so they are written as narratives rather than API coverage.
 """
 
 import awkward as ak
-import numpy as np
-import pytest
 from conftest import make_tree
 
 import cut_utils

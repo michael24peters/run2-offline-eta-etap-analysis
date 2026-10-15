@@ -10,9 +10,6 @@ tests that the reasons are attributed to the right counter -- a filter that
 drops the right events for the wrong stated reason is a debugging trap.
 """
 
-import awkward as ak
-import numpy as np
-import pytest
 from conftest import make_tree
 
 import cut_utils

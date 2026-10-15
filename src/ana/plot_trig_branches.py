@@ -7,7 +7,6 @@ Usage:
     python plot_trig_branches.py input.root
 """
 
-import sys
 import uproot
 import awkward as ak
 import numpy as np
