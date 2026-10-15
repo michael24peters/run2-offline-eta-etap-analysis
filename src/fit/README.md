@@ -10,17 +10,17 @@ fit_*.py      fit the numbers. Blind to files, cuts, candidates.
 plot_*.py     render
 ```
 
-Awkward arrays own everything jagged (ROOT I/O, event/candidate structure) and
-live only in `src/utils/cut_utils.py`. Numpy owns everything flat (histogram,
+Awkward arrays handle everything jagged (ROOT I/O, event/candidate structure) and
+live only in `src/utils/cut_utils.py`. Numpy handles everything flat (histogram,
 PDFs, curves) and lives in `src/utils/fit_utils.py` and the `fit_*` modules.
-The boundary is one `ak.to_numpy(ak.flatten(...))` call in the driver.
+The conversion occurs in the `ak.to_numpy(ak.flatten(...))` call in the driver.
 
-The drivers are the only entry point -- `fit_dcb.py` / `fit_gauss.py` are
-library modules with no CLI, since they take an array rather than a file.
+Most everything is a library, so the drivers are the only entry point for fitting
+(`fit_dcb.py` / `fit_gauss.py`, etc.).
 
 ## Usage
 
-One-shot fit + plot. Every flag shown explicitly, with its default value:
+One-shot fit + plot. The flag values given below are the defaults.
 
 For double crystal ball:
 
@@ -44,18 +44,18 @@ python src/fit/driver_gauss.py data.root \
     --mean-init 547.862 --sigma-init 10.0
 ```
 
-Each driver runs the fit, saves `results_dcb.json` / `results_gauss.json`,
-and writes `dcb_mass_fit.png` / `gauss_mass_fit.png` into `--outdir`.
-`--max-events` caps how many events are read, for quick iteration on large
-files; omit it to read everything.
+Each driver runs the fit, saves `results_*.json`, and writes `*_mass_fit.png`
+into `--outdir`. `--max-events` caps how many events are read, for quick
+iteration on large files; omit it to read everything (which is usually what you
+want to do).
 
-The drivers only expose fit hyperparameters as flags -- plot styling (font,
+The drivers only expose fit hyperparameters as flags. Plot styling (font,
 colors, ticks, stats box, etc.) is fixed in `plot_mass_fit.py`/`plot_style.py`,
-not driver-configurable.
+and must be changed there manually.
 
 ## Running a full fit, start to finish (eta2mumu / eta2mumugamma)
 
-Two stages, driven by hand; no MC needed for either of them. `fit_dcb()` / `fit_gauss()` already run their own internal two-stage MIGRAD (background -- and for DCB, tails -- fixed first, then floated from that result) on every call, so this is the outer loop on top of that: a quick Gaussian check, then the DCB fit seeded from what it found.
+The full fit is done in two stages. No MC is needed for either of them. `fit_dcb()` / `fit_gauss()` already run their own internal two-stage MIGRAD (background -- and for DCB, tails -- fixed first, then floated from that result) on every call, so this is the outer loop on top of that: a quick Gaussian check, then the DCB fit seeded from what it found.
 
 ### 1. Gaussian
 
@@ -80,11 +80,11 @@ python src/fit/driver_gauss.py ntuple/lhcb/eta2mumugamma/20261006/combined_files
     --sigma-init 10.0
 ```
 
-Read the `[INFO] ... mean=...  σ=...` line on stderr and look at `gauss_mass_fit.png`. `--mean-init` doesn't need setting -- it already defaults to `kinematics.M_ETA` (547.862 MeV). TOS is on by default; add `--no-tos` to turn it off.
+Read the `[INFO] ... mean=...  σ=...` line on stderr and look at `gauss_mass_fit.png`. `--mean-init` defaults to `kinematics.M_ETA`. TOS is on by default; add `--no-tos` to turn it off.
 
 ### 2. DCB fit, seeded from stage 1
 
-Same file, same selection flags, `--sigma-init` set to whatever stage 1 reported:
+Same thing, but set `--sigma-init` to whatever stage 1 reported:
 ```
 python src/fit/driver_dcb.py ntuple/lhcb/eta2mumu/20261006/combined_files.root \
     --outdir out/eta2mumu/turbo/$(date +%Y%m%d) \
@@ -107,44 +107,6 @@ Fit signal MC first to pin down the tail-shape parameters (alphaL, nL, alphaR,
 nR), then constrain them in the data fit with a `NormalConstraint` prior
 centered on the MC values, its covariance widened by `--tail-prior-factor`
 standard deviations (default 5) rather than hard-fixed.
-
-Hard-fixing was tried first, on the reasoning that a soft prior isn't enough
-if MC only weakly constrains one of the four (CB tails are nearly degenerate
-at large n, so a weak constraint lets the data fit drift into the
-barely-decaying regime and reclassify background as signal). It does remove
-that degree of freedom outright -- but it also removes the data fit's only
-way to compensate for real MC/data differences in tail shape, and measured on
-`eta2mumugamma`: both legs converged (`valid=True`), but the data fit's
-chi2/ndof came back at ~21 (vs. ~1.2 for the unconstrained-tail single-stage
-fit), and locking ~150 per-bin Dalitz fits to that MC-only shape produced
-*more* non-converging bins than before, with a median chi2/ndof of ~12 among
-the bins that did converge. A numerically valid but systematically wrong
-shape isn't worth trading real bins for, so the tails float with a wide-slack
-prior instead: real freedom to move away from the MC value where data
-disagrees, while still anchored against drifting into the degenerate regime.
-
-Keep the full mass window for both fits. Restricting the data fit's
-likelihood to a narrow core window around the peak was tried, to stop the
-tail from predicting non-negligible density tens of sigma out -- but it made
-things worse: floating the Chebyshev background's 2 shape parameters against
-only a ~40 MeV slice leaves them essentially unconstrained, and extrapolating
-that across the rest of the window diverges badly. The full window gives the
-background a real baseline and keeps it well-constrained.
-
-The heavy-tail-at-large-sigma effect is real, though, and worth understanding
-rather than fitting around: a single power-law CB tail can't simultaneously
-match the near-tail and deep-tail regions of the (background-free) MC. The
-near tail (better populated) wants a heavier tail than the deep tail actually
-supports, so nL/nR end up as a compromise -- concretely, the fitted MC model
-over-predicts its own deep-tail bin counts by ~17% (480-498 MeV, 17-23 sigma
-from the peak), while under-predicting slightly in the 500-525 MeV near-tail
-region. No parameter fix removes this; it's the functional form running out
-of flexibility. Mitigation: `fixed_params={'n_bkg': 0.0, 'c0': 0.0, 'c1': 0.0}`
-on the MC fit. The sample is truth-matched signal MC, so it shouldn't have a
-floating background component at all -- and letting one float anyway was
-additionally distorting the tail-shape estimate (`nR` came back at 4.98+/-1.25
-with it floating vs. 2.10+/-0.16 fixed to zero -- the former was largely
-unconstrained noise, not real precision).
 
 ```python
 import sys
