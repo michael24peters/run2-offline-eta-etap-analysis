@@ -10,9 +10,8 @@ tests that the reasons are attributed to the right counter -- a filter that
 drops the right events for the wrong stated reason is a debugging trap.
 """
 
-from conftest import make_tree
-
 import cut_utils
+from conftest import make_tree
 
 
 def good_event():

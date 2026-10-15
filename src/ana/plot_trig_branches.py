@@ -7,11 +7,12 @@ Usage:
     python plot_trig_branches.py input.root
 """
 
-import uproot
-import awkward as ak
-import numpy as np
-import matplotlib.pyplot as plt
 import argparse
+
+import awkward as ak
+import matplotlib.pyplot as plt
+import numpy as np
+import uproot
 
 parser = argparse.ArgumentParser(description='Plot trigger branches from a ROOT file.')
 parser.add_argument('infile', help='Input ROOT file')

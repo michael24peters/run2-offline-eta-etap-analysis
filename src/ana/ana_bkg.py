@@ -25,8 +25,8 @@ import numpy as np
 
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
-import cut_utils
 import bkg_utils
+import cut_utils
 
 BRANCHES = ['tag_pid', 'prt_pid', 'prt_idx_gen', 'prt_idx_mom', 'prt_pnn_mu',
             'mc_pid', 'mc_idx_mom']

@@ -11,8 +11,9 @@ Usage:
 
 import argparse
 import os
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
 import uproot
 
 C_MM_PER_S = 299_792_458_000.0  # speed of light in mm/s

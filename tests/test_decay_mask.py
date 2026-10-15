@@ -7,10 +7,9 @@ materialising each mother's daughter list.
 """
 
 import awkward as ak
-from conftest import make_tree
 
 import cut_utils
-
+from conftest import make_tree
 
 # --- the decays this analysis actually cares about ---------------------------
 

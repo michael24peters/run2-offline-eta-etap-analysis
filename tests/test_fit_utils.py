@@ -21,8 +21,8 @@ sys.path.insert(0, os.path.join(_here, '..', 'src', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'src', 'fit'))
 
 import fit_utils
-from fit_gauss import fit_gauss
 from fit_dcb import fit_dcb
+from fit_gauss import fit_gauss
 
 XMIN, XMAX = 480.0, 620.0
 

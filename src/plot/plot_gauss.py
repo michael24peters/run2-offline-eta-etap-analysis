@@ -8,10 +8,10 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'utils'))
-import plot_utils
 import plot_style
-
+import plot_utils
 from plot_mass_fit import plot_fit_data
+
 
 def build_text(params, chi2_per_ndof):
     mean,  mean_err  = plot_utils.val_err(params['mean'])

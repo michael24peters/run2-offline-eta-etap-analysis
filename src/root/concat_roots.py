@@ -8,9 +8,9 @@ Usage:
 """
 
 import argparse
+import os
 
 import ROOT
-import os
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('input_dir', help='Base path containing the ROOT files')

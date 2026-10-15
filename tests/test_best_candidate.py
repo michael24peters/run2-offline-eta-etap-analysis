@@ -14,9 +14,9 @@ event where nothing survived the cuts would silently select candidate 0.
 import awkward as ak
 import numpy as np
 import pytest
-from conftest import make_tree
 
 import cut_utils
+from conftest import make_tree
 
 
 @pytest.fixture

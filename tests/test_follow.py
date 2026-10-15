@@ -8,10 +8,9 @@ aggregated and the result always has the shape of the index branch.
 
 import awkward as ak
 import numpy as np
-from conftest import make_tree
 
 import cut_utils
-
+from conftest import make_tree
 
 # --- basic behaviour ---------------------------------------------------------
 

@@ -63,9 +63,10 @@ The typical pipeline, with TOS_LINES = {'L0': [...], 'HLT1': [...], 'HLT2': [...
     masses       = values(tree, 'tag_dtf_m', best)   # flat numpy, ready to fit
 """
 
+import collections
+
 import awkward as ak
 import numpy as np
-import collections
 
 
 def read_branches(root_path, branches, tree='tree', entry_stop=None):

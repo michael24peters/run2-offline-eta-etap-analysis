@@ -12,10 +12,9 @@ trips against follow().
 
 import awkward as ak
 import pytest
-from conftest import make_tree
 
 import cut_utils
-
+from conftest import make_tree
 
 # --- the five aggregations ---------------------------------------------------
 

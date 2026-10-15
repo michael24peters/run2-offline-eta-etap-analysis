@@ -43,7 +43,7 @@ _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 import fit_utils
 import kinematics
-from fit_dcb import fit_dcb, TAIL_PARAMS
+from fit_dcb import TAIL_PARAMS, fit_dcb
 
 # --- Configuration -----------------------------------------------------------
 

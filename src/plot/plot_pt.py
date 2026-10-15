@@ -11,8 +11,9 @@ import sys
 import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'utils'))
-import plot_utils
 import plot_style
+import plot_utils
+
 
 def _new_axes():
     plot_utils.apply_font()

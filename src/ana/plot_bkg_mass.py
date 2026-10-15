@@ -21,13 +21,13 @@ import os
 from collections import defaultdict
 
 import awkward as ak
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 import uproot
 
 # Python auto-adds this script's own directory (src/ana/) to sys.path, so bkg
 # is importable directly when this script is run as `python plot_bkg_mass.py`.
-from bkg import classify_candidate, ErrorType, Candidate
+from bkg import Candidate, ErrorType, classify_candidate
 
 # --- Category definitions ---
 # Ordered for legend display: signal first, then mismatch group, error group,

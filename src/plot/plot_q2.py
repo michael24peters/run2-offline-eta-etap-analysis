@@ -10,13 +10,16 @@ Usage:
 import argparse
 import os
 import sys
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
 import uproot
+
 # Ensure utils/kinematics.py is importable
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 '..', 'utils'))
 from kinematics import invariant_mass2
+
 
 def parse_args():
 
@@ -96,6 +99,7 @@ bin_edges = np.linspace(0.04, 0.92, 201)
 counts = np.histogram(q2s, bins=bin_edges)[0]
 # Save to JSON file
 import json
+
 json_outfile = 'out/q2_histogram.json'  
 with open(json_outfile, 'w') as f:
     json.dump({

@@ -11,10 +11,12 @@ ROOT files, applying selection, and reducing to one candidate per event all
 happen upstream in driver_dcb.py via cut_utils.
 """
 
-import sys
 import os
+import sys
+
 import numpy as np
 from iminuit.cost import NormalConstraint
+
 # Ensure utils/fit_utils.py is importable
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))

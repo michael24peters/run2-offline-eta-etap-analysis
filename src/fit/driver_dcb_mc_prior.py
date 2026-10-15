@@ -61,10 +61,10 @@ Usage:
                        [--tail-prior-factor 5]
 """
 
-import sys
-import os
-import json
 import argparse
+import json
+import os
+import sys
 
 import awkward as ak
 
@@ -74,11 +74,11 @@ _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'fit'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
-import cut_utils
-import kinematics
-import fit_utils
 import bkg_utils
-from fit_dcb import fit_dcb, TAIL_PARAMS
+import cut_utils
+import fit_utils
+import kinematics
+from fit_dcb import TAIL_PARAMS, fit_dcb
 from plot_dcb import plot_dcb
 
 # --- Selection ---------------------------------------------------------------

@@ -9,17 +9,18 @@ Usage:
 """
 
 import argparse
-import sys
 import os
+import sys
+
 import awkward as ak
 import matplotlib.pyplot as plt
+
 # Add the "plot" and "fit" directories to the Python path so we can import the
 # project modules.
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
 import cut_utils
-
 
 # IO
 parser = argparse.ArgumentParser(description='Compare all-candidate vs best-candidate mass distributions')

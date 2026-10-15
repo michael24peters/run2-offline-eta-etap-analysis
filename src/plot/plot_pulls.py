@@ -10,12 +10,13 @@ Usage:
     python plot_pulls.py fit_results.json [output.png]
 """
 
-import os
 import argparse
 import json
-import numpy as np
+import os
+
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+import numpy as np
 from scipy import stats
 
 # --- Argument parsing ---

@@ -23,8 +23,8 @@ import uproot
 # Ensure utils/fit_utils.py is importable
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
-import kinematics
 import cut_utils
+import kinematics
 
 # LHCb fiducial requirements.
 FIDUCIAL_REQS = {

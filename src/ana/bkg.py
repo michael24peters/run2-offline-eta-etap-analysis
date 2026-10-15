@@ -17,15 +17,16 @@ Usage:
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
-from enum import Enum
-from collections import Counter
-import os
 import json
 import logging
+import os
+from collections import Counter
+from dataclasses import dataclass
+from enum import Enum
 
 import awkward as ak
 import uproot
+
 
 def parse_args():
     """
