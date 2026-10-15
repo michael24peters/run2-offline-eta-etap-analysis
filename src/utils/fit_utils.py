@@ -187,9 +187,9 @@ def dcb_cdf(x, xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR):
     """DCB CDF over [xmin, xmax], from 0 at xmin to 1 at xmax: the cumulative
     trapezoid integral on _dcb_grid, normalized and interpolated to x
     (_grid_cdf)."""
-    # 4.1 Unnormalized DCB at the grid masses (no factor)
+    # Unnormalized DCB at the grid masses
     masses, shape = _dcb_grid(xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR)
-    # 4.3-4.5
+    # Integrate cumulatively, normalize to [0, 1], interpolate to x
     return _grid_cdf(x, masses, shape)
 
 
@@ -231,8 +231,7 @@ def dcb_window_yield(p, e, xmin, xmax, window):
 #                       bin. `masses`: n_grid evenly spaced masses spanning
 #                       [xmin, xmax] [MeV]. `factor`: f at those masses.
 #
-# Fit of one Dalitz bin; the numbers label the code below (the caller does 1
-# and 5):
+# Fit of one Dalitz bin (the caller does 1 and 5):
 #   1. Histogram the M of the candidates in the box: counts, bin_edges.
 #   2. sample_factor(f, xmin, xmax) -> factor_grid, once per Dalitz bin.
 #   3. make_dcb_cost(counts, bin_edges, xmin, xmax, signal_factor_grid=...,
@@ -278,9 +277,9 @@ def sample_factor(factor_fn, xmin, xmax, n_grid=2000):
         masses : (n_grid,) evenly spaced masses spanning [xmin, xmax] [MeV]
         factor : (n_grid,) f at `masses`
     """
-    # 2. n_grid evenly spaced masses spanning [xmin, xmax]
+    # n_grid evenly spaced masses spanning [xmin, xmax]
     masses = np.linspace(xmin, xmax, n_grid)
-    # 2. f at each of them
+    # f at each of them
     return masses, np.asarray(factor_fn(masses), dtype=float)
 
 
@@ -289,13 +288,13 @@ def _grid_cdf(x, masses, weighted_shape):
     integral from masses[0], divided by the total, so it runs from 0 at
     masses[0] to 1 at masses[-1]. All zeros if the weighted shape is 0
     everywhere (a component f forbids in the bin; its yield is fixed to 0)."""
-    # 4.3 Cumulative trapezoid integral from masses[0]; cumulative[0] = 0
+    # Cumulative trapezoid integral from masses[0]; cumulative[0] = 0
     cumulative = np.zeros_like(weighted_shape)
     cumulative[1:] = np.cumsum(0.5 * (weighted_shape[:-1] + weighted_shape[1:]) * np.diff(masses))
     # Weighted shape 0 everywhere: CDF 0 everywhere
     if cumulative[-1] <= 0:
         return np.zeros_like(np.asarray(x, float))
-    # 4.4 Divide by the total; 4.5 interpolate to x
+    # Divide by the total, interpolate to x
     return np.interp(np.asarray(x, float), masses, cumulative / cumulative[-1])
 
 
@@ -319,11 +318,11 @@ def weighted_dcb_cdf(factor_grid):
                   the one `masses` spans.
     """
     masses, factor = factor_grid
-    # 3.1 Signal CDF function of this Dalitz bin
+    # Signal CDF function of this Dalitz bin
     def cdf(x, xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR):
-        # 4.1 Unnormalized DCB at the grid masses; 4.2 times f
+        # Unnormalized DCB at the grid masses, times f
         weighted_shape = dcb_unnorm(masses, mean, sigma, alphaL, nL, alphaR, nR) * factor
-        # 4.3-4.5
+        # Integrate cumulatively, normalize to [0, 1], interpolate to x
         return _grid_cdf(x, masses, weighted_shape)
     return cdf
 
@@ -364,11 +363,11 @@ def weighted_cheb_cdf(factor_grid):
     masses, factor = factor_grid
     # Masses the Chebyshev variable x̃ spans
     mass_lo, mass_hi = reachable_range(factor_grid)
-    # 3.1 Background CDF function of this Dalitz bin
+    # Background CDF function of this Dalitz bin
     def cdf(x, xmin, xmax, c0, c1):
-        # 4.1 Unnormalized Chebyshev at the grid masses, floored at BKG_FLOOR
+        # Unnormalized Chebyshev at the grid masses, floored at BKG_FLOOR
         cheb = np.clip(cheb_bkg_unnorm(masses, mass_lo, mass_hi, c0, c1), BKG_FLOOR, None)
-        # 4.2 Times f; 4.3-4.5
+        # Times f; integrate cumulatively, normalize to [0, 1], interpolate to x
         return _grid_cdf(x, masses, cheb * factor)
     return cdf
 
@@ -412,13 +411,13 @@ def _make_scaled_cdf(signal_param_names, signal_cdf, bkg_cdf, xmin, xmax):
     n_sig_params = len(signal_param_names)
     param_names = tuple(signal_param_names) + ('n_sig', 'n_bkg') + BKG_PARAMS
 
-    # 3.2 Combine into scaled_cdf = n_sig * signal CDF + n_bkg * background CDF
+    # Combine into scaled_cdf = n_sig * signal CDF + n_bkg * background CDF
     def scaled_cdf(xe, *args):
         # Split args into signal shape, yields, background shape
         sig_args = args[:n_sig_params]
         n_sig, n_bkg = args[n_sig_params], args[n_sig_params + 1]
         bkg_args = args[n_sig_params + 2:]
-        # 4. Expected cumulative count at each mass-bin edge xe
+        # Expected cumulative count at each mass-bin edge xe
         return (signal_cdf(xe, xmin, xmax, *sig_args) * n_sig
                 + bkg_cdf(xe, xmin, xmax, *bkg_args) * n_bkg)
 
@@ -444,18 +443,18 @@ def make_dcb_cost(counts, bin_edges, xmin, xmax, signal_factor_grid=None, bkg_fa
     bkg_factor_grid    : the same for the background: weighted_cheb_cdf
                          instead of cheb_cdf.
     """
-    # 3.1 Signal CDF, weighted by f if signal_factor_grid is given
+    # Signal CDF, weighted by f if signal_factor_grid is given
     signal_cdf = dcb_cdf
     if signal_factor_grid is not None:
         signal_cdf = weighted_dcb_cdf(signal_factor_grid)
-    # 3.1 Background CDF, weighted by f if bkg_factor_grid is given
+    # Background CDF, weighted by f if bkg_factor_grid is given
     bkg_cdf = cheb_cdf
     if bkg_factor_grid is not None:
         bkg_cdf = weighted_cheb_cdf(bkg_factor_grid)
-    # 3.2 Combine into scaled_cdf = n_sig * signal CDF + n_bkg * background CDF
+    # Combine into scaled_cdf = n_sig * signal CDF + n_bkg * background CDF
     signal_params = ('mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR')
     scaled_cdf, param_names = _make_scaled_cdf(signal_params, signal_cdf, bkg_cdf, xmin, xmax)
-    # 3.3 Extended binned Poisson likelihood of counts in bin_edges
+    # Extended binned Poisson likelihood of counts in bin_edges
     return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf, name=param_names)
 
 
