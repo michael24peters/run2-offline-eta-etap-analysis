@@ -13,8 +13,7 @@
 # root files directory
 ntuple/
 
-# outputs/ directory
-outputs/
+# out/ directory
 out/
 
 # old/ directory
@@ -39,3 +38,9 @@ __pycache__/
 # Linter files
 .ruff_cache/
 ruff.toml
+
+# local write-ups
+docs/
+
+# dot directories
+.*/ 
