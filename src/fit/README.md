@@ -247,7 +247,7 @@ its arbitrarily-chosen candidate failed. Reordering is a matter of moving two
 lines in the driver.
 
 `drop_malformed()` removes events with no candidates and events whose `prt_*`
-branches are inconsistent with `prt_idx_mom` (~0.1% of current ntuples). It works
+branches are inconsistent with `prt_idx_mom`. It works
 out which branches live at which level from their name prefixes, so **every**
 `prt_*` branch read is checked as a daughter field and every `tag_*` branch as a
 candidate field — forgetting to list one is how a ragged event survives to blow
@@ -263,45 +263,7 @@ as a real index and throws no error, which then produces the wrong entry.
 
 ## Known ntuple quirks
 
-Open items, surfaced by the drivers on stderr every run. Each is worked around
-rather than solved, and each is worth chasing upstream in the ntuple production.
-
-**Ragged HLT2 trigger branches.** `tag_hlt2_tos0` / `tag_hlt2_tos1` are not
-always written with one entry per candidate. Two distinct cases:
-
-- *Absent* (empty list): the line was not evaluated for that event. Treated as
-  "did not fire" and zero-filled by `_align_candidates()`. Reported as
-  `[INFO] <branch>: not evaluated in N/M events`. If a branch is ever absent in
-  *all* events it contributes nothing to its level's OR, so it is escalated to
-  `[WARN]`; if every line of a level is absent, no candidate passes TOS.
-- *Partial* (fewer entries than candidates): there is no way to tell which
-  candidate each entry belongs to, so `drop_malformed()` drops those events
-  rather than assuming positional correspondence. Reported as
-  `[WARN] <branch>: partial in N events`.
-
-Measured on `ntuple/lhcb/.../20260716/combined_files.root`:
-
-| channel | partial (events dropped) | `tag_hlt2_tos0` absent | `tag_hlt2_tos1` absent |
-|---|---|---|---|
-| `eta2mumu` | none | none | none |
-| `eta2mumugamma` | 16.8% | 88.3% | 52.1% |
-
-So `eta2mumu` is clean, while `eta2mumugamma` loses ~17% of events to the
-ambiguity, and a candidate passes the HLT2 level only where an HLT2 line was
-actually evaluated. Both the absent and the partial lists come from the
-`turboTISTOS` / `fill(key, None)` path described under "HLT2 TOS is 0 in every
-data ntuple" below.
-
-**HLT2 TOS is 0 in every data ntuple.** In `ntuple/lhcb/eta2mumugamma/{20260507,20260608,20260716}`
-every `tag_hlt2_tos*` entry is 0; in MC (`signal_20260716`) and in
-`eta2mumu/20260716` data they are filled. TOS therefore selects no eta2mumugamma
-data candidates until the data is reprocessed. Cause, from a local `ana.py` run
-on Leptons Turbo data: `~/ana/src/ntuple.py:turboTISTOS` reads the track of every
-candidate daughter, the photon has none, the exception is swallowed and the
-function returns `None`; `Ntuple.fill(key, None)` then calls `TTree::Fill()` in
-the middle of the candidate loop. That same path writes the ~5x partial copies of
-each event in `eta2mumugamma/20260716`. Data 20260507 also has HLT1 TOS 0
-everywhere.
+Properties of the ntuple productions that the selection depends on.
 
 **Trigger branch numbering depends on the production.** `tag_<level>_tos<i>` is
 the i-th line of `l0Trgs` / `hlt1Trgs` / `hlt2Trgs` in the `~/ana/src/ntuple.py`
@@ -320,16 +282,15 @@ Hlt1DiMuonLowMass) keep the same order in all of them. Since 2026-10-05 each
 level has further lines after those: L0 `tos2` L0Hadron (TIS line), HLT1
 `tos2` Hlt1MultiDiMuonNoIP and `tos3` Hlt1TrackMVA (TIS line).
 
-**Inconsistent `prt_*` lengths.** In a small fraction of events (~0.1% in MC)
-the `prt_*` branches disagree in length with `prt_idx_mom`, or an index points
-past the last candidate. Those events are dropped and counted.
-
-> **Caveat on the best-candidate metric.** In current ntuples `tag_dtf_chi2` is
-> identical across all candidates in ~61% of multi-candidate events, with a
-> median mass spread of ~300 MeV within those events -- so `method='min'` is
-> effectively picking candidate 0 arbitrarily most of the time.
-> `find_best_candidates()` takes `metric=` / `method=` so a better discriminant
-> can be substituted.
+> **Caveat on the best-candidate metric.** In the 20261006 `eta2mumugamma`
+> ntuples `tag_dtf_chi2` is the same for every candidate, to a relative
+> difference below 1e-9, in 95% of multi-candidate data events and 91% of
+> multi-candidate MC events, with a median mass spread of 180 MeV (data) and
+> 300 MeV (MC) within those events. In `eta2mumu` this never occurs. The values
+> differ only by floating-point rounding, so taking the minimum selects the
+> best candidate by rounding noise in most multi-candidate `eta2mumugamma`
+> events. `best_candidate_mask()` takes the ranking branch as `metric_branch`
+> (`METRIC_BRANCH` in the drivers), so a better discriminant can be substituted.
 
 
 ## Per-Dalitz-bin fits: the phase-space factor
