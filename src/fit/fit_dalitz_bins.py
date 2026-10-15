@@ -16,19 +16,16 @@ the bin reachable by a gamma mu+ mu- system of mass M:
 
 Steps: global DCB + Chebyshev fit of every event in the mass window (its
 mean/sigma become a prior for every bin, its tails are held fixed in every
-bin) -> one fit per bin -> dalitz_fit_<binning>_<signal-factor>.json.
+bin) -> one fit per bin -> dalitz_fit_grid_<signal-factor>.json.
 
-Binnings:
-    grid   14 x 14 bins over m12 in M12_RANGE and m23 in M23_RANGE
-    q2     14 strips over m23 in M23_RANGE (the grid's rows), each covering
-           every m12 a candidate in the mass window can have
+Bins: a 14 x 14 grid over m12 in M12_RANGE and m23 in M23_RANGE.
 
 Bins the eta itself cannot reach (signal factor 0 at m_eta) have n_sig fixed
 to 0.
 
 Usage:
     python src/fit/fit_dalitz_bins.py OUTDIR/dalitz_events.npz
-        --binning grid|q2 --signal-factor flat|dalitz [--tail-prior PATH]
+        --signal-factor flat|dalitz [--tail-prior PATH]
 """
 
 import argparse
@@ -52,7 +49,7 @@ MEAN_INIT, SIGMA_INIT = kinematics.M_ETA, 10.0  # global-fit seeds [MeV]
 BKG_MODEL = 'cheb2'
 
 M12_RANGE = (0.0, 0.21)   # m^2(gamma mu+) range of the grid [GeV^2]
-M23_RANGE = (0.0, 0.31)   # m^2(mu+ mu-) range of the grid and strips [GeV^2]
+M23_RANGE = (0.0, 0.31)   # m^2(mu+ mu-) range of the grid [GeV^2]
 N_PER_AXIS = 14           # bins per axis
 
 MIN_CANDIDATES = 10         # bins with this many candidates or fewer in the window are not fit
@@ -72,7 +69,6 @@ parser = argparse.ArgumentParser(
     description='Per-Dalitz-bin mass fits',
     formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
 parser.add_argument('events', help='dalitz_events.npz from driver_dalitz.py')
-parser.add_argument('--binning', required=True, choices=['grid', 'q2'])
 parser.add_argument('--signal-factor', required=True, choices=list(SIGNAL_FACTORS))
 parser.add_argument('--tail-prior', default=TAIL_PRIOR_PATH,
                     help='Results JSON of the MC DCB fit whose tails seed the global-fit prior')
@@ -89,13 +85,9 @@ m12s, m23s, masses = events['m12s'], events['m23s'], events['masses']
 with open(os.path.join(os.path.dirname(os.path.abspath(args.events)), 'selection.json')) as f:
     selection = json.load(f)
 
-# Bin edges [GeV^2]. A q2 strip spans every m12 up to (XMAX)^2, above any
-# m12 a candidate with M < XMAX can have.
+# Bin edges [GeV^2].
+m12_edges = np.linspace(*M12_RANGE, N_PER_AXIS + 1)
 m23_edges = np.linspace(*M23_RANGE, N_PER_AXIS + 1)
-if args.binning == 'grid':
-    m12_edges = np.linspace(*M12_RANGE, N_PER_AXIS + 1)
-else:
-    m12_edges = np.array([0.0, (XMAX / 1000.0)**2])
 mass_edges = np.linspace(XMIN, XMAX, MASS_NBINS + 1)
 
 # --- Global fit --------------------------------------------------------------
@@ -150,7 +142,8 @@ for i in range(len(m12_edges) - 1):
         # Factors on FACTOR_GRID, as fit_utils's (masses, factor) weights.
         bkg_weight = (FACTOR_GRID, kinematics.phase_space_factor(FACTOR_GRID, m12_range, m23_range))
         sig_weight = (FACTOR_GRID, signal_factor(FACTOR_GRID, m12_range, m23_range))
-        no_signal = bool(np.interp(kinematics.M_ETA, *sig_weight) == 0.0)
+        # True where the signal factor, evaluated at m_eta itself, is exactly 0.
+        no_signal = bool(signal_factor(np.array([kinematics.M_ETA]), m12_range, m23_range)[0] == 0.0)
 
         # Extended binned likelihood of f_sig * DCB + f_bkg * Chebyshev, plus the prior.
         sig_cdf = fit_utils.weighted_dcb_cdf(sig_weight)
@@ -192,6 +185,13 @@ for i in range(len(m12_edges) - 1):
         ndof = int(filled.sum()) - fit.nfit
         pulls = np.where(filled, (counts - bin_fit) / np.sqrt(np.where(filled, counts, 1.0)), 0.0)
 
+        # TODO: fit robustness in edge bins. Two symptoms: the raw Chebyshev goes negative at
+        # reachable masses (it is floored at fit_utils.BKG_FLOOR and the bin gets
+        # bkg_goes_negative below), and the HESSE error on n_sig collapses when a parameter sits
+        # at a limit (signal MC bin (12, 4): 141 +- 2 for 119 true decays). Candidate: an option
+        # whose default does nothing, with choices to floor the background at zero, to only mark
+        # the affected bins, or to apply a more robust treatment such as MINOS errors (intervals
+        # from scanning the likelihood, which stay valid at a parameter limit).
         # True where the raw Chebyshev goes negative at some reachable mass.
         reachable = bkg_weight[1] > 0
         bkg_negative = bool(np.any(bkg_model.unnorm(FACTOR_GRID[reachable], XMIN, XMAX,
@@ -232,7 +232,7 @@ in_grid = ((m12s >= m12_edges[0]) & (m12s < m12_edges[-1])
            & (m23s >= m23_edges[0]) & (m23s < m23_edges[-1]))
 in_window = (masses >= XMIN) & (masses < XMAX)
 
-print(f'[INFO] {args.binning} / {args.signal_factor}: {len(bins)} bins, '
+print(f'[INFO] grid / {args.signal_factor}: {len(bins)} bins, '
       f'{len(bins) - len(fitted)} skipped, {len(fitted) - len(valid)} invalid, {len(valid)} valid, '
       f"{sum(b['n_sig_fixed_zero'] for b in fitted)} with n_sig fixed to 0, "
       f"{sum(b.get('bkg_goes_negative', False) for b in valid)} with negative background")
@@ -244,7 +244,6 @@ print(f'[INFO] chi2/ndof over valid bins: median {np.median(chi2s):.3f}, max {ch
 # --- Write -------------------------------------------------------------------
 
 result['dalitz'] = {
-    'binning': args.binning,
     'signal_factor': args.signal_factor,
     'background_factor': 'flat',
     'ff_lambda_gev': kinematics.FF_LAMBDA if args.signal_factor == 'dalitz' else None,
@@ -269,7 +268,7 @@ result['dalitz'] = {
     },
     'bins': bins,
 }
-json_path = os.path.join(outdir, f'dalitz_fit_{args.binning}_{args.signal_factor}.json')
+json_path = os.path.join(outdir, f'dalitz_fit_grid_{args.signal_factor}.json')
 with open(json_path, 'w') as f:
     json.dump(result, f, indent=1)
 print(f'[DONE] {json_path}')

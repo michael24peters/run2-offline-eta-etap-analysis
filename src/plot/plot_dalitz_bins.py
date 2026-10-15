@@ -6,9 +6,8 @@ JSON's name (without .json) as prefix:
 
     global_fit.png               the global DCB + Chebyshev fit (the same for
                                  every results JSON of one events file)
-    <prefix>_signal_yield.png    n_sig per bin                 (grid)
-    <prefix>_bkg_yield.png       n_bkg per bin                 (grid)
-    <prefix>_q2_yield.png        n_sig per q^2 strip           (q2)
+    <prefix>_signal_yield.png    n_sig per bin
+    <prefix>_bkg_yield.png       n_bkg per bin
     <prefix>_per_bin_fits.pdf    one page per bin, in order of i then j
 
 Usage:
@@ -41,14 +40,13 @@ SIGNAL_KEYS = {'mean', 'sigma', 'n_sig', 'n_bkg'}
 C = plot_style.COLORS
 
 parser = argparse.ArgumentParser(description='Figures from a fit_dalitz_bins.py results JSON')
-parser.add_argument('results', help='dalitz_fit_<binning>_<signal-factor>.json')
+parser.add_argument('results', help='dalitz_fit_grid_<signal-factor>.json')
 args = parser.parse_args()
 
 with open(args.results) as f:
     result = json.load(f)
 dalitz = result['dalitz']
 prefix = os.path.splitext(args.results)[0]
-binning = dalitz['binning']
 
 m12_edges = np.array(dalitz['m12_edges'])
 m23_edges = np.array(dalitz['m23_edges'])
@@ -69,41 +67,22 @@ plot_utils.apply_font()
 plt.rcParams['font.size'] = 11
 boundary12, boundary23 = dalitz_boundary(kinematics.M_ETA)
 
-if binning == 'grid':
-    # One map per yield, on the Dalitz grid, with the eta's Dalitz region.
-    for key, name, label in [('n_sig', 'signal', 'Fitted signal yield'),
-                             ('n_bkg', 'bkg', 'Fitted background yield')]:
-        yields = np.zeros((len(m12_edges) - 1, len(m23_edges) - 1))
-        for (i, j), b in bins.items():
-            if b['valid']:
-                yields[i, j] = b[key]
-        fig, ax = plt.subplots(figsize=(7, 6))
-        mesh = ax.pcolormesh(m12_edges, m23_edges, yields.T, cmap='viridis', shading='auto')
-        fig.colorbar(mesh, ax=ax, label=label, pad=0.13)
-        ax.plot(boundary12, boundary23, color='red', lw=1, label=r'Dalitz region at $m_\eta$')
-        ax.legend(loc='upper right', fontsize=8)
-        ax.set_xlabel(r'$m^2_{\gamma\mu^+}$ [GeV$^2$]')
-        ax.set_ylabel(r'$m^2_{\mu^+\mu^-}$ [GeV$^2$]')
-        plot_style.add_bin_index_axes(ax, m12_edges, m23_edges)
-        plot_style.save_plot(fig, f'{prefix}_{name}_yield.png')
-        plt.close(fig)
-else:
-    # Signal yield per q^2 strip; strips without a valid fit are left out.
-    strips = [bins[(0, j)] for j in range(len(m23_edges) - 1) if bins[(0, j)]['valid']]
-    q2_lo = np.array([b['m23_range'][0] for b in strips])
-    q2_hi = np.array([b['m23_range'][1] for b in strips])
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.errorbar(0.5 * (q2_lo + q2_hi), [b['n_sig'] for b in strips],
-                xerr=0.5 * (q2_hi - q2_lo), yerr=[b['n_sig_err'] for b in strips],
-                fmt='o', color=C['data'], markersize=5, capsize=0)
-    # Dimuon threshold and the eta's largest q^2.
-    for q2_limit in (4 * (kinematics.M_MU / 1000.0)**2, (kinematics.M_ETA / 1000.0)**2):
-        ax.axvline(q2_limit, color=C['reference'], linestyle='--', lw=1)
-    ax.set_xlabel(r'$q^2 = m^2_{\mu^+\mu^-}$ [GeV$^2$]')
-    ax.set_ylabel('Fitted signal yield per strip (not efficiency-corrected)')
-    ax.set_ylim(bottom=0)
-    plot_style.style_axes(ax)
-    plot_style.save_plot(fig, f'{prefix}_q2_yield.png')
+# One map per yield, on the Dalitz grid, with the eta's Dalitz region.
+for key, name, label in [('n_sig', 'signal', 'Fitted signal yield'),
+                         ('n_bkg', 'bkg', 'Fitted background yield')]:
+    yields = np.zeros((len(m12_edges) - 1, len(m23_edges) - 1))
+    for (i, j), b in bins.items():
+        if b['valid']:
+            yields[i, j] = b[key]
+    fig, ax = plt.subplots(figsize=(7, 6))
+    mesh = ax.pcolormesh(m12_edges, m23_edges, yields.T, cmap='viridis', shading='auto')
+    fig.colorbar(mesh, ax=ax, label=label, pad=0.13)
+    ax.plot(boundary12, boundary23, color='red', lw=1, label=r'Dalitz region at $m_\eta$')
+    ax.legend(loc='upper right', fontsize=8)
+    ax.set_xlabel(r'$m^2_{\gamma\mu^+}$ [GeV$^2$]')
+    ax.set_ylabel(r'$m^2_{\mu^+\mu^-}$ [GeV$^2$]')
+    plot_style.add_bin_index_axes(ax, m12_edges, m23_edges)
+    plot_style.save_plot(fig, f'{prefix}_{name}_yield.png')
     plt.close(fig)
 
 # --- Per-bin pages -----------------------------------------------------------

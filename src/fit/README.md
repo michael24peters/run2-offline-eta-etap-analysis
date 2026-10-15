@@ -314,8 +314,8 @@ choice of signal factor:
 python src/fit/driver_dalitz.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
     --outdir OUT [--tos-levels L0 HLT1 HLT2] [--pnn-mu-min X] [--max-events N]
 python src/fit/fit_dalitz_bins.py OUT/dalitz_events.npz \
-    --binning grid|q2 --signal-factor flat|dalitz [--tail-prior PATH]
-python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_<binning>_<signal-factor>.json
+    --signal-factor flat|dalitz [--tail-prior PATH]
+python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_grid_<signal-factor>.json
 ```
 
 - `driver_dalitz.py`: read ROOT -> TOS (default L0, HLT1 and HLT2) -> best
@@ -324,19 +324,18 @@ python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_<binning>_<signal-factor>.jso
   `selection.json` (cutflow).
 - `fit_dalitz_bins.py`: global DCB + Chebyshev fit (tail prior from the
   truth-matched rebuilt-mass MC fit by default), then one fit per bin ->
-  `dalitz_fit_<binning>_<signal-factor>.json`. `grid` is the 14 x 14 grid;
-  `q2` is 14 strips in m23 = q^2, each over every m12. The background factor is
-  always `kinematics.phase_space_factor` (flat). The signal factor is either
-  the same (`flat`) or `kinematics.dalitz_factor` (`dalitz`): the fraction of
-  the bin reachable at M with each point weighted by
+  `dalitz_fit_grid_<signal-factor>.json`, on the 14 x 14 grid. The background
+  factor is always `kinematics.phase_space_factor` (flat). The signal factor
+  is either the same (`flat`) or `kinematics.dalitz_factor` (`dalitz`): the
+  fraction of the bin reachable at M with each point weighted by
   `kinematics.dalitz_density`, the eta -> gamma gamma* -> gamma mu+ mu-
   (Kroll-Wada) density with the NA60 2016 pole form factor (`FF_LAMBDA`).
   Bins with signal factor 0 at m_eta have n_sig fixed to 0.
-- `plot_dalitz_bins.py`: global fit (`global_fit.png`), yield maps (grid) or
-  yield vs q^2 (q2), and the per-bin fit pages (`*_per_bin_fits.pdf`).
+- `plot_dalitz_bins.py`: global fit (`global_fit.png`), yield maps, and the
+  per-bin fit pages (`*_per_bin_fits.pdf`).
 
-With `--tos-levels L0 HLT1` in the driver, and `--signal-factor flat --binning
-grid` with the 20260903 tail prior in the fit, the scripts reproduce
+With `--tos-levels L0 HLT1` in the driver, and `--signal-factor flat` with
+the 20260903 tail prior in the fit, the scripts reproduce
 `fit_dalitz.ipynb` (L0 + HLT1 TOS, 20260608 data) bin for bin.
 
 
