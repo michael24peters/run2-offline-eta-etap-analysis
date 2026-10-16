@@ -34,7 +34,7 @@ Usage:
                        [--mean-init 548] [--sigma-init 5]
                        [--alphaL-init 1.5] [--nL-init 2]
                        [--alphaR-init 1.5] [--nR-init 2]
-                       [--tail-prior-factor 5]
+                       [--tail-prior-factor 5] [--daughter-pids -13 13 [22]]
 """
 
 import argparse
@@ -66,7 +66,7 @@ DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']   # branches the cuts below read
 PNN_MU_MIN      = 0.4              # every muon daughter must exceed this
 MUON_PID        = 13               # |pid| the pnn_mu cut applies to
 MOTHER_PID      = 221              # signal mother PID, for truth-matching (eta)
-DAUGHTER_PIDS   = [-13, 13]        # signal daughter PIDs, for truth-matching
+DAUGHTER_PIDS   = [-13, 13]        # default signal daughter PIDs, for truth-matching
 
 # Trigger-on-signal lines per trigger level. The candidate must be TOS on at
 # least one line at every level (cut_utils.tos_mask).
@@ -108,6 +108,9 @@ parser.add_argument('--no-tos', action='store_true',
                     help='Skip the TOS trigger requirement, for selection studies')
 parser.add_argument('--no-truth-match', action='store_true',
                     help='Skip MC truth-matching on the MC leg, for selection studies')
+parser.add_argument('--daughter-pids', nargs='+', type=int, default=DAUGHTER_PIDS,
+                    help='Signal daughter PIDs for truth-matching (default: -13 13; '
+                         '-13 13 22 for eta -> mu+ mu- gamma)')
 parser.add_argument('--xmin', type=float, default=480.0, help='Lower mass bound [MeV]')
 parser.add_argument('--xmax', type=float, default=620.0, help='Upper mass bound [MeV]')
 parser.add_argument('--nbins', type=int, default=80, help='Number of histogram bins')
@@ -133,7 +136,7 @@ def select_masses(infile, tag, truth_match=False):
     `tag` ('mc' or 'data') labels the [INFO] log lines.
 
     `truth_match` (MC file only): require every daughter of a candidate to
-    match the signal decay MOTHER_PID -> DAUGHTER_PIDS, i.e. a matched
+    match the signal decay MOTHER_PID -> args.daughter_pids, i.e. a matched
     generator particle whose true PID equals the reco PID and whose mother
     is the signal mother (bkg_utils.signal_candidate_mask).
     """
@@ -161,12 +164,14 @@ def select_masses(infile, tag, truth_match=False):
     truth_report = None
     if truth_match:
         # Per candidate: every daughter matches the signal decay
-        # MOTHER_PID -> DAUGHTER_PIDS (see bkg_utils.signal_daughter_mask).
+        # MOTHER_PID -> args.daughter_pids (see bkg_utils.signal_daughter_mask).
         truth_matched = bkg_utils.signal_candidate_mask(
-            tree, MOTHER_PID, DAUGHTER_PIDS, target_ref=MASS_BRANCH)
+            tree, MOTHER_PID, args.daughter_pids, target_ref=MASS_BRANCH)
 
         keep = keep & truth_matched
         truth_report = {
+            'mother_pid': MOTHER_PID,
+            'daughter_pids': args.daughter_pids,
             'truth_matched': int(ak.sum(truth_matched)),
         }
 
