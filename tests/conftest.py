@@ -1,8 +1,8 @@
 """
 Shared pytest fixtures and path setup.
 
-`src/utils` and `src/root` are not packages, so they go on sys.path the same way
-every script in the repo does it.
+`src/utils`, `src/root` and `src/fit` are not packages, so they go on sys.path
+the same way every script in the repo does it.
 
 Every fixture here is a hand-built toy tree -- no ROOT files, no network. The
 trees are small enough to verify by eye, which is the point: a test that needs
@@ -25,6 +25,7 @@ import pytest
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'src', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'src', 'root'))
+sys.path.insert(0, os.path.join(_here, '..', 'src', 'fit'))
 
 
 def make_tree(**fields):
