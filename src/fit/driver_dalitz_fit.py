@@ -7,6 +7,8 @@ driver_dalitz.py wrote:
     dalitz_events.npz -> N_PER_AXIS x N_PER_AXIS grid over M12_RANGE x M23_RANGE
                       -> fit_dalitz (global fit, then one fit per bin)
                       -> dalitz_fit_<factor>.json
+                      -> plot_dalitz_bins.plot_dalitz_fit (global fit, yield
+                         maps, per-bin pages)
 
     <factor>  none    no factor on either shape (default)
               flat    --phase-space: kinematics.phase_space_factor on the
@@ -23,6 +25,7 @@ rebuilt mass; events written with another driver_dalitz.py --mass need
 Usage:
     python src/fit/driver_dalitz_fit.py OUTDIR/dalitz_events.npz
         [--phase-space [--dalitz-factor]] [--tail-prior PATH] [--outdir DIR]
+        [--horizontal]
 """
 
 import argparse
@@ -34,10 +37,12 @@ import numpy as np
 
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
+sys.path.insert(0, os.path.join(_here, '..', 'plot'))
 import fit_utils
 import kinematics
 from fit_dalitz import fit_dalitz, hole_neighbors
 from fit_dcb import TAIL_PARAMS
+from plot_dalitz_bins import plot_dalitz_fit
 
 # --- Configuration -----------------------------------------------------------
 
@@ -67,6 +72,8 @@ parser.add_argument('--tail-prior', default=None,
                          '(default: TAIL_PRIOR_PATH, rebuilt-mass events only)')
 parser.add_argument('--outdir', default=None,
                     help="Output directory (default: the events file's directory)")
+parser.add_argument('--horizontal', action='store_true',
+                    help='Also write the per-bin pages with j (m23) as the outer loop')
 args = parser.parse_args()
 if args.dalitz_factor and not args.phase_space:
     parser.error('--dalitz-factor requires --phase-space')
@@ -167,3 +174,5 @@ json_path = os.path.join(outdir, f'dalitz_fit_{factor_label}.json')
 with open(json_path, 'w') as f:
     json.dump(result, f, indent=1)
 print(f'[DONE] {json_path}')
+
+plot_dalitz_fit(result, os.path.splitext(json_path)[0], horizontal=args.horizontal)
