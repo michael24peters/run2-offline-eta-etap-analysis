@@ -13,7 +13,7 @@ import numpy as np
 from iminuit import Minuit
 from iminuit.cost import ExtendedBinnedNLL
 from scipy.integrate import cumulative_trapezoid, trapezoid
-from scipy.special import erf
+from scipy.special import erf, xlogy
 
 
 def make_histogram(values, xmin, xmax, nbins):
@@ -127,32 +127,31 @@ A Gaussian core with independent power-law tails on each side of the peak:
   where   t = (x − μ) / σ.
 """
 
-def _dcb_tail_constants(alpha, n):
+def _dcb_tail(u, alpha, n):
     """
-    Continuity constants A, B for one DCB tail (alpha > 0).
-    At the transition point t = -|alpha| (left) or t = |alpha| (right):
+    One DCB tail at distance u = |t| > |alpha| from the mean, in units of
+    sigma: A · (B + u)^(-n) with the continuity constants
       A = (n/|α|)^n · exp(-α²/2)
-      B = n/|α| - |α|
+      B = n/|α| - |α|,
+    evaluated as exp(-α²/2 + n·log(n/|α|) - n·log(B + u)), which stays finite
+    for large n (A alone overflows).
     """
     abs_a = abs(alpha)
-    A = (n / abs_a) ** n * math.exp(-0.5 * alpha * alpha)
-    B = n / abs_a - abs_a
-    return A, B
+    n_over_a = n / abs_a
+    return np.exp(-0.5 * alpha * alpha + xlogy(n, n_over_a) - n * np.log(n_over_a - abs_a + u))
 
 
 def dcb_unnorm(x, mean, sigma, alphaL, nL, alphaR, nR):
     """Unnormalized Double Crystal Ball PDF."""
     x = np.asarray(x, float)
     t = (x - mean) / sigma
-    AL, BL = _dcb_tail_constants(alphaL, nL)
-    AR, BR = _dcb_tail_constants(alphaR, nR)
     out = np.empty_like(t)
     mc = (-alphaL <= t) & (t <= alphaR)
     ml = t < -alphaL
     mr = t >  alphaR
     out[mc] = np.exp(-0.5 * t[mc]**2)
-    out[ml] = AL * (BL - t[ml]) ** (-nL)
-    out[mr] = AR * (BR + t[mr]) ** (-nR)
+    out[ml] = _dcb_tail(-t[ml], alphaL, nL)
+    out[mr] = _dcb_tail(t[mr], alphaR, nR)
     return out
 
 

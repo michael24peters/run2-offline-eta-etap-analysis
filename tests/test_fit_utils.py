@@ -307,3 +307,21 @@ def test_build_prior_falls_back_to_diagonal_when_covariance_is_none():
     assert values == pytest.approx([100.0, 500.0])
     assert cov == pytest.approx(np.diag([10.0**2, 20.0**2]) * 4.0)
     assert cov[0, 1] == 0.0
+
+
+# --- DCB tails ---------------------------------------------------------------
+
+def test_dcb_tails_match_the_power_law_and_stay_finite_for_large_n():
+    """dcb_unnorm's tails equal A * (B + u)^(-n), A = (n/alpha)^n exp(-alpha^2/2),
+    B = n/alpha - alpha, where that is finite, and stay finite where A alone
+    overflows."""
+    t = np.linspace(-20, 20, 4001)
+    for alpha, n in [(1.5, 2.0), (0.8, 5.5), (2.5, 0.2), (1.2, 40.0)]:
+        A = (n / alpha)**n * np.exp(-0.5 * alpha**2)
+        B = n / alpha - alpha
+        expected = np.where(np.abs(t) <= alpha, np.exp(-0.5 * t**2),
+                            A * (B + np.abs(t))**(-n))
+        assert np.allclose(fit_utils.dcb_unnorm(t, 0.0, 1.0, alpha, n, alpha, n), expected,
+                           rtol=1e-12, atol=0)
+    y = fit_utils.dcb_unnorm(t, 0.0, 1.0, 0.5, 2000.0, 0.5, 2000.0)
+    assert np.all(np.isfinite(y)) and np.all(y >= 0)
