@@ -191,3 +191,21 @@ def test_hole_neighbors_lists_fitted_neighbors_of_invalid_bins():
         entry(2, 0, True, True, 70.0),
     ]}}
     assert hole_neighbors(result) == [(1, 0, 40.0, {(-1, 0): 50.0, (1, 0): 70.0, (0, 1): 60.0})]
+
+
+def test_signal_only_fixes_the_background_to_zero(physical_toy):
+    """signal_only on signal toys: n_bkg is 0 in the global fit and in every
+    bin, and n_sig equals the bin's candidates wherever it floats."""
+    m12s, m23s, masses, is_signal = physical_toy
+    result, global_fit = fit_dalitz(m12s[is_signal], m23s[is_signal], masses[is_signal],
+                                    M12_EDGES, M23_EDGES, xmin=XMIN, xmax=XMAX,
+                                    min_candidates=MIN_CANDIDATES,
+                                    signal_factor=kinematics.phase_space_factor,
+                                    bkg_factor=kinematics.phase_space_factor, signal_only=True)
+    assert global_fit.valid and global_fit.values['n_bkg'] == 0.0
+    assert result['dalitz']['signal_only']
+    floating = [b for b in result['dalitz']['bins'] if b['fitted'] and not b['n_sig_fixed_zero']]
+    assert floating
+    for b in floating:
+        assert b['valid'] and b['n_bkg'] == 0.0
+        assert b['n_sig'] == pytest.approx(b['n_cand'], rel=1e-3)

@@ -31,6 +31,9 @@ Per-bin fit:
                   from fit_utils.BKG_INIT (flat) with it
     With signal_factor 0 at m_eta (a bin the eta cannot reach), n_sig is
     fixed to 0 and mean, sigma to the global fit's values.
+
+signal_only=True (truth-matched signal MC) fixes n_bkg to 0 and c0, c1 to
+fit_utils.BKG_INIT in the global fit and in every bin.
 """
 
 import os
@@ -64,7 +67,7 @@ def bin_factor_grid(factor, m12_range, m23_range, xmin, xmax):
 
 
 def fit_bin(counts, mass_edges, xmin, xmax, seed, prior_cov, bkg_seed,
-            signal_factor_grid=None, bkg_factor_grid=None):
+            signal_factor_grid=None, bkg_factor_grid=None, signal_only=False):
     """One Dalitz bin's mass fit.
 
     counts             (nbins,) candidates of the bin in each mass bin
@@ -73,6 +76,7 @@ def fit_bin(counts, mass_edges, xmin, xmax, seed, prior_cov, bkg_seed,
     prior_cov          (2, 2) covariance of the mean/sigma NormalConstraint
     bkg_seed           {c0, c1} start values without bkg_factor_grid
     signal_factor_grid, bkg_factor_grid : (masses, factor) or None
+    signal_only        n_bkg fixed to 0, c0 and c1 to fit_utils.BKG_INIT
 
     Returns (fit, no_signal): the Minuit object, and whether n_sig was fixed
     to 0 (signal factor 0 at m_eta).
@@ -93,12 +97,17 @@ def fit_bin(counts, mass_edges, xmin, xmax, seed, prior_cov, bkg_seed,
                 n_sig=0.0 if no_signal else 0.5 * n_cand,
                 n_bkg=n_cand if no_signal else 0.5 * n_cand,
                 **(bkg_seed if bkg_factor_grid is None else fit_utils.BKG_INIT))
+    # Signal only: every candidate is signal
+    if signal_only:
+        init.update(n_sig=n_cand, n_bkg=0.0, **fit_utils.BKG_INIT)
     limits = dict(sigma=(0.0, None), alphaL=(0.0, None), alphaR=(0.0, None),
                   nL=(0.0, None), nR=(0.0, None), n_sig=(0.0, None), n_bkg=(0.0, None))
     # Tails at the global fit's values; with no signal, its yield and shape too
     fixed = list(TAIL_PARAMS)
     if no_signal:
         fixed += ['n_sig', 'mean', 'sigma']
+    if signal_only:
+        fixed += ['n_bkg', *fit_utils.BKG_PARAMS]
     return fit_utils.run_fit(cost, init, limits, fixed=fixed), no_signal
 
 
@@ -152,7 +161,7 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
                xmin=420.0, xmax=680.0, nbins=80,
                mean_init=kinematics.M_ETA, sigma_init=10.0,
                tail_prior=None, signal_prior_factor=5.0, min_candidates=10,
-               signal_factor=None, bkg_factor=None):
+               signal_factor=None, bkg_factor=None, signal_only=False):
     """
     Global DCB + Chebyshev fit of every candidate, then one fit per Dalitz bin.
 
@@ -171,6 +180,8 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
              are not fit
     signal_factor, bkg_factor : f(M, m12_range, m23_range) multiplying the
              signal / background shape in each bin, or None
+    signal_only : fix n_bkg to 0 and c0, c1 to fit_utils.BKG_INIT in the
+             global and per-bin fits (truth-matched signal MC)
 
     Returns:
     --------
@@ -183,9 +194,10 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
     factor_masses = np.linspace(xmin, xmax, int(round(xmax - xmin)) + 1)   # 1 MeV apart
 
     # Global fit; its signal shape seeds and constrains every bin
+    global_fixed = {'n_bkg': 0.0, **fit_utils.BKG_INIT} if signal_only else None
     result, global_fit = fit_dcb(masses, xmin=xmin, xmax=xmax, nbins=nbins,
                                  mean_init=mean_init, sigma_init=sigma_init,
-                                 tail_prior=tail_prior)
+                                 tail_prior=tail_prior, fixed_params=global_fixed)
     global_params = result['fit']['parameters']
     seed = {name: global_params[name]['value'] for name in SIGNAL_PARAMS}
     bkg_seed = {name: global_params[name]['value'] for name in fit_utils.BKG_PARAMS}
@@ -224,7 +236,7 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
                 bkg_factor_grid = bin_factor_grid(bkg_factor, m12_range, m23_range, xmin, xmax)
 
             fit, no_signal = fit_bin(counts, mass_edges, xmin, xmax, seed, prior_cov, bkg_seed,
-                                     signal_factor_grid, bkg_factor_grid)
+                                     signal_factor_grid, bkg_factor_grid, signal_only)
             entry.update({'fitted': True, 'valid': bool(fit.valid), 'n_sig_fixed_zero': no_signal})
             if not fit.valid:
                 continue
@@ -270,6 +282,7 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
         'bkg_factor': None if bkg_factor is None else bkg_factor.__name__,
         'ff_lambda_gev': (kinematics.FF_LAMBDA if signal_factor is kinematics.dalitz_factor
                           else None),
+        'signal_only': signal_only,
         'm12_edges': [float(edge) for edge in m12_edges],
         'm23_edges': [float(edge) for edge in m23_edges],
         'mass_window': {'xmin': xmin, 'xmax': xmax, 'nbins': nbins},

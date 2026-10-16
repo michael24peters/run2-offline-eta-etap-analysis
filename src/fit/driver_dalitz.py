@@ -5,6 +5,7 @@ Select eta -> mu+ mu- gamma candidates from a ROOT file and write each
 event's best candidate as its Dalitz variables and gamma mu+ mu- mass:
 
     read ROOT -> drop malformed events -> TOS (+ pnn_mu) -> best candidate
+              (+ truth match)
               -> daughter four-vectors -> m12s, m23s, masses
               -> dalitz_events.npz, selection.json
 
@@ -18,6 +19,12 @@ event's best candidate as its Dalitz variables and gamma mu+ mu- mass:
     tag_m      tag_m; m12, m23 from prt_px/py/pz/e
     tag_dtf_m  tag_dtf_m; m12, m23 from the DTF daughters prt_dtf_px/py/pz/e
 
+--truth-match (signal MC only) keeps the events whose best candidate has
+every daughter truth-matched to eta -> mu+ mu- gamma
+(bkg_utils.signal_candidate_mask): the signal as the selection picks it, for
+driver_dalitz_fit.py --signal-only, whose global fit is the tail prior of the
+data fit of the same --mass.
+
 For each, the median and RMS of (mass - mass rebuilt from the same daughters)
 and the number of candidates outside their own kinematic limits
 (kinematics.m123_limits) go to stderr and selection.json. No mass-window or
@@ -26,7 +33,7 @@ Dalitz-grid cut is applied here.
 Usage:
     python src/fit/driver_dalitz.py INFILE --outdir OUTDIR
         [--mass rebuilt|tag_m|tag_dtf_m] [--tos-levels L0 HLT1 HLT2]
-        [--pnn-mu-min X] [--max-events N]
+        [--pnn-mu-min X] [--truth-match] [--max-events N]
 """
 
 import argparse
@@ -39,6 +46,7 @@ import numpy as np
 
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
+import bkg_utils
 import cut_utils
 import kinematics
 
@@ -59,6 +67,8 @@ MASS_SOURCES = {
 
 # Daughter name -> PID. Every candidate is built from exactly one of each.
 DAUGHTERS = {'gamma': 22, 'mu+': -13, 'mu-': 13}
+MOTHER_PID = 221                                      # eta, for --truth-match
+TRUTH_BRANCHES = ['prt_idx_gen', 'mc_idx_mom', 'mc_pid']   # read with --truth-match
 
 # TOS lines per trigger level; --tos-levels picks the levels to require.
 TOS_LINES = {
@@ -83,6 +93,8 @@ parser.add_argument('--tos-levels', nargs='*', default=list(TOS_LINES),
                          'Pass none for no TOS cut')
 parser.add_argument('--pnn-mu-min', type=float, default=None,
                     help='Every muon daughter must have prt_pnn_mu above this (default: no cut)')
+parser.add_argument('--truth-match', action='store_true',
+                    help='Signal MC: keep only candidates truth-matched to eta -> mu+ mu- gamma')
 parser.add_argument('--max-events', type=int, default=None,
                     help='Only read the first N events (default: all)')
 args = parser.parse_args()
@@ -94,7 +106,8 @@ tos_lines = {level: TOS_LINES[level] for level in args.tos_levels}
 branches = ([TAG_REF_BRANCH, METRIC_BRANCH, 'prt_idx_mom', 'prt_pid', 'prt_pnn_mu']
             + ([mass_branch] if mass_branch not in (None, TAG_REF_BRANCH) else [])
             + momenta
-            + [line for lines in tos_lines.values() for line in lines])
+            + [line for lines in tos_lines.values() for line in lines]
+            + (TRUTH_BRANCHES if args.truth_match else []))
 
 # --- Read --------------------------------------------------------------------
 
@@ -148,6 +161,16 @@ for label, n in cutflow:
 
 # One candidate per event: smallest METRIC_BRANCH among those kept.
 best = cut_utils.best_candidate_mask(tree, METRIC_BRANCH, keep)
+
+# Truth match: keep the events whose best candidate has every daughter
+# matched to eta -> gamma mu+ mu-.
+if args.truth_match:
+    cutflow.append(('best candidates', int(ak.sum(best))))
+    best = best & bkg_utils.signal_candidate_mask(tree, MOTHER_PID, list(DAUGHTERS.values()),
+                                                  target_ref=TAG_REF_BRANCH)
+    cutflow.append(('best candidate truth-matched', int(ak.sum(best))))
+    for label, n in cutflow[-2:]:
+        print(f'[INFO]   {label:28s} {n:9d}')
 n_best = int(ak.sum(best))
 assert n_best > 0, 'no event survives the selection'
 
@@ -216,6 +239,7 @@ selection = {
         'selection': {
             'tos': tos_lines or None,
             'pnn_mu_min': args.pnn_mu_min,
+            'truth_match': args.truth_match,
             'best_candidate': f'min {METRIC_BRANCH}',
             'daughters': DAUGHTERS,
             'max_events': args.max_events,

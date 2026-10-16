@@ -22,9 +22,15 @@ stdevs times TAIL_PRIOR_FACTOR. The default, TAIL_PRIOR_PATH, is a fit of the
 rebuilt mass; events written with another driver_dalitz.py --mass need
 --tail-prior given explicitly.
 
+--signal-only (truth-matched signal MC, driver_dalitz.py --truth-match) fits
+without a tail prior and with the background fixed to 0 (fit_dalitz
+signal_only); its results JSON is the --tail-prior of the data fit of the
+same --mass.
+
 Usage:
     python src/fit/driver_dalitz_fit.py OUTDIR/dalitz_events.npz
-        [--phase-space [--dalitz-factor]] [--tail-prior PATH] [--outdir DIR]
+        [--phase-space [--dalitz-factor]] [--tail-prior PATH | --signal-only]
+        [--outdir DIR]
         [--horizontal]
 """
 
@@ -70,6 +76,8 @@ parser.add_argument('--dalitz-factor', action='store_true',
 parser.add_argument('--tail-prior', default=None,
                     help='Results JSON of the MC DCB fit whose tails seed the global-fit prior '
                          '(default: TAIL_PRIOR_PATH, rebuilt-mass events only)')
+parser.add_argument('--signal-only', action='store_true',
+                    help='Truth-matched signal MC: no tail prior, background fixed to 0')
 parser.add_argument('--outdir', default=None,
                     help="Output directory (default: the events file's directory)")
 parser.add_argument('--horizontal', action='store_true',
@@ -77,6 +85,8 @@ parser.add_argument('--horizontal', action='store_true',
 args = parser.parse_args()
 if args.dalitz_factor and not args.phase_space:
     parser.error('--dalitz-factor requires --phase-space')
+if args.signal_only and args.tail_prior is not None:
+    parser.error('--signal-only and --tail-prior are exclusive')
 outdir = args.outdir or os.path.dirname(os.path.abspath(args.events))
 os.makedirs(outdir, exist_ok=True)
 
@@ -95,7 +105,7 @@ events = np.load(args.events)
 m12s, m23s, masses = events['m12s'], events['m23s'], events['masses']
 with open(os.path.join(os.path.dirname(os.path.abspath(args.events)), 'selection.json')) as f:
     selection = json.load(f)
-if args.tail_prior is None:
+if args.tail_prior is None and not args.signal_only:
     if selection['meta']['mass'] != 'rebuilt':
         parser.error(f"events use --mass {selection['meta']['mass']}; the default tail prior "
                      'is a rebuilt-mass fit, pass --tail-prior')
@@ -105,9 +115,11 @@ m12_edges = np.linspace(*M12_RANGE, N_PER_AXIS + 1)   # [GeV^2]
 m23_edges = np.linspace(*M23_RANGE, N_PER_AXIS + 1)   # [GeV^2]
 
 # Tail prior: the MC fit's tail parameters and covariance, stdevs widened
-with open(args.tail_prior) as f:
-    mc_fit = fit_utils.LoadedFit(json.load(f)['fit'])
-tail_prior = fit_utils.build_prior(mc_fit, TAIL_PARAMS, factor=TAIL_PRIOR_FACTOR)
+tail_prior = None
+if not args.signal_only:
+    with open(args.tail_prior) as f:
+        mc_fit = fit_utils.LoadedFit(json.load(f)['fit'])
+    tail_prior = fit_utils.build_prior(mc_fit, TAIL_PARAMS, factor=TAIL_PRIOR_FACTOR)
 
 # --- Fit ---------------------------------------------------------------------
 
@@ -116,9 +128,11 @@ result, global_fit = fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
                                 mean_init=MEAN_INIT, sigma_init=SIGMA_INIT,
                                 tail_prior=tail_prior, signal_prior_factor=SIGNAL_PRIOR_FACTOR,
                                 min_candidates=MIN_CANDIDATES,
-                                signal_factor=signal_factor, bkg_factor=bkg_factor)
+                                signal_factor=signal_factor, bkg_factor=bkg_factor,
+                                signal_only=args.signal_only)
 result['meta'].update(selection['meta'])
-result['meta']['tail_prior'] = {'path': args.tail_prior, 'factor': TAIL_PRIOR_FACTOR}
+result['meta']['tail_prior'] = (None if args.signal_only else
+                                {'path': args.tail_prior, 'factor': TAIL_PRIOR_FACTOR})
 result['selection_report'] = selection['selection_report']
 dalitz = result['dalitz']
 
