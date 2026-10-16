@@ -16,7 +16,9 @@ driver_dalitz.py wrote:
                       background
 
 The global fit carries the tail prior of an MC DCB fit (--tail-prior), its
-stdevs times TAIL_PRIOR_FACTOR.
+stdevs times TAIL_PRIOR_FACTOR. The default, TAIL_PRIOR_PATH, is a fit of the
+rebuilt mass; events written with another driver_dalitz.py --mass need
+--tail-prior given explicitly.
 
 Usage:
     python src/fit/driver_dalitz_fit.py OUTDIR/dalitz_events.npz
@@ -60,8 +62,9 @@ parser.add_argument('--phase-space', action='store_true',
                     help='Multiply signal and background by the phase-space factor of each bin')
 parser.add_argument('--dalitz-factor', action='store_true',
                     help='With --phase-space: the Dalitz factor instead on the signal')
-parser.add_argument('--tail-prior', default=TAIL_PRIOR_PATH,
-                    help='Results JSON of the MC DCB fit whose tails seed the global-fit prior')
+parser.add_argument('--tail-prior', default=None,
+                    help='Results JSON of the MC DCB fit whose tails seed the global-fit prior '
+                         '(default: TAIL_PRIOR_PATH, rebuilt-mass events only)')
 parser.add_argument('--outdir', default=None,
                     help="Output directory (default: the events file's directory)")
 args = parser.parse_args()
@@ -85,6 +88,11 @@ events = np.load(args.events)
 m12s, m23s, masses = events['m12s'], events['m23s'], events['masses']
 with open(os.path.join(os.path.dirname(os.path.abspath(args.events)), 'selection.json')) as f:
     selection = json.load(f)
+if args.tail_prior is None:
+    if selection['meta']['mass'] != 'rebuilt':
+        parser.error(f"events use --mass {selection['meta']['mass']}; the default tail prior "
+                     'is a rebuilt-mass fit, pass --tail-prior')
+    args.tail_prior = TAIL_PRIOR_PATH
 
 m12_edges = np.linspace(*M12_RANGE, N_PER_AXIS + 1)   # [GeV^2]
 m23_edges = np.linspace(*M23_RANGE, N_PER_AXIS + 1)   # [GeV^2]
