@@ -83,6 +83,37 @@ def m123_limits(m12s, m23s):
     return m_min * 1000.0, m_max * 1000.0
 
 
+def m12_limits(M, m23s):
+    """
+    Kinematic range [m12_min, m12_max] (GeV^2) of m12 = m^2(gamma mu+) for a
+    gamma mu+ mu- system of invariant mass M (MeV) and m23s = m^2(mu+ mu-)
+    (GeV^2). The inverse of m123_limits.
+
+    In the mu+ mu- rest frame (the frame where the pair's total momentum is
+    zero) the muons fly apart back to back, each with energy E_mu =
+    sqrt(m23s) / 2 and speed beta = sqrt(1 - 4 m_mu^2 / m23s), and the photon
+    has energy E_gamma = (M^2 - m23s) / (2 sqrt(m23s)). With theta* the angle
+    between the mu+ and the photon,
+
+        m12 = (p_gamma + p_mu+)^2 = m_mu^2 + 2 E_gamma E_mu (1 - beta cos theta*)
+            = m_mu^2 + (M^2 - m23s) / 2 * (1 - beta cos theta*)
+
+    (the sqrt(m23s) in E_gamma cancels the one in E_mu). cos theta* runs over
+    [-1, 1], so m12 runs over [m12_min, m12_max]. The range has zero width
+    where m23s >= M^2 (photon energy 0) and where m23s <= 4 m_mu^2 (beta = 0).
+    """
+    m_mu2 = (M_MU / 1000.0)**2
+    M2 = (np.asarray(M, float) / 1000.0)**2
+    m23s = np.asarray(m23s, float)
+    with np.errstate(divide='ignore'):   # m23s = 0 gives beta = 0
+        beta = np.sqrt(np.clip(1.0 - 4.0 * m_mu2 / m23s, 0.0, None))
+    # cos theta* = +1: mu+ along the photon
+    m12_min = m_mu2 + np.clip(M2 - m23s, 0.0, None) / 2.0 * (1.0 - beta)
+    # cos theta* = -1: mu+ against the photon
+    m12_max = m_mu2 + np.clip(M2 - m23s, 0.0, None) / 2.0 * (1.0 + beta)
+    return m12_min, m12_max
+
+
 def phase_space_factor(M, m12_range, m23_range, n_m23=400):
     """
     Fraction of the Dalitz bin m12_range x m23_range (GeV^2, m12 =
@@ -99,7 +130,8 @@ def phase_space_factor(M, m12_range, m23_range, n_m23=400):
     M: array of trial masses (MeV) to evaluate the factor at.
     m12_range: (m12_min, m12_max) of the bin (GeV^2, m12 = m^2(gamma mu+)).
     m23_range: (m23_min, m23_max) of the bin (GeV^2, m23 = m^2(mu+ mu-)).
-    n_m23: number of q^2 = m23 points to sample across the bin.
+    n_m23: number of equal q^2 = m23 strips across the bin; the factor is
+        sampled at their midpoints.
 
     Returns:
     --------
@@ -108,27 +140,18 @@ def phase_space_factor(M, m12_range, m23_range, n_m23=400):
     1 where the whole bin is inside the Dalitz region of mass M, 0
     where none of it is.
     """
-    m_mu2 = (M_MU / 1000.0)**2
-    M2 = (np.asarray(M, float) / 1000.0)[:, None]**2
-    q2 = np.linspace(*m23_range, n_m23)[None, :]  # n_m23 values of m23 = q^2 spanning the bin, one column each
+    M = np.asarray(M, float)[:, None]
+    # Midpoints of n_m23 equal strips across the bin's q2 range, one column per strip.
+    q2 = (m23_range[0] + (np.arange(n_m23) + 0.5) * (m23_range[1] - m23_range[0]) / n_m23)[None, :]
 
-    # Reachable m12 at each (M, q2). In the mu+ mu- rest frame (the frame where
-    # the pair's total momentum is zero: the muons fly apart back to back, each
-    # with speed beta), energy-momentum conservation gives the photon energy
-    # (M^2 - q2) / (2 sqrt(q2)) and
-    #     m12 = m_mu^2 + (M^2 - q2) (1 - beta cos theta*) / 2,
-    # theta* = angle between the mu+ and the photon. cos theta* runs over
-    # [-1, 1], so m12 runs over [lo12, hi12].
-    with np.errstate(divide='ignore'):   # q2 = 0 at the grid's bottom edge
-        beta = np.sqrt(np.clip(1.0 - 4.0 * m_mu2 / q2, 0.0, None))  # muon speed; 0 at or below threshold
-    half_span = np.clip(M2 - q2, 0.0, None) / 2.0  # (M^2 - q2) / 2; 0 where q2 >= M^2 (photon energy 0)
-    lo12 = m_mu2 + half_span * (1.0 - beta)  # cos theta* = +1: mu+ along the photon
-    hi12 = m_mu2 + half_span * (1.0 + beta)  # cos theta* = -1: mu+ against the photon
+    # Reachable m12 at each (M, q2).
+    lo12, hi12 = m12_limits(M, q2)
 
     # TODO: the ntuple keeps only photons with pT > 500 MeV (~/ana/src/ana.py), which empties the
     # part of D(M) where the photon is soft in the mu+ mu- frame, E*_gamma = (M^2 - q2) / (2 sqrt(q2))
     # -> 0, i.e. near a bin's lowest reachable masses; this factor counts that part as populated.
     # The loss depends on the photon's lab boost, not only on (M, m12, m23): a turn-on from data.
+    #
     # At each (M, q2): the length of [lo12, hi12] inside the bin's m12 range,
     # 0 where they do not overlap. Averaged over the q2 values and divided by
     # the bin's m12 width, this is (reachable area) / (bin area).
@@ -136,54 +159,13 @@ def phase_space_factor(M, m12_range, m23_range, n_m23=400):
     return overlap12.mean(axis=1) / (m12_range[1] - m12_range[0])
 
 
-def dalitz_density(m12s, m23s):
-    """
-    Unnormalized density of eta Dalitz decays, eta -> gamma gamma* ->
-    gamma mu+ mu-, over the Dalitz plot at the eta mass: |M|^2 for m12s =
-    m^2(gamma mu+) and m23s = q^2 = m^2(mu+ mu-) in GeV^2 (the Kroll-Wada
-    matrix element with the pole form factor F(q^2) = 1 / (1 - q^2 /
-    FF_LAMBDA^2)):
-
-        |F(q^2)|^2 / q^2 [(m_eta^2 - q^2)^2 (1 + 4 m_mu^2 / q^2) + (m13s - m12s)^2]
-
-    with m13s = m_eta^2 + 2 m_mu^2 - q^2 - m12s.
-    0 for q^2 <= 4 m_mu^2. Valid for q^2 < FF_LAMBDA^2.
-
-    True, gen-level eta decays fill D(m_eta) with this density. The formula is
-    defined at any (m12s, m23s) above threshold, including outside D(m_eta),
-    where it is the same expression continued.
-    """
-    m_mu2 = (M_MU / 1000.0)**2
-    m_eta2 = (M_ETA / 1000.0)**2
-    m12s, q2 = np.asarray(m12s, float), np.asarray(m23s, float)
-
-    # Below the dimuon threshold (q2 <= 4 m_mu^2) no muon pair exists and the
-    # density is 0; q2_safe stands in a 1 there so the divisions stay finite.
-    physical = q2 > 4.0 * m_mu2
-    q2_safe = np.where(physical, q2, 1.0)
-
-    form_factor2 = (1.0 - q2_safe / FF_LAMBDA**2)**-2  # |F(q^2)|^2
-    m13s = m_eta2 + 2.0 * m_mu2 - q2_safe - m12s  # m13 = m_eta^2 + 2 m_mu^2 - q2 - m12, so m12 + m13 + q2 = m_eta^2 + 2 m_mu^2
-
-    # |M|^2 = |F|^2 / q2 * (m_eta^2 - q2)^2 [1 + cos^2 theta* + (4 m_mu^2 / q2) sin^2 theta*]:
-    #   1 / q2                the virtual photon: 1/q2^2 from its propagator, times q2 from its decay to mu+ mu-
-    #   (m_eta^2 - q2)^2      the eta -> gamma gamma* coupling, from the photons' momenta
-    #   [...]                 the mu+ direction in the mu+ mu- frame; with
-    #                         m13 - m12 = (m_eta^2 - q2) beta cos theta*, (m_eta^2 - q2)^2 [...] is
-    #                         (m_eta^2 - q2)^2 (1 + 4 m_mu^2 / q2) + (m13 - m12)^2
-    density = form_factor2 / q2_safe * ((m_eta2 - q2_safe)**2 * (1.0 + 4.0 * m_mu2 / q2_safe)
-                                        + (m13s - m12s)**2)
-    # 0 below physical threshold.
-    return np.where(physical, density, 0.0)
-
-
 def dalitz_factor(M, m12_range, m23_range, n_m23=400):
     """
     Dalitz-decay counterpart of phase_space_factor: the fraction of the
     Dalitz bin m12_range x m23_range that is kinematically reachable by a
     gamma mu+ mu- system of invariant mass M (array of trial masses, as in
-    phase_space_factor), with each point of the bin weighted by
-    dalitz_density instead of counting equally:
+    phase_space_factor), with each point of the bin weighted by the eta
+    Dalitz-decay density instead of counting equally:
 
         f(M) = sum over q^2 strips of int_{reachable m12 in the bin} density dm12
                / sum over q^2 strips of int_{bin's m12 range} density dm12
@@ -193,24 +175,51 @@ def dalitz_factor(M, m12_range, m23_range, n_m23=400):
     bin is inside the Dalitz region of mass M, 0 where none of it is. At
     fixed q^2 the density is quadratic in m12, so the m12 integral is exact;
     q^2 is sampled at the midpoints of n_m23 strips.
+
+    The density of eta -> gamma gamma* -> gamma mu+ mu- decays over the Dalitz
+    plot at the eta mass, |M|^2 for m12 = m^2(gamma mu+) and q^2 = m23 =
+    m^2(mu+ mu-) in GeV^2 (the Kroll-Wada matrix element with the pole form
+    factor F(q^2) = 1 / (1 - q^2 / FF_LAMBDA^2)):
+
+        |F(q^2)|^2 / q^2 [(m_eta^2 - q^2)^2 (1 + 4 m_mu^2 / q^2) + (m13 - m12)^2]
+
+    with m13 = m_eta^2 + 2 m_mu^2 - q^2 - m12.
+    0 for q^2 <= 4 m_mu^2. Valid for q^2 < FF_LAMBDA^2.
+
+    True, gen-level eta decays fill D(m_eta) with this density. The formula is
+    defined at any (m12, q^2) above threshold, including outside D(m_eta),
+    where it is the same expression continued.
+
+    References:
+        Matrix element: Kampf, Knecht, Novotny, Eur. Phys. J. C 46 (2006) 191
+            (hep-ph/0510021), Eq. (3.2) for |M_LO|^2 with M = m_eta, m = m_mu;
+            Eq. (2.11) for the form factor F(q^2) multiplying the amplitude;
+            Eq. (2.8) for the (1 - x) dx dy = 2 dm12 dm23 / m_eta^4 measure.
+        Form factor and angular factor: NA60, Phys. Lett. B 757 (2016) 437
+            (arXiv:1608.07898), Eq. (6) and Eq. (1).
     """
     m_mu2 = (M_MU / 1000.0)**2
     m_eta2 = (M_ETA / 1000.0)**2
-    M2 = (np.asarray(M, float) / 1000.0)[:, None]**2
+    M = np.asarray(M, float)[:, None]
     bin_lo23, bin_hi23 = m23_range  # the bin's m23 edges
     bin_lo12, bin_hi12 = m12_range  # the bin's m12 edges
     # Midpoints of n_m23 equal strips across the bin's q2 range, one column per strip.
     q2 = (bin_lo23 + (np.arange(n_m23) + 0.5) * (bin_hi23 - bin_lo23) / n_m23)[None, :]
 
-    # Reachable m12 at each (M, q2), as in phase_space_factor, clipped to the
-    # bin's m12 range: [reach_lo12, reach_hi12] is the part of the bin inside
-    # D(M) (zero length where none is).
-    beta = np.sqrt(np.clip(1.0 - 4.0 * m_mu2 / q2, 0.0, None))  # muon speed in the mu+ mu- frame
-    half_span = np.clip(M2 - q2, 0.0, None) / 2.0  # (M^2 - q2) / 2
-    reach_lo12 = np.clip(m_mu2 + half_span * (1.0 - beta), bin_lo12, bin_hi12)
-    reach_hi12 = np.clip(m_mu2 + half_span * (1.0 + beta), bin_lo12, bin_hi12)
+    # Reachable m12 at each (M, q2), clipped to the bin's m12 range:
+    # [reach_lo12, reach_hi12] is the part of the bin inside D(M) (zero length
+    # where none is).
+    lo12, hi12 = m12_limits(M, q2)
+    reach_lo12 = np.clip(lo12, bin_lo12, bin_hi12)
+    reach_hi12 = np.clip(hi12, bin_lo12, bin_hi12)
 
-    # dalitz_density at fixed q2, written as a polynomial in m12:
+    # |M|^2 = |F|^2 / q2 * (m_eta^2 - q2)^2 [1 + cos^2 theta* + (4 m_mu^2 / q2) sin^2 theta*]:
+    #   1 / q2                the virtual photon: 1/q2^2 from its propagator, times q2 from its decay to mu+ mu-
+    #   (m_eta^2 - q2)^2      the eta -> gamma gamma* coupling, from the photons' momenta
+    #   [...]                 the mu+ direction in the mu+ mu- frame; with
+    #                         m13 - m12 = (m_eta^2 - q2) beta cos theta*, (m_eta^2 - q2)^2 [...] is
+    #                         (m_eta^2 - q2)^2 (1 + 4 m_mu^2 / q2) + (m13 - m12)^2
+    # At fixed q2 this is a polynomial in m12,
     #     density = q2_weight * (base_term + 4 (m12 - mid12)^2),
     # since m13 - m12 = 2 (mid12 - m12).
     physical = q2 > 4.0 * m_mu2

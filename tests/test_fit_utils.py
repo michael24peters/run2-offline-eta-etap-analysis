@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 from iminuit import Minuit
 from iminuit.cost import NormalConstraint
+from scipy.integrate import trapezoid
 
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'src', 'utils'))
@@ -175,7 +176,7 @@ def test_background_pdf_integrates_to_one_and_is_nonnegative():
     for c0, c1 in [(fit_utils.BKG_INIT['c0'], fit_utils.BKG_INIT['c1']), (0.3, -0.2)]:
         y = fit_utils.cheb_bkg_pdf(xg, XMIN, XMAX, c0, c1)
         assert (y >= 0).all()
-        assert fit_utils._trapz(y, xg) == pytest.approx(1.0, abs=1e-3)
+        assert trapezoid(y, xg) == pytest.approx(1.0, abs=1e-3)
 
 
 def test_make_gauss_cost_recovers_toy_params():

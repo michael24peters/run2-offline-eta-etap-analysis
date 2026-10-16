@@ -29,6 +29,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Rectangle
+from scipy.integrate import trapezoid
 
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
@@ -183,7 +184,7 @@ def fig_decomposition(outdir, results, i, j):
 
     cheb_range = fit_utils.reachable_range(factor_grid)
     cheb = np.clip(fit_utils.cheb_bkg_unnorm(masses, *cheb_range, *c), 0, None)
-    cheb /= fit_utils._trapz(cheb, masses)
+    cheb /= trapezoid(cheb, masses)
     dcb_alone = fit_utils.dcb_pdf(masses, XMIN, XMAX, *dcb)
     shapes = [
         ('Background', C['background'], cheb, 'Chebyshev',
@@ -200,7 +201,7 @@ def fig_decomposition(outdir, results, i, j):
     axes[0].set_ylim(-0.05, 1.1); axes[0].set_ylabel('$f(M)$')
     axes[0].legend(loc='lower right', fontsize=11)
     for ax, (name, color, alone, label, renorm) in zip(axes[1:], shapes, strict=True):
-        kept = fit_utils._trapz(factor * alone, masses)
+        kept = trapezoid(factor * alone, masses)
         ax.plot(masses, alone, color=color, ls='--', lw=1.6, label=f'{label} alone (area 1)')
         ax.plot(masses, factor * alone, color=color, ls=':', lw=2,
                 label=fr'$f \times$ {label}, before renormalizing (area {kept:.2f})')

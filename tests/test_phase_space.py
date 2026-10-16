@@ -1,7 +1,7 @@
 """
 Unit tests for the Dalitz phase-space factor: kinematics.m123_limits /
-kinematics.phase_space_factor, the Dalitz-decay factor
-kinematics.dalitz_factor and its density kinematics.dalitz_density, and the
+kinematics.m12_limits / kinematics.phase_space_factor, the Dalitz-decay factor
+kinematics.dalitz_factor, and the
 phase-space-weighted shapes in fit_utils (weighted_dcb_cdf,
 weighted_cheb_cdf/pdf, make_dcb_cost(signal_factor_grid=, bkg_factor_grid=)). Toy data
 only, fixed RNG seeds.
@@ -12,6 +12,7 @@ import sys
 
 import numpy as np
 import pytest
+from scipy.integrate import trapezoid
 
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'src', 'utils'))
@@ -57,6 +58,20 @@ def test_m123_limits_contain_the_true_mass():
     assert np.min(hi - M * 1000) < 0.5
 
 
+def test_m12_limits_contain_the_true_m12():
+    rng = np.random.default_rng(1)
+    M = rng.uniform(0.3, 0.8, 20000)
+    gamma, mup, mum = toy_decays(rng, M.size, M)
+    m12s = kinematics.invariant_mass2(*gamma, *mup)
+    m23s = kinematics.invariant_mass2(*mup, *mum)
+    lo, hi = kinematics.m12_limits(M * 1000, m23s)
+    assert np.all(lo <= m12s + 1e-9)
+    assert np.all(hi >= m12s - 1e-9)
+    # And the limits are tight: some toys sit right on each edge.
+    assert np.min(m12s - lo) < 1e-3
+    assert np.min(hi - m12s) < 1e-3
+
+
 def test_phase_space_factor_matches_uniform_sampling():
     """The semi-analytic factor equals the Monte Carlo recipe: sample the bin
     uniformly, count how often M is inside m123_limits."""
@@ -94,23 +109,13 @@ def dalitz_weight(m12, m23):
 
         |F(q^2)|^2 / q^4 [q^2 ((m12 - m^2)^2 + (m13 - m^2)^2) + 2 m^2 (m_eta^2 - q^2)^2]
 
-    0 for q^2 <= 4 m^2. Written independently of dalitz_density's form."""
+    0 for q^2 <= 4 m^2. Written independently of dalitz_factor's form."""
     m_mu2, m_eta2 = MMU**2, META**2
     m13 = m_eta2 + 2 * m_mu2 - m23 - m12
     form_factor2 = (1 - m23 / kinematics.FF_LAMBDA**2)**-2
     weight = form_factor2 / m23**2 * (m23 * ((m12 - m_mu2)**2 + (m13 - m_mu2)**2)
                                       + 2 * m_mu2 * (m_eta2 - m23)**2)
     return np.where(m23 > 4 * m_mu2, weight, 0.0)
-
-
-def test_dalitz_density_matches_the_matrix_element():
-    rng = np.random.default_rng(4)
-    m12 = rng.uniform(0.0, 0.3, 10000)
-    m23 = rng.uniform(0.0, 0.31, 10000)
-    weight = dalitz_weight(m12, m23)
-    density = kinematics.dalitz_density(m12, m23)
-    assert np.all(density[weight == 0] == 0)
-    assert np.allclose(density[weight > 0], 2 * weight[weight > 0])
 
 
 def test_dalitz_factor_matches_weighted_sampling():
@@ -153,10 +158,8 @@ def test_dalitz_factor_approaches_phase_space_factor_for_small_bins():
     M between dalitz_factor and phase_space_factor shrinks with the bin size."""
     M = np.linspace(XMIN, XMAX, 261)
     for q2_0 in [0.06, 0.12, 0.20, 0.27]:
-        beta = np.sqrt(1 - 4 * MMU**2 / q2_0)          # muon speed in the mu+ mu- frame
-        half_span = (META**2 - q2_0) / 2
         # The two m12 edges of D(m_eta) at this q2.
-        for m12_0 in [MMU**2 + half_span * (1 - beta), MMU**2 + half_span * (1 + beta)]:
+        for m12_0 in kinematics.m12_limits(kinematics.M_ETA, q2_0):
             max_diffs = []
             for scale in [1, 1 / 4, 1 / 16]:
                 # Grid bin size times scale, centred on the boundary point.
@@ -193,7 +196,7 @@ def test_weighted_background_is_zero_where_forbidden():
         assert weighted_cdf(np.array([535.0]), XMIN, XMAX, c0, c1)[0] == 0.0
         y = weighted_pdf(np.linspace(XMIN, XMAX, 500), XMIN, XMAX, c0, c1)
         assert np.all(y >= 0)
-        assert fit_utils._trapz(y, np.linspace(XMIN, XMAX, 500)) == pytest.approx(1, abs=1e-2)
+        assert trapezoid(y, np.linspace(XMIN, XMAX, 500)) == pytest.approx(1, abs=1e-2)
 
 
 def test_weighted_fit_recovers_background_toy():

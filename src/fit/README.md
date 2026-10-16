@@ -328,9 +328,9 @@ python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_<binning>_<signal-factor>.jso
   `q2` is 14 strips in m23 = q^2, each over every m12. The background factor is
   always `kinematics.phase_space_factor` (flat). The signal factor is either
   the same (`flat`) or `kinematics.dalitz_factor` (`dalitz`): the fraction of
-  the bin reachable at M with each point weighted by
-  `kinematics.dalitz_density`, the eta -> gamma gamma* -> gamma mu+ mu-
-  (Kroll-Wada) density with the NA60 2016 pole form factor (`FF_LAMBDA`).
+  the bin reachable at M with each point weighted by the
+  eta -> gamma gamma* -> gamma mu+ mu- (Kroll-Wada) density with the NA60 2016
+  pole form factor (`FF_LAMBDA`).
   Bins with signal factor 0 at m_eta have n_sig fixed to 0.
 - `plot_dalitz_bins.py`: global fit (`global_fit.png`), yield maps (grid) or
   yield vs q^2 (q2), and the per-bin fit pages (`*_per_bin_fits.pdf`).
