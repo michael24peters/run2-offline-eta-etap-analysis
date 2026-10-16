@@ -274,70 +274,81 @@ counting how often M is within those limits, but computed without MC noise.
 f is 1 where the whole bin is reachable and 0 where none of it is, which is
 what takes edge bins to zero at the ends of the mass window.
 
-`fit_dalitz.ipynb` multiplies both the DCB signal and the (plain Chebyshev)
-background by f in every bin (`fit_utils.make_dcb_cost(..., weight=)`), and
-fixes n_sig = 0 in bins with f(m_eta) = 0, which lie entirely outside the
-eta's Dalitz region. The background has no per-bin prior; mean/sigma keep
-theirs.
+`fit_dalitz.fit_dalitz` multiplies the DCB signal and the (plain Chebyshev)
+background by a factor f in every bin when given one (`signal_factor`,
+`bkg_factor`; `fit_utils.make_dcb_cost(..., signal_factor_grid=,
+bkg_factor_grid=)`), and fixes n_sig = 0 in bins whose signal factor is 0 at
+m_eta, which lie entirely outside the eta's Dalitz region. Without a factor
+(the default) both shapes are the plain ones. The background has no per-bin
+prior; mean/sigma keep theirs.
 
 The limits are an identity on the four-vectors, so the fitted mass must come
-from the same daughter momenta as m12/m23. The notebook rebuilds it from
-`prt_px/py/pz/e` (0 events outside their limits). `tag_dtf_m` differs from
-that by ~29 MeV RMS, so its edges are smeared, and `tag_m` puts ~1% of events
-outside their limits, where the model is exactly 0. The cost is resolution:
-sigma ~16.0 MeV rebuilt vs ~14.4 MeV with DTF. Fitting the DTF mass with an
-exact f would need the DTF-refitted daughter momenta in the ntuple.
+from the same daughter momenta as m12/m23. `driver_dalitz.py --mass` picks the
+mass and the daughters together:
+
+| `--mass` | mass | daughters | mass - rebuilt (median, RMS) | outside own limits |
+|---|---|---|---|---|
+| `rebuilt` (default) | rebuilt from the daughters | `prt_px/py/pz/e` | 0, 0 | 0 |
+| `tag_m` | `tag_m` | `prt_px/py/pz/e` | 0.07 MeV, 4.1 MeV | 0.7% |
+| `tag_dtf_m` | `tag_dtf_m` | `prt_dtf_px/py/pz/e` | 0.00 MeV, 0.04 MeV | 8 of 3.0M |
+
+(20261006 Turbo data; the driver prints and records these numbers in
+`selection.json`.) `tag_dtf_m` with the DTF daughters satisfies the identity
+like the rebuilt mass, at the DTF resolution (sigma ~14 MeV vs ~16.5 MeV
+rebuilt).
 
 Per bin, the Chebyshev's [-1, 1] variable spans the bin's reachable mass
 range (where f > 0), not [xmin, xmax]: fit on only a slice of its range, its
 coefficients are near-degenerate and MIGRAD runs them off to infinity. So
 per-bin c0/c1 are not comparable to the global fit's. The plain Chebyshev can
 still go negative inside the reachable region; the fit floors it at
-`fit_utils.BKG_FLOOR`, and the notebook's positivity check flags any bin
-where that happened.
+`fit_utils.BKG_FLOOR`, and `bkg_goes_negative` flags any bin where that
+happened.
 
-The global fit carries a widened MC tail prior (`TAIL_PRIOR_PATH`): on the
+The global fit carries a widened MC tail prior (`--tail-prior`): on the
 rebuilt mass the unconstrained tails run off to n ~ 50-150 and the fit is
-invalid. That MC fit was of `tag_dtf_m`, so it should be redone on the rebuilt
-mass.
+invalid. The prior of each mass is the global fit of truth-matched signal MC
+of the same mass (`driver_dalitz.py --truth-match`, then
+`driver_dalitz_fit.py --signal-only`).
 
 Known limitation: f assumes background is uniform across the bin. Near the
 low-m12 boundary (the i = 1 column) it isn't, and the data turn on more
 slowly than f predicts, which is where the worst per-bin chi2 values are.
 
-### Script pipeline: flat vs Dalitz-decay signal factor
-
-The same per-bin fit as `fit_dalitz.ipynb`, split into three scripts, with a
-choice of signal factor:
+### Pipeline
 
 ```
 python src/fit/driver_dalitz.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
-    --outdir OUT [--tos-levels L0 HLT1 HLT2] [--pnn-mu-min X] [--max-events N]
-python src/fit/fit_dalitz_bins.py OUT/dalitz_events.npz \
-    --binning grid|q2 --signal-factor flat|dalitz [--tail-prior PATH]
-python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_<binning>_<signal-factor>.json
+    --outdir OUT [--mass rebuilt|tag_m|tag_dtf_m] [--tos-levels L0 HLT1 HLT2]
+    [--pnn-mu-min X] [--truth-match] [--max-events N]
+python src/plot/plot_dalitz.py OUT/dalitz_events.npz
+python src/fit/driver_dalitz_fit.py OUT/dalitz_events.npz \
+    [--phase-space [--dalitz-factor]] [--tail-prior PATH | --signal-only] [--horizontal]
 ```
 
 - `driver_dalitz.py`: read ROOT -> TOS (default L0, HLT1 and HLT2) -> best
-  candidate (min `tag_dtf_chi2`) -> `dalitz_events.npz`
-  (m12, m23, mass rebuilt from the daughters, every event) and
-  `selection.json` (cutflow).
-- `fit_dalitz_bins.py`: global DCB + Chebyshev fit (tail prior from the
-  truth-matched rebuilt-mass MC fit by default), then one fit per bin ->
-  `dalitz_fit_<binning>_<signal-factor>.json`. `grid` is the 14 x 14 grid;
-  `q2` is 14 strips in m23 = q^2, each over every m12. The background factor is
-  always `kinematics.phase_space_factor` (flat). The signal factor is either
-  the same (`flat`) or `kinematics.dalitz_factor` (`dalitz`): the fraction of
-  the bin reachable at M with each point weighted by the
+  candidate (min `tag_dtf_chi2`) -> `dalitz_events.npz` (m12, m23 and the
+  `--mass` mass of every event) and `selection.json` (cutflow, mass
+  consistency). `--truth-match` (signal MC) keeps the events whose best
+  candidate is truth-matched to eta -> mu+ mu- gamma.
+- `plot_dalitz.py`: raw Dalitz histograms (`dalitz_raw.png`,
+  `dalitz_raw_zoom.png`).
+- `driver_dalitz_fit.py`: `fit_dalitz.fit_dalitz` on the 14 x 14 grid ->
+  `dalitz_fit_<none|flat|dalitz>.json`, then `plot_dalitz_bins.plot_dalitz_fit`
+  (`global_fit.png`, yield maps, `*_per_bin_fits.pdf`, with `--horizontal`
+  also `*_per_bin_fits_horizontal.pdf`). No flag: no factor. `--phase-space`:
+  `kinematics.phase_space_factor` on both shapes (`flat`). `--dalitz-factor`
+  in addition: `kinematics.dalitz_factor` on the signal (`dalitz`), the
+  fraction of the bin reachable at M with each point weighted by the
   eta -> gamma gamma* -> gamma mu+ mu- (Kroll-Wada) density with the NA60 2016
-  pole form factor (`FF_LAMBDA`).
-  Bins with signal factor 0 at m_eta have n_sig fixed to 0.
-- `plot_dalitz_bins.py`: global fit (`global_fit.png`), yield maps (grid) or
-  yield vs q^2 (q2), and the per-bin fit pages (`*_per_bin_fits.pdf`).
+  pole form factor (`FF_LAMBDA`). The default `--tail-prior` is a rebuilt-mass
+  MC fit; other masses need it given. `--signal-only` fixes the background to
+  0 and uses no prior (truth-matched MC).
+- `fit_dalitz.ipynb`: the same fit, interactively, on one events file.
 
-With `--tos-levels L0 HLT1` in the driver, and `--signal-factor flat --binning
-grid` with the 20260903 tail prior in the fit, the scripts reproduce
-`fit_dalitz.ipynb` (L0 + HLT1 TOS, 20260608 data) bin for bin.
+The library and the scripts reproduce the per-bin fits of the previous
+`fit_dalitz.ipynb` (`PHASE_SPACE` True and False) bin for bin on the 20261006
+data.
 
 
 ## Fitting an arbitrary array
