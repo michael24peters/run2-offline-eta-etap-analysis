@@ -49,7 +49,7 @@ LINES = {
     'HLT1': ['Hlt1DiMuonNoIP', 'Hlt1DiMuonLowMass', 'Hlt1MultiDiMuonNoIP', 'Hlt1TrackMVA'],
     'HLT2': ['Hlt2ExoticaPrmptDiMuonTurbo', 'Hlt2ExoticaDiMuonNoIPTurbo', 'Hlt2Topo'],
 }
-# TOS selection per level, as in src/fit/driver_dcb.py.
+# TOS selection per level, as in src/fit/driver_mass_fit.py.
 TOS_LINES = {
     'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
     'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass

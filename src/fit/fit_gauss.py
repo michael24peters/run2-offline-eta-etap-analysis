@@ -6,7 +6,7 @@ mass values, using iminuit ExtendedBinnedNLL.
 
 This is a library module: it takes an array of numbers and fits it. Reading
 ROOT files, applying selection, and reducing to one candidate per event all
-happen upstream in driver_gauss.py via cut_utils.
+happen upstream in driver_mass_fit.py via cut_utils.
 """
 
 import os
