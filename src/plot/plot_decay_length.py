@@ -11,10 +11,15 @@ Usage:
 
 import argparse
 import os
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
 import uproot
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'utils'))
+import plot_style
+import plot_utils
 
 C_MM_PER_S = 299_792_458_000.0  # speed of light in mm/s
 
@@ -81,22 +86,24 @@ print(f'[INFO]   Outlier pseudo-lifetimes: {pseudo_lifetimes[pl_mask]}')
 print(f'[INFO] Decay length:    [{decay_lengths[~dl_mask].min():.4f}, {decay_lengths[~dl_mask].max():.4f}] mm')
 print(f'[INFO] Pseudo-lifetime: [{pseudo_lifetimes[~pl_mask].min():.4e}, {pseudo_lifetimes[~pl_mask].max():.4e}] s')
 
+plot_utils.apply_font()
+plt.rcParams['font.size'] = 12
 fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
 
-axes[0].hist(decay_lengths[~dl_mask], bins=100, histtype='step', color='tab:blue')
+axes[0].hist(decay_lengths[~dl_mask], bins=100, histtype='step', color=plot_style.COLORS['data'])
 axes[0].set_xlabel('Decay length [mm]')
 axes[0].set_ylabel('Entries')
 axes[0].set_title(r'$\eta \to \mu\mu\gamma$ decay length')
 axes[0].set_yscale('log')
 
 
-axes[1].hist(pseudo_lifetimes[~pl_mask], bins=100, histtype='step', color='tab:blue')
+axes[1].hist(pseudo_lifetimes[~pl_mask], bins=100, histtype='step', color=plot_style.COLORS['data'])
 axes[1].set_xlabel('Pseudo-lifetime [s]')
 axes[1].set_ylabel('Entries')
 axes[1].set_title(r'$\eta \to \mu\mu\gamma$ pseudo-lifetime')
 axes[1].set_yscale('log')
+for ax in axes:
+    plot_style.style_axes(ax)
 
-fig.tight_layout()
-fig.savefig(outfile, dpi=300)
-print(f'[INFO] Saved: {outfile}')
+plot_style.save_plot(fig, outfile)

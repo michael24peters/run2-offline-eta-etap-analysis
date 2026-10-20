@@ -5,6 +5,7 @@ Plots the mass distribution of candidates from a ROOT file.
 
 Usage:
     python plot_mass.py input.root [output.png] [--best] [--full-range]
+                        [--mass tag_dtf_m|tag_m]
 """
 
 import argparse
@@ -20,6 +21,9 @@ import numpy as np
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 import cut_utils
+import kinematics
+import plot_style
+import plot_utils
 
 # IO
 parser = argparse.ArgumentParser(description='Plot mass distributions from ROOT file')
@@ -43,6 +47,8 @@ parser.add_argument('--tos', action='store_true', default=False,
 parser.add_argument('--pnn-mu-min', type=float, default=0.4,
                     help='Muon PID threshold (default: 0.4, the floor already applied '
                          'upstream in the ntuple, i.e. no additional cut)')
+parser.add_argument('--mass', choices=['tag_dtf_m', 'tag_m'], default='tag_dtf_m',
+                    help='Mass branch to plot (default: tag_dtf_m)')
 args = parser.parse_args()
 print(f'Reading from {args.input} and writing to {args.output}.')
 
@@ -62,11 +68,11 @@ TOS_LINES = {
 TOS_BRANCHES = [branch for lines in TOS_LINES.values() for branch in lines]
 tree = cut_utils.read_branches(
     args.input,
-    ['tag_dtf_m', 'tag_dtf_chi2', 'prt_idx_mom'] + DAUGHTER_FIELDS + TOS_BRANCHES)
-tree, _ = cut_utils.drop_malformed(tree)
+    [args.mass, 'tag_dtf_chi2', 'prt_idx_mom'] + DAUGHTER_FIELDS + TOS_BRANCHES)
+tree, _ = cut_utils.drop_malformed(tree, tag_ref=args.mass)
 
-# Get lengths of arrays in tag_dtf_m to see how many candidates per event
-lengths = ak.to_numpy(ak.num(tree['tag_dtf_m']))
+# Get lengths of arrays in the mass branch to see how many candidates per event
+lengths = ak.to_numpy(ak.num(tree[args.mass]))
 print(f"{'─' * 48}")
 print(f'Events with 0 candidates: {np.sum(lengths == 0)}')
 print(f'Events with 1 candidate:  {np.sum(lengths == 1)}')
@@ -86,19 +92,20 @@ print(f"{'─' * 48}")
 
 # Apply the selection. pnn_mu_min defaults to the upstream floor, so a bare run
 # passes every candidate and only --tos / a raised threshold narrow it.
-keep = ak.ones_like(tree['tag_dtf_m'], dtype=bool)
+keep = ak.ones_like(tree[args.mass], dtype=bool)
 if args.tos:
-    tos, _ = cut_utils.tos_mask(tree, TOS_LINES)
+    tos, _ = cut_utils.tos_mask(tree, TOS_LINES, tag_ref=args.mass)
     keep = keep & tos
 if args.pnn_mu_min is not None:
     # "passes OR isn't a muon", reduced onto the candidate, so a candidate is cut
     # only when one of its own muon daughters fails.
     muon_ok = ((tree['prt_pnn_mu'] > args.pnn_mu_min)
                | (abs(tree['prt_pid']) != MUON_PID))
-    keep = keep & cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all')
+    keep = keep & cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all',
+                                   target_ref=args.mass)
 applied = ', '.join((['TOS'] if args.tos else [])
                     + ([f'pnn_mu>{args.pnn_mu_min}'] if args.pnn_mu_min is not None else []))
-mass = tree['tag_dtf_m'][keep]
+mass = tree[args.mass][keep]
 print(f'Selection [{applied or "none"}]: '
       f'{int(ak.sum(ak.num(mass)))} / {n_all_candidates} candidates pass')
 
@@ -107,7 +114,7 @@ if args.best:
     # the eligibility mask, so each event keeps the best candidate that survived
     # the selection; events with none left simply contribute nothing.
     best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', keep)
-    tag_m = cut_utils.values(tree, 'tag_dtf_m', best)
+    tag_m = cut_utils.values(tree, args.mass, best)
 # Flatten to every surviving candidate
 else: tag_m = ak.to_numpy(ak.flatten(mass))
 
@@ -120,23 +127,19 @@ print(f"{'─' * 48}")
 
 # Plot
 print('Plotting histogram...')
-plt.rcParams['font.family'] = 'STIXGeneral'
+C = plot_style.COLORS
+plot_utils.apply_font()
 plt.rcParams['font.size'] = 16
-plt.figure(figsize=(12, 9))
-if args.full_range: hist_range = (400, 1200)
+fig, ax = plt.subplots(figsize=(12, 9))
+if args.full_range: hist_range = (300, 1200)
 else: hist_range = (450, 650)
-plt.hist(tag_m, bins=100, range=hist_range, histtype='step', color='black', label='Candidates')
-plt.axvline(x=547.86, color='tab:red', linestyle='--', label='Eta')
+ax.hist(tag_m, bins=100, range=hist_range, histtype='step', color=C['data'], label='Candidates')
+ax.axvline(x=kinematics.M_ETA, color=C['reference'], linestyle='--', label=r'$\eta$')
 if args.full_range:
-    plt.axvline(x=770., color='tab:orange', linestyle='--', label='Rho')
-    plt.axvline(x=782.65, color='tab:pink', linestyle='--', label='Omega')
-    plt.axvline(x=957.78, color='tab:purple', linestyle='--', label='Eta Prime')
-    plt.axvline(x=1019.46, color='tab:brown', linestyle='--', label='Phi')
-# plt.xlim(300, 700)
-plt.xlabel('Mass [MeV]')
-plt.ylabel('Candidates')
-plt.title('Mass Distribution of Candidates')
-plt.grid(alpha=0.3)
-plt.legend(frameon=False)
-plt.savefig(f'{args.output}', dpi=300)
-print(f'Saved plot to {args.output}')
+    for label, resonance_mass, linestyle in plot_style.RESONANCES:
+        ax.axvline(x=resonance_mass, color=C['reference'], linestyle=linestyle, label=label)
+ax.set_xlabel('Mass [MeV]')
+ax.set_ylabel('Candidates')
+plot_style.style_axes(ax)
+ax.legend(frameon=False)
+plot_style.save_plot(fig, args.output)

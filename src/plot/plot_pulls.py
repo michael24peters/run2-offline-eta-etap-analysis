@@ -13,11 +13,15 @@ Usage:
 import argparse
 import json
 import os
+import sys
 
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
 import numpy as np
 from scipy import stats
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'utils'))
+import plot_style
+import plot_utils
 
 # --- Argument parsing ---
 parser = argparse.ArgumentParser(description='Pull plot from json fit results')
@@ -40,7 +44,7 @@ n_pulls = len(pulls)
 print(f'[INFO] Extracted {n_pulls} pull values from: {args.input}')
 
 # --- Plot configuration ---
-plt.rcParams['font.family'] = 'STIXGeneral'
+plot_utils.apply_font()
 plt.rcParams['font.size'] = 12
 
 # --- Create pull histogram ---
@@ -68,7 +72,7 @@ ax.hist(
     pulls,
     bins=nbins,
     range=(xmin, xmax),
-    color='#e07b39',   # orange — matches kOrange+7 from the fit script
+    color=plot_style.COLORS['pull'],
     alpha=0.75,
     edgecolor='white',
     linewidth=0.7,
@@ -82,21 +86,18 @@ x_gauss = np.linspace(xmin, xmax, 400)
 y_gauss = area * stats.norm.pdf(x_gauss)
 ax.plot(x_gauss, y_gauss,
         label='Normal gaussian\n(scaled to hist area)',
-        color='blue',
+        color=plot_style.COLORS['fit'],
         linewidth=2,
         linestyle='--',
         zorder=3)
 
 # Plot configuration
-# Axis labels, title, legend
+# Axis labels, legend
 ax.set_xlabel(r'Pull  $(y_{\mathrm{data}} - y_{\mathrm{fit}})\,/\,\sigma_{\mathrm{data}}$',
               fontsize=12)
 ax.set_ylabel('Pull counts')
-ax.set_title('Pull distribution')
 ax.set_xlim(xmin, xmax)
-# Automatic minor ticks
-ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
-ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
+plot_style.style_axes(ax)
 # Legend
 ax.legend(frameon=False, loc='upper right')
 
@@ -106,9 +107,7 @@ ax.text(0.025, 0.95, text, transform=ax.transAxes, verticalalignment='top')
 
 # --- Save plot ---
 os.makedirs(os.path.dirname(args.output) or '.', exist_ok=True)
-fig.tight_layout()
-fig.savefig(args.output, dpi=300)
-print(f'[DONE] Pull histogram saved to: {args.output}')
+plot_style.save_plot(fig, args.output)
 
 # --- Print summary ---
 W = 48

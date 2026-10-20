@@ -10,10 +10,15 @@ Usage:
 
 import argparse
 import os
+import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
 import uproot
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'utils'))
+import plot_style
+import plot_utils
 
 
 def plot_branch(input, branch_name, n_evts=-1, output='branch_plot.png'):
@@ -47,14 +52,15 @@ def plot_branch(input, branch_name, n_evts=-1, output='branch_plot.png'):
     if len(branch_data) > 1e6:
         print(f'[WARNING] Branch data has {len(branch_data)} entries, which '
               f'may be too large to plot.')
-    plt.hist(branch_data, bins=100, color='tab:blue')
-    plt.xlabel(branch_name)
-    plt.ylabel('Counts')
-    plt.title(f'{branch_name} distribution')
-    plt.grid(True, alpha=0.3)
+    plot_utils.apply_font()
+    fig, ax = plt.subplots()
+    ax.hist(branch_data, bins=100, histtype='step', color=plot_style.COLORS['data'])
+    ax.set_xlabel(branch_name)
+    ax.set_ylabel('Counts')
+    plot_style.style_axes(ax)
     print('[INFO] Saving plot...')
-    plt.savefig(output, dpi=300)
-    print(f'[INFO] Saved plot to {output}.')
+    plot_style.save_plot(fig, output)
+    plt.close(fig)
 
 # Main method to run this directly as a script
 if __name__ == '__main__':

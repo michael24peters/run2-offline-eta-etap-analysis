@@ -22,6 +22,15 @@ COLORS = {
     'phase_space': '#4a3aa7',
 }
 
+# (label, mass [MeV], linestyle) of the resonances marked on full-range mass
+# plots, drawn in COLORS['reference'] next to the eta's dashed line.
+RESONANCES = [
+    (r'$\rho$', 770.0, '-.'),
+    (r'$\omega$', 782.65, ':'),
+    (r"$\eta'$", 957.78, (0, (5, 1))),
+    (r'$\phi$', 1019.46, (0, (3, 1, 1, 1, 1, 1))),
+]
+
 # LaTeX decay string for each channel, keyed by the channel segment of
 # meta.input_file ('ntuple/lhcb/<channel>/<date>/combined_files.root').
 CHANNEL_LABELS = {

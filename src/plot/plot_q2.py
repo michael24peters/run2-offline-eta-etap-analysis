@@ -18,6 +18,8 @@ import uproot
 # Ensure utils/kinematics.py is importable
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 '..', 'utils'))
+import plot_style
+import plot_utils
 from kinematics import invariant_mass2
 
 
@@ -92,8 +94,10 @@ q2s = np.array(q2s)
 print(f'[INFO] q2 range: [{q2s.min():.4f}, {q2s.max():.4f}]')
 
 # Plot 1d histogram of q^2
+plot_utils.apply_font()
+plt.rcParams['font.size'] = 14
 fig, ax = plt.subplots(figsize=(7, 6))
-ax.hist(q2s, bins=200, range=(0.04, 0.92))
+ax.hist(q2s, bins=200, range=(0.04, 0.92), histtype='step', color=plot_style.COLORS['data'])
 # Get bin edges and counts
 bin_edges = np.linspace(0.04, 0.92, 201)
 counts = np.histogram(q2s, bins=bin_edges)[0]
@@ -110,9 +114,5 @@ print(f'[DONE] q2 histogram data saved to {json_outfile}')
 
 ax.set_xlabel(r'$q^2 (m^2_{\mu^+,\mu^-})$ [GeV$^2$]')
 ax.set_ylabel('Counts')
-ax.set_title(r'$\eta \to \mu^+\mu^-\gamma$ plot ($q^2$)')
-ax.grid(alpha=0.2)
-
-fig.tight_layout()
-fig.savefig(outfile, dpi=150)
-print(f'[DONE] q2 histogram saved to {outfile}')
+plot_style.style_axes(ax)
+plot_style.save_plot(fig, outfile, dpi=150)

@@ -20,7 +20,7 @@ def _new_axes():
     plt.rcParams['font.size'] = 16
     return plt.subplots(figsize=(8, 6))
 
-def plot_pt_hist(pt, xlabel, title, output, xmax, bins=100):
+def plot_pt_hist(pt, xlabel, output, xmax, bins=100):
     """Single-species pT histogram: black step, log-scale y."""
     fig, ax = _new_axes()
     ax.hist(pt, bins=bins, range=(0, xmax), histtype='step', color=plot_style.COLORS['data'])
@@ -28,11 +28,10 @@ def plot_pt_hist(pt, xlabel, title, output, xmax, bins=100):
     plot_style.style_axes(ax)
     ax.set_xlabel(xlabel)
     ax.set_ylabel('Entries')
-    ax.set_title(title)
     plot_style.save_plot(fig, output)
     plt.close(fig)
 
-def plot_pt_overlay(series, xlabel, title, output, xmax, bins=100):
+def plot_pt_overlay(series, xlabel, output, xmax, bins=100):
     """
     Multiple species overlaid on one pT histogram.
 
@@ -45,7 +44,6 @@ def plot_pt_overlay(series, xlabel, title, output, xmax, bins=100):
     plot_style.style_axes(ax)
     ax.set_xlabel(xlabel)
     ax.set_ylabel('Entries')
-    ax.set_title(title)
     ax.legend(loc='upper right', frameon=True, fancybox=False, edgecolor='none', framealpha=1)
     plot_style.save_plot(fig, output)
     plt.close(fig)

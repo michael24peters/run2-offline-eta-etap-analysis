@@ -21,6 +21,9 @@ _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
 import cut_utils
+import kinematics
+import plot_style
+import plot_utils
 
 # IO
 parser = argparse.ArgumentParser(description='Compare all-candidate vs best-candidate mass distributions')
@@ -54,39 +57,31 @@ print(f"{'─' * 48}")
 
 # Plot
 print('Plotting histogram...')
-plt.rcParams['font.family'] = 'STIXGeneral'
+C = plot_style.COLORS
+plot_utils.apply_font()
 plt.rcParams['font.size'] = 16
-plt.figure(figsize=(12, 9))
+fig, ax = plt.subplots(figsize=(12, 9))
 
 bins = 200
 if args.full_range: hist_range = (400, 1200)
 else: hist_range = (450, 600)
 
-# All candidates: red low-opacity fill + red full-opacity outline.
-# Best candidate: blue low-opacity fill + blue full-opacity outline.
-# Where the two fills overlap, the alpha blending reads as purple.
-plt.hist(tag_m_all, bins=bins, range=hist_range, histtype='stepfilled',
-         color='red', alpha=0.25, label='All candidates')
-plt.hist(tag_m_all, bins=bins, range=hist_range, histtype='step',
-         color='red', alpha=1.0, linewidth=1.5)
+# Each sample: low-opacity fill plus full-opacity outline, so the overlap of
+# the two fills stays readable.
+for values, color, label in [(tag_m_all, C['pull'], 'All candidates'),
+                             (tag_m_best, C['fit'], 'Best candidate')]:
+    ax.hist(values, bins=bins, range=hist_range, histtype='stepfilled',
+            color=color, alpha=0.25, label=label)
+    ax.hist(values, bins=bins, range=hist_range, histtype='step',
+            color=color, alpha=1.0, linewidth=1.5)
 
-plt.hist(tag_m_best, bins=bins, range=hist_range, histtype='stepfilled',
-         color='blue', alpha=0.25, label='Best candidate')
-plt.hist(tag_m_best, bins=bins, range=hist_range, histtype='step',
-         color='blue', alpha=1.0, linewidth=1.5)
-
-plt.axvline(x=547.86, color='tab:green', linestyle='--', label='Eta')
-
+ax.axvline(x=kinematics.M_ETA, color=C['reference'], linestyle='--', label=r'$\eta$')
 if args.full_range:
-    plt.axvline(x=770., color='tab:orange', linestyle='--', label='Rho')
-    plt.axvline(x=782.65, color='tab:pink', linestyle='--', label='Omega')
-    plt.axvline(x=957.78, color='tab:purple', linestyle='--', label='Eta Prime')
-    plt.axvline(x=1019.46, color='tab:brown', linestyle='--', label='Phi')
+    for label, resonance_mass, linestyle in plot_style.RESONANCES:
+        ax.axvline(x=resonance_mass, color=C['reference'], linestyle=linestyle, label=label)
 
-plt.xlabel('Mass [MeV]')
-plt.ylabel('Candidates')
-plt.title('Mass Distribution: All vs Best Candidate')
-plt.grid(alpha=0.3)
-plt.legend(frameon=False)
-plt.savefig(f'{args.output}', dpi=300)
-print(f'Saved plot to {args.output}')
+ax.set_xlabel('Mass [MeV]')
+ax.set_ylabel('Candidates')
+plot_style.style_axes(ax)
+ax.legend(frameon=False)
+plot_style.save_plot(fig, args.output)

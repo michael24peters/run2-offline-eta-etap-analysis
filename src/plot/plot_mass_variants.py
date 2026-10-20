@@ -22,14 +22,18 @@ import matplotlib.pyplot as plt
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 import cut_utils
+import kinematics
+import plot_style
+import plot_utils
 
 # (label, use_tos, pnn_mu_min, colour). Ordered widest selection first so the
 # tighter ones draw on top and stay visible.
+C = plot_style.COLORS
 VARIANTS = [
-    ('All, pnn_mu > 0.4',   False, 0.4,  'tab:orange'),
-    ('TOS, pnn_mu > 0.4',   True,  0.4,  'tab:green'),
-    ('All, pnn_mu > 0.95',  False, 0.95, 'tab:blue'),
-    ('TOS, pnn_mu > 0.95',  True,  0.95, 'tab:red'),
+    ('All, pnn_mu > 0.4',   False, 0.4,  C['pull']),
+    ('TOS, pnn_mu > 0.4',   True,  0.4,  C['background']),
+    ('All, pnn_mu > 0.95',  False, 0.95, C['fit']),
+    ('TOS, pnn_mu > 0.95',  True,  0.95, C['phase_space']),
 ]
 
 DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']
@@ -85,9 +89,9 @@ print(f"{'─' * 56}")
 
 # Plot
 print('Plotting histogram...')
-plt.rcParams['font.family'] = 'STIXGeneral'
+plot_utils.apply_font()
 plt.rcParams['font.size'] = 16
-plt.figure(figsize=(12, 9))
+fig, ax = plt.subplots(figsize=(12, 9))
 
 bins = 200
 if args.full_range: hist_range = (400, 1200)
@@ -95,25 +99,20 @@ else: hist_range = (450, 600)
 
 # Each variant: low-opacity fill for area, full-opacity outline for its edge.
 for label, colour, values in samples:
-    plt.hist(values, bins=bins, range=hist_range, histtype='stepfilled',
-             color=colour, alpha=0.25, label=label)
-    plt.hist(values, bins=bins, range=hist_range, histtype='step',
-             color=colour, alpha=1.0, linewidth=1.5)
+    ax.hist(values, bins=bins, range=hist_range, histtype='stepfilled',
+            color=colour, alpha=0.25, label=label)
+    ax.hist(values, bins=bins, range=hist_range, histtype='step',
+            color=colour, alpha=1.0, linewidth=1.5)
 
-plt.axvline(x=547.86, color='black', linestyle=':', label='Eta')
-
+ax.axvline(x=kinematics.M_ETA, color=C['reference'], linestyle='--', label=r'$\eta$')
 if args.full_range:
-    plt.axvline(x=770., color='tab:orange', linestyle=':', label='Rho')
-    plt.axvline(x=782.65, color='tab:pink', linestyle=':', label='Omega')
-    plt.axvline(x=957.78, color='tab:purple', linestyle=':', label='Eta Prime')
-    plt.axvline(x=1019.46, color='tab:brown', linestyle=':', label='Phi')
+    for label, resonance_mass, linestyle in plot_style.RESONANCES:
+        ax.axvline(x=resonance_mass, color=C['reference'], linestyle=linestyle, label=label)
 
-if args.log: plt.yscale('log')
+if args.log: ax.set_yscale('log')
 
-plt.xlabel('Mass [MeV]')
-plt.ylabel('Candidates')
-plt.title('Mass Distribution by Selection')
-plt.grid(alpha=0.3)
-plt.legend(frameon=False)
-plt.savefig(f'{args.output}', dpi=300)
-print(f'Saved plot to {args.output}')
+ax.set_xlabel('Mass [MeV]')
+ax.set_ylabel('Candidates')
+plot_style.style_axes(ax)
+ax.legend(frameon=False)
+plot_style.save_plot(fig, args.output)

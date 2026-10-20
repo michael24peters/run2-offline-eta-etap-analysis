@@ -63,14 +63,12 @@ if __name__ == '__main__':
         'gamma':    daughter_mask & (tree['mc_pid'] == 22),
     }
 
-    channel = fr'${plot_style.CHANNEL_LABELS["eta2mumugamma"]}$'
     pts = {}
     for name, pid, symbol, xmax in PARTICLES:
         pt = ak.to_numpy(ak.flatten(pt_all[masks[name]]))
         pts[name] = pt
         output = os.path.join(args.output_dir, f'mc_pt_{name}.png')
-        plot_pt.plot_pt_hist(pt, fr'$p_T({symbol})$ [MeV/$c$]',
-                              fr'MC truth $p_T({symbol})$, {channel}', output, xmax)
+        plot_pt.plot_pt_hist(pt, fr'$p_T({symbol})$ [MeV/$c$]', output, xmax)
         print(f'[INFO] {name} (PID {pid}): n={len(pt)}, '
               f'p_T range [{pt.min():.2f}, {pt.max():.2f}] MeV/c')
 
@@ -78,5 +76,5 @@ if __name__ == '__main__':
     plot_pt.plot_pt_overlay(
         [(r'$\mu^+$', pts['mu_plus'], plot_style.COLORS['fit']),
          (r'$\mu^-$', pts['mu_minus'], plot_style.COLORS['pull'])],
-        r'$p_T(\mu)$ [MeV/$c$]', fr'MC truth $p_T(\mu)$, {channel}', dimuon_output, xmax=15000)
+        r'$p_T(\mu)$ [MeV/$c$]', dimuon_output, xmax=15000)
     print(f'[INFO] dimuon overlay saved to {dimuon_output}')
