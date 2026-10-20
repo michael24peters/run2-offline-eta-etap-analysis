@@ -1,7 +1,11 @@
 """
 plot_mass_fit.py
 
-Library for plotting fit results from JSON files.
+Fit + pull plots of mass-fit result dicts (fit_gauss / fit_dcb / a per-bin
+Dalitz fit), with the stats box of the fit model:
+
+    plot_fit(result, output, gauss_text)   Gaussian + Chebyshev
+    plot_fit(result, output, dcb_text)     DCB + Chebyshev
 """
 
 import os
@@ -15,17 +19,69 @@ import plot_style
 import plot_utils
 
 
+def gauss_text(params, chi2_per_ndof):
+    """Stats box of a Gaussian + Chebyshev fit: (plot_text, term_text)."""
+    mean, mean_err = plot_utils.val_err(params['mean'])
+    sigma, sigma_err = plot_utils.val_err(params['sigma'])
+
+    stats = [
+        [(r'\mu', 'μ', mean, mean_err, '.2f', 'MeV')],
+        [(r'\sigma', 'σ', sigma, sigma_err, '.2f', 'MeV')],
+    ]
+    extra = (
+        fr'$\chi^2/ndof$ = {chi2_per_ndof:.2f}',
+        f'χ²/ndof = {chi2_per_ndof:.2f}',
+    )
+    return plot_style.build_stats_text(stats, extra=extra)
+
+
+def dcb_text(params, chi2_per_ndof):
+    """Stats box of a DCB + Chebyshev fit: (plot_text, term_text)."""
+    mean, mean_err   = plot_utils.val_err(params['mean'])
+    sigma, sigma_err = plot_utils.val_err(params['sigma'])
+    n_sig, n_sig_err = plot_utils.val_err(params['n_sig'])
+    n_bkg, n_bkg_err = plot_utils.val_err(params['n_bkg'])
+
+    # DCB tail parameters (asymmetric)
+    alphaL, alphaL_err = plot_utils.val_err(params.get('alphaL', {}))
+    nL, nL_err         = plot_utils.val_err(params.get('nL', {}))
+    alphaR, alphaR_err = plot_utils.val_err(params.get('alphaR', {}))
+    nR, nR_err         = plot_utils.val_err(params.get('nR', {}))
+
+    # Whatever key in `params` isn't one of the known signal/yield names
+    # above is a background parameter (c0, c1).
+    SIGNAL_KEYS = {'mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR', 'n_sig', 'n_bkg'}
+    bkg_row = [(name, name, *plot_utils.val_err(params[name]), '.3f', '')
+               for name in params if name not in SIGNAL_KEYS]
+
+    # Rows of (latex_symbol, plain_symbol, value, error, format string, unit)
+    stats = [
+        [(r'\mu', 'μ', mean, mean_err, '.2f', 'MeV')],
+        [(r'\sigma', 'σ', sigma, sigma_err, '.2f', 'MeV')],
+        [(r'\alpha_L', 'α_L', alphaL, alphaL_err, '.2f', ''),
+         (r'n_L', 'n_L', nL, nL_err, '.1f', '')],
+        [(r'\alpha_R', 'α_R', alphaR, alphaR_err, '.2f', ''),
+         (r'n_R', 'n_R', nR, nR_err, '.2f', '')],
+        [(r'n_{sig}', 'n_sig', n_sig, n_sig_err, '.0f', '')],
+        [(r'n_{bkg}', 'n_bkg', n_bkg, n_bkg_err, '.0f', '')],
+        bkg_row,
+    ]
+    # Values which are not a value-error pair (e.g., chi2/ndof). Must provide
+    # exact strings for desired LaTeX and terminal output.
+    extra = (
+        fr'$\chi^2/ndof$ = {chi2_per_ndof:.2f}',
+        f'χ²/ndof = {chi2_per_ndof:.2f}',
+    )
+    return plot_style.build_stats_text(stats, extra=extra)
+
+
 def build_fit_figure(data, build_text, x_lim=None, title=None):
     """
-    Draw a fit + pull figure from an already-loaded result dict. Does not
-    save or print anything -- that's plot_fit_data(), which wraps this for
-    the single-plot-per-JSON-file callers (plot_dcb.py, plot_gauss.py). A
-    caller that needs the figure itself (e.g. to add it to a multi-page
-    PdfPages) should call this directly instead.
+    Draw a fit + pull figure from a result dict. Does not save or print
+    anything; plot_fit() does both.
 
-    build_text(params, chi2_per_ndof) builds the stats-box text -- this is
-    what lets each caller (DCB vs Gauss, or a per-bin Dalitz fit) show its
-    own stats without this function knowing about any of them.
+    build_text(params, chi2_per_ndof) returns the stats box as
+    (plot_text, term_text): gauss_text, dcb_text, or a per-bin Dalitz one.
 
     x_lim: (xmin, xmax) override; defaults to the data range.
     title: optional plot title (e.g. to identify one page of a multi-page
@@ -37,7 +93,7 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     axis. An optional 'f_sig' in it is a separate signal factor (with 'f'
     then the background's), drawn dashed in the same panel.
 
-    Returns (fig, ax, ax_pull, plot_text, term_text).
+    Returns (fig, term_text).
     """
     # Extract histogram data
     hist = data['histogram']
@@ -101,16 +157,6 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     ax.axvline(x=547.86, color=plot_style.COLORS['reference'],
                linestyle='--', label='PDG Mass')
 
-    # Mark the region actually used in the likelihood, if the fit was
-    # restricted (fit_dcb's fit_window) -- curves elsewhere on the plot are
-    # extrapolated from the fixed/fitted shape, not fit against those bins.
-    fit_window = data.get('meta', {}).get('fit_window')
-    if fit_window:
-        for ax_i in (ax, ax_pull):
-            for edge in fit_window:
-                ax_i.axvline(x=edge, color=plot_style.COLORS['reference'],
-                             linestyle=':', linewidth=1.2)
-
     # Ticks and grid
     plot_style.style_axes(ax)
 
@@ -124,13 +170,7 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     # Add fit parameters to plot
     params = data['fit']['parameters']
     chi2_per_ndof = data['fit']['chi2_per_ndof']
-    # Get text from build_text, with error handling for compatibility
-    try:
-        plot_text, term_text = build_text(params, chi2_per_ndof)
-    except ValueError:
-        plot_text = build_text(params, chi2_per_ndof)
-        term_text = None
-
+    plot_text, term_text = build_text(params, chi2_per_ndof)
     stats_box = plot_style.add_stats_box(ax, plot_text)
 
     # Reserve headroom above the data/curves for the stats box + legend,
@@ -139,23 +179,10 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     plot_style.reserve_top_margin(ax, content_max, artists=[stats_box, legend])
     plot_style.format_y_axis(ax)
 
-    if fit_window:
-        ax.text(fit_window[0], ax.get_ylim()[1], ' fit region',
-                color=plot_style.COLORS['reference'], fontsize=12, va='top', ha='left')
-
     # Bottom panel: pulls
     ax_pull.bar(x, pulls, width=bin_width, color=plot_style.COLORS['pull'], edgecolor='none')
     ax_pull.axhline(0, color=plot_style.COLORS['data'], lw=0.8)
-    # y axis config
-    # Bins outside fit_window (if set) were never fit against, so their pulls
-    # can be huge and shouldn't blow out the axis scale for the bins that
-    # matter.
-    scale_pulls = pulls
-    if fit_window:
-        in_window = (x >= fit_window[0]) & (x <= fit_window[1])
-        if in_window.any():
-            scale_pulls = pulls[in_window]
-    ymin, ymax = int(np.floor(scale_pulls.min())) - 1, int(np.ceil(scale_pulls.max())) + 1
+    ymin, ymax = int(np.floor(pulls.min())) - 1, int(np.ceil(pulls.max())) + 1
     ax_pull.set_ylim(ymin, ymax)
     ax_pull.set_yticks(np.arange(ymin, ymax + 1, 1))
     plot_style.style_axes(ax_pull, minor_y=False)
@@ -169,12 +196,12 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     if xticklabels:
         min(xticklabels, key=lambda t: t.get_position()[0]).set_visible(False)
 
-    return fig, ax, ax_pull, plot_text, term_text
+    return fig, term_text
 
-def plot_fit_data(data, output, build_text, x_lim=None, title=None):
-    """Render a fit + pull plot from an already-loaded result dict, save it,
-    and print its summary."""
-    fig, ax, ax_pull, plot_text, term_text = build_fit_figure(
-        data, build_text, x_lim=x_lim, title=title)
+
+def plot_fit(data, output, build_text):
+    """Fit + pull plot of a result dict, saved to output, with its stats
+    printed to the terminal."""
+    fig, term_text = build_fit_figure(data, build_text)
     plot_style.save_plot(fig, output)
-    plot_style.print_summary(term_text if term_text else plot_text)
+    plot_style.print_summary(term_text)

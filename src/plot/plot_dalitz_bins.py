@@ -35,8 +35,7 @@ import fit_utils
 import kinematics
 import plot_style
 import plot_utils
-from plot_dcb import plot_dcb
-from plot_mass_fit import build_fit_figure
+from plot_mass_fit import build_fit_figure, dcb_text, plot_fit
 from plot_phase_space import dalitz_boundary
 
 SIGNAL_KEYS = {'mean', 'sigma', 'n_sig', 'n_bkg'}
@@ -79,7 +78,7 @@ def plot_yield_maps(result, prefix):
 
 
 def make_build_text(n_cand):
-    """Stats-box builder for a per-bin page: the plot_dcb layout without the
+    """Stats-box builder for a per-bin page: the dcb_text layout without the
     tails (fixed per bin), with n_cand next to chi2/ndof."""
     def build_text(params, chi2_per_ndof):
         mean, mean_err = plot_utils.val_err(params['mean'])
@@ -139,8 +138,8 @@ def bin_page(result, b):
             data['phase_space'] = {'x': dalitz['factor_masses'], 'f': b['f_bkg']}
             if dalitz['signal_factor'] != dalitz['bkg_factor']:
                 data['phase_space']['f_sig'] = b['f_sig']
-        fig, _, _, _, _ = build_fit_figure(data, make_build_text(b['n_cand']),
-                                           x_lim=(xmin, xmax), title=title)
+        fig, _ = build_fit_figure(data, make_build_text(b['n_cand']),
+                                  x_lim=(xmin, xmax), title=title)
         return fig
 
     # Data-only page in the fit pages' style, with the reason there is no fit
@@ -200,7 +199,8 @@ def write_per_bin_pdf(result, pdf_path, horizontal=False):
 def plot_dalitz_fit(result, prefix, horizontal=False):
     """global_fit.png next to prefix, the yield maps, and the per-bin pages
     (also in horizontal order with horizontal=True)."""
-    plot_dcb(result, os.path.join(os.path.dirname(os.path.abspath(prefix)), 'global_fit.png'))
+    plot_fit(result, os.path.join(os.path.dirname(os.path.abspath(prefix)), 'global_fit.png'),
+             dcb_text)
     plot_yield_maps(result, prefix)
     write_per_bin_pdf(result, f'{prefix}_per_bin_fits.pdf')
     if horizontal:

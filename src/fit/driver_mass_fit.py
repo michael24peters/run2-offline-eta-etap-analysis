@@ -48,8 +48,7 @@ import fit_utils
 import kinematics
 from fit_dcb import TAIL_PARAMS, fit_dcb
 from fit_gauss import fit_gauss
-from plot_dcb import plot_dcb
-from plot_gauss import plot_gauss
+from plot_mass_fit import dcb_text, gauss_text, plot_fit
 
 # --- Selection ---------------------------------------------------------------
 
@@ -219,9 +218,10 @@ if args.tail_prior:
 
 # --- Write -------------------------------------------------------------------
 
-for name, result, plot in [('gauss', gauss_result, plot_gauss), ('dcb', dcb_result, plot_dcb)]:
+for name, result, build_text in [('gauss', gauss_result, gauss_text),
+                                 ('dcb', dcb_result, dcb_text)]:
     json_path = os.path.join(args.outdir, f'results_{name}.json')
     with open(json_path, 'w') as f:
         json.dump(result, f, indent=2)
     print(f'[DONE] JSON saved to: {json_path}', file=sys.stderr)
-    plot(result, os.path.join(args.outdir, f'{name}_mass_fit.png'))
+    plot_fit(result, os.path.join(args.outdir, f'{name}_mass_fit.png'), build_text)
