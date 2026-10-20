@@ -116,6 +116,17 @@ def test_fit_dcb_returns_result_and_minuit():
     assert isinstance(m, Minuit)
 
 
+def test_fit_gauss_fixed_params_stay_fixed():
+    """fixed_params holds its parameters at the given values through both
+    stages, as for a signal-only fit of truth-matched MC."""
+    rng = np.random.default_rng(3)
+    vals = rng.normal(547.9, 8.0, 1500)
+    _, m = fit_gauss(vals, xmin=XMIN, xmax=XMAX, nbins=60,
+                     fixed_params={'n_bkg': 0.0, **fit_utils.BKG_INIT})
+    assert m.fixed['n_bkg'] and m.values['n_bkg'] == 0.0
+    assert m.values['n_sig'] == pytest.approx(1500, rel=0.05)
+
+
 # --- Chebyshev background ---------------------------------------------------
 
 def test_background_pdf_integrates_to_one_and_is_nonnegative():
@@ -150,9 +161,9 @@ def test_make_gauss_cost_recovers_toy_params():
 
 
 def test_fit_dcb_bkg_params_roundtrip_through_json():
-    """fit_dcb's result JSON names the background parameters c0, c1, and a
-    LoadedFit built from that JSON exposes them under the same names (so
-    plot_dcb.py / a later per-bin fit reading this JSON back finds them)."""
+    """fit_dcb's result JSON names the background parameters c0, c1, and
+    build_prior_from_result on that JSON gives the live fit's values and
+    covariance for them (so a later fit reading this JSON back finds them)."""
     rng = np.random.default_rng(11)
     sig = rng.normal(547.9, 8.0, 2000)
     bkg = rng.uniform(XMIN, XMAX, 6000)
@@ -168,9 +179,10 @@ def test_fit_dcb_bkg_params_roundtrip_through_json():
         assert result['fit']['parameters'][name]['value'] == pytest.approx(
             m.values[name], abs=1e-5)
 
-    loaded = fit_utils.LoadedFit(result['fit'])
-    for name in fit_utils.BKG_PARAMS:
-        assert name in loaded.values
+    values, cov = fit_utils.build_prior_from_result(result['fit'], fit_utils.BKG_PARAMS)
+    live_values, live_cov = fit_utils.build_prior(m, fit_utils.BKG_PARAMS)
+    assert values == pytest.approx(live_values, abs=1e-5)
+    assert cov == pytest.approx(live_cov)
 
 
 # --- build_prior -----------------------------------------------------------
@@ -204,9 +216,9 @@ def test_build_prior_excluded_param_gets_no_prior():
 
 
 def test_build_prior_falls_back_to_diagonal_when_covariance_is_none():
-    """A LoadedFit with no 'covariance' block in its JSON (HESSE's matrix
-    inversion failed on the original fit) must fall back to a diagonal
-    matrix built from .errors, not raise."""
+    """A results JSON with no 'covariance' block (HESSE's matrix inversion
+    failed on the original fit) must fall back to a diagonal matrix built
+    from the errors, not raise."""
     fit_block = {
         'valid': True, 'fval': 0.0, 'n_free_params': 2,
         'parameters': {
@@ -214,10 +226,7 @@ def test_build_prior_falls_back_to_diagonal_when_covariance_is_none():
             'n_bkg': {'value': 500.0, 'error': 20.0},
         },
     }
-    loaded = fit_utils.LoadedFit(fit_block)
-    assert loaded.covariance is None
-
-    values, cov = fit_utils.build_prior(loaded, ['n_sig', 'n_bkg'], factor=2.0)
+    values, cov = fit_utils.build_prior_from_result(fit_block, ['n_sig', 'n_bkg'], factor=2.0)
 
     assert values == pytest.approx([100.0, 500.0])
     assert cov == pytest.approx(np.diag([10.0**2, 20.0**2]) * 4.0)

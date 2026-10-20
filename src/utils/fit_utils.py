@@ -43,6 +43,21 @@ def make_histogram(values, xmin, xmax, nbins):
     return centers, edges, counts.astype(float), errors
 
 
+# --- Goodness of fit ---
+
+def neyman_chi2(counts, bin_fit):
+    """Neyman (data-based) chi2, sum (d - f)^2 / d over the mass bins with
+    d > 0: the data, not the fit, estimate each bin's variance."""
+    filled = counts > 0
+    return float(np.sum((counts[filled] - bin_fit[filled])**2 / counts[filled]))
+
+
+def data_pulls(counts, bin_fit):
+    """Data-based pull (d - f) / sqrt(d) of each mass bin; 0 for an empty bin."""
+    filled = counts > 0
+    return np.where(filled, (counts - bin_fit) / np.sqrt(np.where(filled, counts, 1.0)), 0.0)
+
+
 # --- Chebyshev ---
 
 # Background parameters, in the order the cost functions take them, and their
@@ -492,8 +507,7 @@ def build_prior(fit, params, factor=1.0):
     `NormalConstraint(params, values, error=cov)` -- from a previous fit's
     parameters, with each parameter's uncertainty scaled by `factor`.
 
-    fit    : a live iminuit.Minuit or a LoadedFit (both expose .values,
-             .errors, .covariance).
+    fit    : an iminuit.Minuit.
     params : names to constrain. A parameter NOT in this list gets no prior
              at all -- this is how a prior is dropped entirely for a given
              stage of a fit chain (e.g. floating a background parameter
@@ -520,45 +534,20 @@ def build_prior(fit, params, factor=1.0):
     return values, (scaled + scaled.T) / 2
 
 
-# --- Reloading a saved fit ---
+def build_prior_from_result(fit_block, params, factor=1.0):
+    """build_prior() for a fit saved in a results JSON. fit_block is its
+    'fit' dict: 'parameters' {name: {'value', 'error'}} and 'covariance'
+    {'names', 'matrix'}, or None if HESSE's matrix inversion failed."""
+    params = list(params)
+    values = np.array([fit_block['parameters'][p]['value'] for p in params], dtype=float)
+    covariance = fit_block.get('covariance')
+    if covariance is not None:
+        index = [covariance['names'].index(p) for p in params]
+        cov = np.array(covariance['matrix'], dtype=float)[np.ix_(index, index)]
+    else:
+        errs = np.array([fit_block['parameters'][p]['error'] for p in params], dtype=float)
+        cov = np.diag(errs**2)
 
-class NamedCovariance:
-    """Read-only stand-in for iminuit's name-indexable covariance view, e.g.
-    cov[['mean', 'sigma']] returns the 2x2 submatrix for those two parameters,
-    in that order."""
-
-    def __init__(self, names, matrix):
-        self._index = {name: i for i, name in enumerate(names)}
-        self._matrix = np.asarray(matrix, dtype=float)
-
-    def __getitem__(self, names):
-        idx = [self._index[n] for n in names]
-        return self._matrix[np.ix_(idx, idx)]
-
-
-class LoadedFit:
-    """Minuit-like read-only view over a JSON fit result's `fit` block, so
-    code written against a live Minuit object (m.values[name],
-    m.errors[name], m.valid, m.covariance) runs unchanged against a fit
-    reloaded from disk.
-
-    `covariance` is None unless the `fit` block has a `covariance` entry
-    ({'names': [...], 'matrix': [[...]]}) -- same as a live fit whose HESSE
-    matrix inversion failed, so callers that already fall back to a diagonal
-    prior from `errors` in that case need no changes. There is no live HESSE
-    run behind a loaded fit, so `fmin` and `limits` aren't reconstructed --
-    debugging cells built around those should be skipped for a loaded fit
-    rather than adapted.
-    """
-
-    def __init__(self, fit_block):
-        self.valid = fit_block['valid']
-        self.fval = fit_block['fval']
-        self.nfit = fit_block['n_free_params']
-        params = fit_block['parameters']
-        self.parameters = tuple(params)
-        self.values = {name: p['value'] for name, p in params.items()}
-        self.errors = {name: p['error'] for name, p in params.items()}
-        cov = fit_block.get('covariance')
-        self.covariance = (NamedCovariance(cov['names'], cov['matrix'])
-                            if cov is not None else None)
+    scaled = factor**2 * cov
+    # NormalConstraint requires a bit-exact symmetric matrix.
+    return values, (scaled + scaled.T) / 2

@@ -130,16 +130,11 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
     bin_bkg = np.diff(bkg_cdf_edges) * p['n_bkg']
     bin_fit = bin_sig + bin_bkg
 
-    # Goodness of fit: Neyman (data-based) chi2, with the data as the variance
-    # estimate. The denominator is the measurement uncertainty rather than a fit
-    # uncertainty.
-    mask = counts > 0
-    chi2 = float(np.sum((counts[mask] - bin_fit[mask])**2 / counts[mask]))
-    ndof = int(mask.sum()) - m.nfit
+    # Goodness of fit, over the filled mass bins
+    chi2 = fit_utils.neyman_chi2(counts, bin_fit)
+    ndof = int((counts > 0).sum()) - m.nfit
     chi2_per_ndof = chi2 / ndof if ndof > 0 else float('nan')
-
-    # Data-based pulls: (d - f) / sqrt(d), 0 for empty bins.
-    pulls = np.where(counts > 0, (counts - bin_fit) / np.sqrt(counts), 0.0)
+    pulls = fit_utils.data_pulls(counts, bin_fit)
 
     print(f'[INFO] χ²/ndf = {chi2_per_ndof:.4f}  ({chi2:.2f} / {ndof})',
           file=sys.stderr)

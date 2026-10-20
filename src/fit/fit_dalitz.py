@@ -136,10 +136,9 @@ def bin_prediction(fit, counts, mass_edges, xmin, xmax,
     bin_fit = bin_sig + bin_bkg
 
     # Neyman chi2 and pulls, empty mass bins skipped
-    filled = counts > 0
-    chi2 = float(np.sum((counts[filled] - bin_fit[filled])**2 / counts[filled]))
-    ndof = int(filled.sum()) - fit.nfit
-    pulls = np.where(filled, (counts - bin_fit) / np.sqrt(np.where(filled, counts, 1.0)), 0.0)
+    chi2 = fit_utils.neyman_chi2(counts, bin_fit)
+    ndof = int((counts > 0).sum()) - fit.nfit
+    pulls = fit_utils.data_pulls(counts, bin_fit)
     return {'bin_sig': bin_sig, 'bin_bkg': bin_bkg, 'pulls': pulls, 'chi2': chi2, 'ndof': ndof}
 
 

@@ -118,8 +118,8 @@ m23_edges = np.linspace(*M23_RANGE, N_PER_AXIS + 1)   # [GeV^2]
 tail_prior = None
 if not args.signal_only:
     with open(args.tail_prior) as f:
-        mc_fit = fit_utils.LoadedFit(json.load(f)['fit'])
-    tail_prior = fit_utils.build_prior(mc_fit, TAIL_PARAMS, factor=TAIL_PRIOR_FACTOR)
+        mc_fit = json.load(f)['fit']
+    tail_prior = fit_utils.build_prior_from_result(mc_fit, TAIL_PARAMS, factor=TAIL_PRIOR_FACTOR)
 
 # --- Fit ---------------------------------------------------------------------
 

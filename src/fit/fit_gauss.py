@@ -64,12 +64,15 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
         n_bkg=(0.0, None),
     )
 
-    # Stage 1: fit with the background params fixed at their initial values.
-    # Stage 2: float them, starting from stage 1's result.
-    stage1 = fit_utils.run_fit(cost, init, limits, fixed=list(fit_utils.BKG_PARAMS))
+    # Stage 1: fit with the background params fixed at their initial values
+    # (also anything in fixed_params).
+    # Stage 2: float everything except fixed_params, starting from stage 1's
+    # result.
+    stage1_fixed = set(fit_utils.BKG_PARAMS) | set(fixed_params or {})
+    stage1 = fit_utils.run_fit(cost, init, limits, fixed=list(stage1_fixed))
     init2 = dict(init, mean=stage1.values['mean'], sigma=stage1.values['sigma'],
                  n_sig=stage1.values['n_sig'], n_bkg=stage1.values['n_bkg'])
-    m = fit_utils.run_fit(cost, init2, limits)
+    m = fit_utils.run_fit(cost, init2, limits, fixed=list(fixed_params) if fixed_params else None)
     p, e = m.values, m.errors
 
     print(f"[INFO] valid={m.valid}  "
@@ -86,16 +89,11 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
     bin_bkg = np.diff(bkg_cdf_edges) * p['n_bkg']
     bin_fit = bin_sig + bin_bkg
 
-    # Goodness of fit: Neyman (data-based) chi2, with the data as the variance
-    # estimate. The denominator is the measurement uncertainty rather than a fit
-    # uncertainty.
-    mask = counts > 0
-    chi2 = float(np.sum((counts[mask] - bin_fit[mask])**2 / counts[mask]))
-    ndof = int(mask.sum()) - m.nfit
+    # Goodness of fit, over the filled mass bins
+    chi2 = fit_utils.neyman_chi2(counts, bin_fit)
+    ndof = int((counts > 0).sum()) - m.nfit
     chi2_per_ndof = chi2 / ndof if ndof > 0 else float('nan')
-
-    # Data-based pulls: (d - f) / sqrt(d), 0 for empty bins.
-    pulls = np.where(counts > 0, (counts - bin_fit) / np.sqrt(counts), 0.0)
+    pulls = fit_utils.data_pulls(counts, bin_fit)
 
     print(f'[INFO] χ²/ndf = {chi2_per_ndof:.4f}  ({chi2:.2f} / {ndof})',
           file=sys.stderr)
