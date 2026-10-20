@@ -13,7 +13,6 @@ import os
 import sys
 
 import numpy as np
-from iminuit.cost import NormalConstraint
 
 # Ensure src/utils is importable regardless of working directory
 _here = os.path.dirname(os.path.abspath(__file__))
@@ -23,9 +22,7 @@ import kinematics
 
 
 def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
-              mean_init=kinematics.M_ETA, sigma_init=5.0,
-              bkg_init=None,
-              mean_prior=None, sigma_prior=None, fixed_params=None):
+              mean_init=kinematics.M_ETA, sigma_init=5.0, fixed_params=None):
     """
     Run the Gaussian + background fit and return (result, m).
 
@@ -35,13 +32,6 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
     xmin, xmax, nbins : float, float, int : The range and number of bins for the
              histogram.
     mean_init, sigma_init : float : Initial values for the Gaussian parameters.
-    bkg_init : optional dict overriding the Chebyshev's default initial
-             values (e.g. {'c0': 0.3}), merged over fit_utils.BKG_INIT. These
-             still float in stage 2 -- for holding a background parameter
-             fixed instead, use fixed_params.
-    mean_prior, sigma_prior : optional (value, error). Adds
-             NormalConstraint(name, value, error=error) to the cost. None
-             (default) adds no constraint.
 
     Returns:
     --------
@@ -59,17 +49,13 @@ def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
 
     # Fit
     cost = fit_utils.make_gauss_cost(counts, edges, xmin, xmax)
-    if mean_prior is not None:
-        cost = cost + NormalConstraint('mean', mean_prior[0], error=mean_prior[1])
-    if sigma_prior is not None:
-        cost = cost + NormalConstraint('sigma', sigma_prior[0], error=sigma_prior[1])
 
     init = dict(
         mean  = mean_init,
         sigma = sigma_init,
         n_sig = n_total * 0.5,
         n_bkg = n_total * 0.5,
-        **{**fit_utils.BKG_INIT, **(bkg_init or {})},
+        **fit_utils.BKG_INIT,
     )
     if fixed_params:
         init.update(fixed_params)

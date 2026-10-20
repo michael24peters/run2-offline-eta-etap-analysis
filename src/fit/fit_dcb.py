@@ -31,8 +31,7 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
             mean_init=kinematics.M_ETA, sigma_init=5.0,
             alphaL_init=1.5, nL_init=2.0,
             alphaR_init=1.5, nR_init=2.0,
-            bkg_init=None,
-            mean_prior=None, sigma_prior=None, tail_prior=None, fixed_params=None):
+            tail_prior=None, fixed_params=None):
     """
     Run the asymmetric DCB + background fit and return (result, m).
 
@@ -44,11 +43,6 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
     mean_init, sigma_init : float : Initial values for the DCB parameters.
     alphaL_init, nL_init : float : Initial values for the left tail parameters.
     alphaR_init, nR_init : float : Initial values for the right tail parameters.
-    bkg_init : optional dict overriding the Chebyshev's default initial
-             values (e.g. {'c0': 0.3}), merged over fit_utils.BKG_INIT. These
-             still float in stage 2 -- for holding a background parameter
-             fixed instead, use fixed_params.
-    mean_prior, sigma_prior : optional (value, error) in MeV; see fit_gauss().
     tail_prior : optional (values, cov) for TAIL_PARAMS as a group -- `values`
              a length-4 array/dict, `cov` its 4x4 covariance. Adds
              NormalConstraint(TAIL_PARAMS, values, error=cov) to the cost, so
@@ -75,10 +69,6 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
 
     # Fit
     cost = fit_utils.make_dcb_cost(counts, bin_edges, xmin, xmax)
-    if mean_prior is not None:
-        cost = cost + NormalConstraint('mean', mean_prior[0], error=mean_prior[1])
-    if sigma_prior is not None:
-        cost = cost + NormalConstraint('sigma', sigma_prior[0], error=sigma_prior[1])
     if tail_prior is not None:
         cost = cost + NormalConstraint(TAIL_PARAMS, tail_prior[0], error=tail_prior[1])
 
@@ -91,7 +81,7 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
         nR     = nR_init,
         n_sig  = n_total * 0.5,
         n_bkg  = n_total * 0.5,
-        **{**fit_utils.BKG_INIT, **(bkg_init or {})},
+        **fit_utils.BKG_INIT,
     )
     if fixed_params:
         init.update(fixed_params)

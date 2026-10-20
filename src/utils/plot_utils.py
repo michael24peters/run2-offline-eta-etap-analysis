@@ -1,13 +1,11 @@
 """
 plot_utils.py
 
-Generic plotting helpers: font setup, JSON I/O, and param-dict unpacking.
+Generic plotting helpers: font setup and param-dict unpacking.
 
 For "house style" presentation logic (stats-box text, text placement,
 save/report boilerplate), see plot_style.py.
 """
-
-import json
 
 import matplotlib.pyplot as plt
 
@@ -24,9 +22,6 @@ def apply_font():
         family = 'sans-serif'
     plt.rcParams['font.family'] = family
     plt.rcParams['mathtext.fontset'] = 'dejavusans'
-
-def load_data(infile):
-    with open(infile) as f: return json.load(f)
 
 def val_err(param):
     return param.get('value', float('nan')), param.get('error', float('nan'))

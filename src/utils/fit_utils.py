@@ -184,17 +184,6 @@ def dcb_cdf(x, xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR):
     return _grid_cdf(x, masses, shape)
 
 
-def dcb_window_yield(p, e, xmin, xmax, window):
-    """Signal yield (and its error) from a fitted DCB within an arbitrary
-    (lo, hi) sub-window, by scaling n_sig by the DCB CDF's mass fraction
-    there. `p`/`e` are the fit's values/errors (e.g. Minuit's m.values,
-    m.errors), needing mean/sigma/alphaL/nL/alphaR/nR/n_sig."""
-    edge_cdf = dcb_cdf(np.array(window), xmin, xmax, p['mean'], p['sigma'],
-                       p['alphaL'], p['nL'], p['alphaR'], p['nR'])
-    frac = float(edge_cdf[1] - edge_cdf[0])
-    return p['n_sig'] * frac, e['n_sig'] * frac
-
-
 # --- Weighting by a Dalitz-bin factor f(M) ---
 #
 # In one Dalitz bin (one m12 x m23 box), the signal and background models of
@@ -453,24 +442,9 @@ def make_dcb_cost(counts, bin_edges, xmin, xmax, signal_factor_grid=None, bkg_fa
     return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf, name=param_names)
 
 
-def _dcb_sym_cdf(xe, xmin, xmax, mean, sigma, alpha, n):
-    return dcb_cdf(xe, xmin, xmax, mean, sigma, alpha, n, alpha, n)
-
-
-def make_dcb_sym_cost(counts, bin_edges, xmin, xmax):
-    """
-    ExtendedBinnedNLL cost for symmetric DCB (α_R ≡ α_L, n_R ≡ n_L) +
-    Chebyshev background.
-    Free parameters: mean, sigma, alpha, n, n_sig, n_bkg, c0, c1 (8 vs 10).
-    """
-    signal_params = ('mean', 'sigma', 'alpha', 'n')
-    scaled_cdf, param_names = _make_scaled_cdf(signal_params, _dcb_sym_cdf, cheb_cdf, xmin, xmax)
-    return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf, name=param_names)
-
-
 # --- Fit ---
 
-def run_fit(cost, initial_values, limits=None, fixed=None, seeds=None):
+def run_fit(cost, initial_values, limits=None, fixed=None):
     """
     Run MIGRAD (minimisation) then HESSE (covariance / symmetric errors).
 
@@ -482,10 +456,6 @@ def run_fit(cost, initial_values, limits=None, fixed=None, seeds=None):
                      be None
     fixed          : optional list of param names to hold at their
                      initial_values instead of floating
-    seeds          : optional list of alternative {param: value} dicts,
-                     tried in order (each merged over initial_values) until
-                     one produces m.valid == True. Returns the lowest-fval
-                     attempt if none validate.
 
     Returns:
     m : iminuit.Minuit
@@ -499,23 +469,19 @@ def run_fit(cost, initial_values, limits=None, fixed=None, seeds=None):
           m.nfit       – number of free floating parameters
           m.fmin.edm   – estimated distance to minimum
     """
-    best = None
-    for start in [initial_values, *({**initial_values, **s} for s in (seeds or []))]:
-        m = Minuit(cost, **start)
-        for param, lim in (limits or {}).items(): m.limits[param] = lim
-        for param in (fixed or []): m.fixed[param] = True
+    m = Minuit(cost, **initial_values)
+    for param, lim in (limits or {}).items(): m.limits[param] = lim
+    for param in (fixed or []): m.fixed[param] = True
+    m.migrad(ncall=100000)
+    m.hesse()
+    if not m.valid:
+        # A single MIGRAD pass can land close enough for HESSE to succeed
+        # but still miss MIGRAD's own EDM convergence goal -- standard
+        # MINUIT practice is to re-run it once more from there, refining
+        # off the now-improved Hessian estimate, before giving up.
         m.migrad(ncall=100000)
         m.hesse()
-        if not m.valid:
-            # A single MIGRAD pass can land close enough for HESSE to succeed
-            # but still miss MIGRAD's own EDM convergence goal -- standard
-            # MINUIT practice is to re-run it once more from there, refining
-            # off the now-improved Hessian estimate, before giving up.
-            m.migrad(ncall=100000)
-            m.hesse()
-        if m.valid: return m
-        if best is None or m.fval < best.fval: best = m
-    return best
+    return m
 
 
 # --- Priors from a previous fit ---
@@ -533,34 +499,15 @@ def build_prior(fit, params, factor=1.0):
              stage of a fit chain (e.g. floating a background parameter
              completely on the per-bin fits after constraining it on the
              data fit).
-    factor : a single float (one stdev multiplier applied to every parameter
-             in `params`) or a {param_name: float} dict (a per-parameter
-             multiplier; a name missing from the dict defaults to 1.0) --
-             e.g. factor={'mean': 5.0, 'sigma': 5.0, 'c0': 25.0, 'c1': 25.0}
-             loosens background far more than signal in one call, replacing
-             the previous SIGNAL_PRIOR_FACTOR / BKG_PRIOR_FACTOR two-call
-             pattern. This is a STDEV multiplier, so variances scale by
-             factor**2.
-
-    Off-diagonal covariance terms encode correlation: cov_ij says how much
-    parameter i and j moved together in the original fit, and
-    rho_ij = cov_ij / (sigma_i * sigma_j) is unitless (-1 to 1). Scaling with
-    F = diag(factors) as cov' = F @ cov @ F multiplies var_i by factor_i**2
-    and cov_ij by factor_i*factor_j for i != j -- every rho_ij is UNCHANGED.
-    So each parameter's marginal uncertainty can be loosened independently
-    while the correlation structure the original fit measured is preserved
-    exactly, rather than discarded.
+    factor : stdev multiplier applied to every parameter in `params`, so
+             the covariance scales by factor**2. The correlations
+             cov_ij / (sigma_i * sigma_j) of the original fit are unchanged.
 
     Falls back to a diagonal matrix built from `fit.errors` when
     `fit.covariance` is None (HESSE's matrix inversion failed) -- no
     cross-parameter term, but still a usable prior instead of a crash.
     """
     params = list(params)
-    if isinstance(factor, dict):
-        factors = np.array([factor.get(p, 1.0) for p in params], dtype=float)
-    else:
-        factors = np.full(len(params), float(factor))
-
     values = np.array([fit.values[p] for p in params], dtype=float)
     if fit.covariance is not None:
         cov = np.array(fit.covariance[params], dtype=float)
@@ -568,10 +515,8 @@ def build_prior(fit, params, factor=1.0):
         errs = np.array([fit.errors[p] for p in params], dtype=float)
         cov = np.diag(errs**2)
 
-    F = np.diag(factors)
-    scaled = F @ cov @ F
-    # F @ cov @ F is symmetric in exact arithmetic but not always bit-exact
-    # symmetric in floating point; NormalConstraint requires the latter.
+    scaled = factor**2 * cov
+    # NormalConstraint requires a bit-exact symmetric matrix.
     return values, (scaled + scaled.T) / 2
 
 
