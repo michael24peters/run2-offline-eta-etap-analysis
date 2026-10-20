@@ -14,7 +14,6 @@ Usage:
 """
 
 import argparse
-import json
 import os
 import sys
 from collections import Counter
@@ -36,7 +35,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('infile', help='Input ROOT file')
     parser.add_argument('outfile', default='out/output.txt',
-                        help='Output file prefix, writes .txt and .json')
+                        help='Output file prefix, writes .txt')
     parser.add_argument('-v', '--verbose', action='store_true', default=False,
                         help='Include a per-candidate, per-daughter dump of '
                              'background candidates')
@@ -343,42 +342,6 @@ def format_text(result, verbose, verbose_candidates):
     return out
 
 
-def format_json(result, verbose, verbose_candidates):
-    out = {
-        'total_candidates': result['ncan'],
-        'total_signal': result['nsig'],
-        'total_background': result['nbkg'],
-        'err_counters': {err.name: count for err, count in result['err_counters'].items()},
-        'error_rates': {
-            'P(dimuon error | muon error)': result['prob_dimu_given_mu'],
-            'P(mu+ error)': result['prob_mup_err'],
-            'P(mu- error)': result['prob_mum_err'],
-            'P(photon error)': result['prob_pho_err'],
-        },
-        'pid_mismatches': {
-            label: dict(rows) if rows else None
-            for label, rows in result['pid_freq'].items()
-        },
-    }
-    if verbose:
-        out['candidates'] = [
-            {
-                'event': can['evt'],
-                'candidate_index': can['can_idx'],
-                'has_dimu_mismatch': can['has_dimu_mismatch'],
-                'has_dimu_err': can['has_dimu_err'],
-                'daughters': [
-                    {'prt_pid': d['prt_pid'], 'prt_idx_gen': d['prt_idx_gen'],
-                     'mc_pid': d['mc_pid'], 'mc_idx_mom': d['mc_idx_mom'],
-                     'err_type': d['err_type'].name if d['err_type'] else None}
-                    for d in can['daughters']
-                ],
-            }
-            for can in verbose_candidates
-        ]
-    return out
-
-
 # ──────────────────────────────────────────────────────────────────────────────
 
 def main():
@@ -400,14 +363,11 @@ def main():
     verbose_candidates = collect_verbose_candidates(tree, masks) if args.verbose else []
 
     text_out = format_text(result, args.verbose, verbose_candidates)
-    json_out = format_json(result, args.verbose, verbose_candidates)
 
     print(text_out)
     with open(args.outfile + '.txt', 'w') as f:
         f.write(text_out)
-    with open(args.outfile + '.json', 'w') as f:
-        json.dump(json_out, f, indent=2)
-    print(f'[INFO] DONE: results saved to {args.outfile}.txt and {args.outfile}.json',
+    print(f'[INFO] DONE: results saved to {args.outfile}.txt',
           file=sys.stderr)
 
 
