@@ -13,8 +13,10 @@ masses.
 
 --truth-match PID... (signal MC only) keeps the candidates whose every daughter
 matches eta -> PIDs (bkg_utils.signal_candidate_mask), before the best
-candidate is chosen, and fits with n_bkg fixed to 0 and the background shape at
-its init values. Its results_dcb.json is the --tail-prior of the data fit.
+candidate is chosen, and runs only the DCB fit, from --sigma-init, with n_bkg
+fixed to 0 and the background shape at its init values: no Gaussian fit and
+no results_gauss.json. Its results_dcb.json is the --tail-prior of the data
+fit.
 
 --tail-prior RESULTS_JSON floats the DCB tails under
 NormalConstraint(TAIL_PARAMS, MC values, MC covariance * TAIL_PRIOR_FACTOR**2),
@@ -92,7 +94,8 @@ parser.add_argument('--xmin', type=float, default=480.0, help='Lower mass bound 
 parser.add_argument('--xmax', type=float, default=620.0, help='Upper mass bound [MeV]')
 parser.add_argument('--nbins', type=int, default=80, help='Number of histogram bins')
 parser.add_argument('--mean-init', type=float, default=kinematics.M_ETA, help='Initial mean [MeV]')
-parser.add_argument('--sigma-init', type=float, default=5.0, help='Initial Gaussian sigma [MeV]')
+parser.add_argument('--sigma-init', type=float, default=5.0,
+                    help='Initial sigma [MeV] of the Gaussian, or of the DCB with --truth-match')
 parser.add_argument('--alphaL-init', type=float, default=1.5, help='Initial left tail α_L')
 parser.add_argument('--nL-init', type=float, default=2.0, help='Initial left tail n_L')
 parser.add_argument('--alphaR-init', type=float, default=1.5, help='Initial right tail α_R')
@@ -183,14 +186,22 @@ print(f'[DONE] JSON saved to: {selection_path}', file=sys.stderr)
 
 # --- Fit ---------------------------------------------------------------------
 
-# Truth-matched MC has no background: n_bkg is fixed to 0 and the background
-# shape parameters at their init values (fit_utils.BKG_INIT).
-fixed_params = {'n_bkg': 0.0, **fit_utils.BKG_INIT} if args.truth_match else None
+fits = []   # (name, result, stats-box builder) of each fit, written below
 
-gauss_result, m_gauss = fit_gauss(
-    masses, xmin=args.xmin, xmax=args.xmax, nbins=args.nbins,
-    mean_init=args.mean_init, sigma_init=args.sigma_init, fixed_params=fixed_params)
-gauss_result['meta']['input_file'] = args.infile
+# Truth-matched MC: no background, n_bkg fixed to 0 and the background shape
+# parameters at their init values (fit_utils.BKG_INIT); the DCB starts from
+# --sigma-init. Otherwise the Gaussian fit, whose sigma seeds the DCB.
+fixed_params = None
+sigma_init = args.sigma_init
+if args.truth_match:
+    fixed_params = {'n_bkg': 0.0, **fit_utils.BKG_INIT}
+else:
+    gauss_result, m_gauss = fit_gauss(
+        masses, xmin=args.xmin, xmax=args.xmax, nbins=args.nbins,
+        mean_init=args.mean_init, sigma_init=args.sigma_init)
+    gauss_result['meta']['input_file'] = args.infile
+    fits.append(('gauss', gauss_result, gauss_text))
+    sigma_init = m_gauss.values['sigma']
 
 # DCB tails: from the MC tail prior, widened by TAIL_PRIOR_FACTOR, or free.
 tail_init = (args.alphaL_init, args.nL_init, args.alphaR_init, args.nR_init)
@@ -207,7 +218,7 @@ if args.tail_prior:
 
 dcb_result, m_dcb = fit_dcb(
     masses, xmin=args.xmin, xmax=args.xmax, nbins=args.nbins,
-    mean_init=args.mean_init, sigma_init=m_gauss.values['sigma'],
+    mean_init=args.mean_init, sigma_init=sigma_init,
     alphaL_init=tail_init[0], nL_init=tail_init[1],
     alphaR_init=tail_init[2], nR_init=tail_init[3],
     tail_prior=tail_prior, fixed_params=fixed_params)
@@ -215,11 +226,11 @@ dcb_result['meta']['input_file'] = args.infile
 if args.tail_prior:
     dcb_result['meta']['tail_prior_from'] = args.tail_prior
     dcb_result['meta']['tail_prior_factor'] = TAIL_PRIOR_FACTOR
+fits.append(('dcb', dcb_result, dcb_text))
 
 # --- Write -------------------------------------------------------------------
 
-for name, result, build_text in [('gauss', gauss_result, gauss_text),
-                                 ('dcb', dcb_result, dcb_text)]:
+for name, result, build_text in fits:
     json_path = os.path.join(args.outdir, f'results_{name}.json')
     with open(json_path, 'w') as f:
         json.dump(result, f, indent=2)
