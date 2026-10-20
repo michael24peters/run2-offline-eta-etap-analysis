@@ -142,6 +142,15 @@ def test_counts_add_up_to_the_window_candidates_in_the_grid(physical_toy, phase_
         assert b['n_cand'] == sum(b['counts'])
 
 
+def test_chi2_summary_is_over_the_valid_bins(baseline):
+    chi2s = [b['chi2_per_ndof'] for b in baseline['dalitz']['bins']
+             if b['valid'] and b['chi2_per_ndof'] is not None]
+    summary = baseline['dalitz']['chi2_per_ndof_over_bins']
+    assert summary['mean'] == pytest.approx(np.mean(chi2s), abs=1e-6)
+    assert summary['median'] == pytest.approx(np.median(chi2s), abs=1e-6)
+    assert summary['max'] == pytest.approx(max(chi2s), abs=1e-6)
+
+
 def test_baseline_bins_carry_no_factor(baseline):
     assert baseline['dalitz']['signal_factor'] is None
     assert baseline['dalitz']['bkg_factor'] is None

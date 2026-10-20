@@ -185,8 +185,9 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
     Returns:
     --------
     result : fit_dcb()'s result dict of the global fit, plus result['dalitz']
-             with one entry per Dalitz bin ('bins'), the outcome counts and
-             the yield closure.
+             with one entry per Dalitz bin ('bins'), the outcome counts, the
+             yield closure and the mean, median and max chi2/ndof of the
+             valid bins.
     global_fit : the global fit's Minuit object.
     """
     mass_edges = np.linspace(xmin, xmax, nbins + 1)
@@ -275,6 +276,7 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
     valid = [b for b in bins if b['valid']]
     in_grid = bin_mask(m12s, m23s, (m12_edges[0], m12_edges[-1]), (m23_edges[0], m23_edges[-1]))
     in_window = (masses >= xmin) & (masses < xmax)
+    chi2s = [b['chi2_per_ndof'] for b in valid if b['chi2_per_ndof'] is not None]
 
     result['dalitz'] = {
         'signal_factor': None if signal_factor is None else signal_factor.__name__,
@@ -303,6 +305,11 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
             'window_candidates': int(in_window.sum()),
             'candidates_in_grid': int(in_grid.sum()),
             'candidates': int(len(masses)),
+        },
+        'chi2_per_ndof_over_bins': None if not chi2s else {
+            'mean': round(float(np.mean(chi2s)), 6),
+            'median': round(float(np.median(chi2s)), 6),
+            'max': round(float(np.max(chi2s)), 6),
         },
         'bins': bins,
     }

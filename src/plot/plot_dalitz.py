@@ -1,22 +1,17 @@
 """
 plot_dalitz.py
 
-Raw Dalitz histograms (no fit) of the candidates driver_dalitz.py wrote, with
-the eta's Dalitz region:
+Raw Dalitz histograms (no fit) of the candidates driver_dalitz.py selects,
+with the eta's Dalitz region. driver_dalitz.py writes HISTOGRAMS:
 
     dalitz_raw.png       m12 in [0, 1.0], m23 in [0, 1.2] GeV^2 (every candidate)
     dalitz_raw_zoom.png  m12 in [0, 0.22], m23 in [0, 0.35] GeV^2 (the eta's region)
-
-Usage:
-    python src/plot/plot_dalitz.py OUTDIR/dalitz_events.npz [--outdir DIR]
 """
 
-import argparse
 import os
 import sys
 
 import matplotlib.pyplot as plt
-import numpy as np
 
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
@@ -49,16 +44,3 @@ def plot_dalitz_hist(m12s, m23s, hist_range, output, bins=N_BINS):
     plot_style.save_plot(fig, output)
     plt.close(fig)
 
-
-if __name__ == '__main__':
-    plt.switch_backend('Agg')
-    parser = argparse.ArgumentParser(description='Raw Dalitz histograms of dalitz_events.npz')
-    parser.add_argument('events', help='dalitz_events.npz from driver_dalitz.py')
-    parser.add_argument('--outdir', default=None,
-                        help="Output directory (default: the events file's directory)")
-    args = parser.parse_args()
-    outdir = args.outdir or os.path.dirname(os.path.abspath(args.events))
-    os.makedirs(outdir, exist_ok=True)
-    events = np.load(args.events)
-    for name, hist_range in HISTOGRAMS:
-        plot_dalitz_hist(events['m12s'], events['m23s'], hist_range, os.path.join(outdir, name))
