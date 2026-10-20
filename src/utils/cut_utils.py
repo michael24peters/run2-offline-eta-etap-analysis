@@ -140,7 +140,6 @@ def drop_malformed(tree, tag_ref='tag_dtf_m', idx_branch='prt_idx_mom',
     ----------
     read : int, number of events read
     kept : int, number of events kept
-    dropped_total : int, number of events dropped
     dropped_no_candidates : int, number of events dropped for having no
                             candidates
     dropped_idx_out_of_range : int, number of events dropped for having an index
@@ -152,8 +151,6 @@ def drop_malformed(tree, tag_ref='tag_dtf_m', idx_branch='prt_idx_mom',
                                        a candidate branch with a partial list
     partial_by_branch : dict, candidate branch -> number of events dropped for
                         that branch
-    daughter_fields_checked : list of str, the daughter fields checked
-    candidate_fields_checked : list of str, the candidate fields checked
     """
     if daughter_fields is None:
         daughter_fields = [f for f in tree.fields
@@ -197,14 +194,11 @@ def drop_malformed(tree, tag_ref='tag_dtf_m', idx_branch='prt_idx_mom',
     report = {
         'read': n_before,
         'kept': n_kept,
-        'dropped_total': n_before - n_kept,
         'dropped_no_candidates': int(ak.sum(~has_candidates)),
         'dropped_idx_out_of_range': int(ak.sum(has_candidates & ~idx_in_range)),
         'dropped_daughter_length_mismatch': int(ak.sum(has_candidates & ~matched_daughter_lengths)),
         'dropped_partial_candidate_branch': int(ak.sum(has_candidates & ~whole_candidate_fields)),
         'partial_by_branch': {f: n for f, n in partial_by_field.items() if n},
-        'daughter_fields_checked': list(daughter_fields),
-        'candidate_fields_checked': list(candidate_fields),
     }
     return tree[keep], report
 
@@ -269,55 +263,34 @@ def tos_mask(tree, levels, tag_ref='tag_dtf_m'):
     Returns:
     --------
     (mask, report) : per-candidate boolean mask, and a dict keyed by level
-                     recording which lines were actually available to drive
-                     that level's OR and how many candidates pass
+                     of how many candidates pass
 
     Report keys, per level:
     -----------------------
-    requested                  : list of str, the level's TOS branches
-    always_evaluated           : branches present in every event
-    not_evaluated_in_events    : branch -> number of events where it was absent
-                                 and read as not fired
-    ignored                    : branches absent in every event, so contributing
-                                 nothing to the level's OR
-    candidates_tos             : int, candidates TOS at this level
-    candidates_tos_cumulative  : int, candidates TOS at this level and every
-                                 level before it
+    lines            : branch -> int, candidates TOS on that line (0 for a
+                       line absent in every event)
+    tos_up_to_level  : int, candidates TOS at this level and every level
+                       before it
     """
     if not isinstance(levels, dict):
         raise TypeError("levels must be a dict of trigger level -> list of TOS "
                         "branches, e.g. {'L0': [...], 'HLT1': [...], 'HLT2': [...]}")
 
-    n_tag = ak.num(tree[tag_ref])
-    n_events = len(tree)
     mask = ak.ones_like(tree[tag_ref], dtype=bool)
     report = {}
     for level, triggers in levels.items():
         if not triggers:
             raise ValueError(f'trigger level {level!r} has no TOS branches')
-        not_evaluated, ignored = {}, []
+        lines = {}
         level_tos = ak.zeros_like(tree[tag_ref], dtype=bool)
         for trigger in triggers:
-            # An absent branch contributes nothing to the OR, so it should be
-            # reported if a line is absent everywhere and not contributing to
-            # the selection.
-            n_absent = int(ak.sum(ak.num(tree[trigger]) != n_tag))
-            if n_absent:
-                not_evaluated[trigger] = n_absent
-                if n_absent == n_events: ignored.append(trigger)
             # Makes sure the trigger branch has one entry per candidate,
             # filling absent lines with -1.0, which reads as not fired.
-            level_tos = level_tos | (align(tree, trigger, tag_ref) > 0.5)
+            line_tos = align(tree, trigger, tag_ref) > 0.5
+            lines[trigger] = int(ak.sum(line_tos))
+            level_tos = level_tos | line_tos
         mask = mask & level_tos
-
-        report[level] = {
-            'requested': list(triggers),
-            'always_evaluated': [t for t in triggers if t not in not_evaluated],
-            'not_evaluated_in_events': not_evaluated,
-            'ignored': ignored,
-            'candidates_tos': int(ak.sum(level_tos)),
-            'candidates_tos_cumulative': int(ak.sum(mask)),
-        }
+        report[level] = {'lines': lines, 'tos_up_to_level': int(ak.sum(mask))}
     return mask, report
 
 

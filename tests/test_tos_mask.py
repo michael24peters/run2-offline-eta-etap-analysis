@@ -85,29 +85,27 @@ def test_absent_line_reads_as_not_fired():
                      tag_hlt2_tos0=[[], [1.0]], tag_hlt2_tos1=[[1.0, 0.0], []])
     mask, report = cut_utils.tos_mask(tree, LEVELS)
     assert mask.tolist() == [[True, False], [True]]
-    assert report['HLT2']['not_evaluated_in_events'] == {'tag_hlt2_tos0': 1,
-                                                        'tag_hlt2_tos1': 1}
-    assert report['HLT2']['ignored'] == []
+    assert report['HLT2']['lines'] == {'tag_hlt2_tos0': 1, 'tag_hlt2_tos1': 1}
 
 
 def test_level_with_every_line_absent_passes_nothing():
     tree = tree_with(tag_hlt2_tos0=[[]], tag_hlt2_tos1=[[]])
     mask, report = cut_utils.tos_mask(tree, LEVELS)
     assert mask.tolist() == [[False]]
-    assert report['HLT2']['ignored'] == ['tag_hlt2_tos0', 'tag_hlt2_tos1']
+    assert report['HLT2']['lines'] == {'tag_hlt2_tos0': 0, 'tag_hlt2_tos1': 0}
 
 
 # --- report ------------------------------------------------------------------
 
-def test_report_counts_per_level_and_cumulative():
+def test_report_counts_per_line_and_cumulative():
     tree = make_tree(tag_dtf_m=[[550.0, 551.0, 552.0]],
                      tag_l0_tos0=[[1.0, 1.0, 1.0]], tag_l0_tos1=[[0.0, 0.0, 0.0]],
                      tag_hlt1_tos0=[[1.0, 1.0, 0.0]], tag_hlt1_tos1=[[0.0, 0.0, 0.0]],
                      tag_hlt2_tos0=[[1.0, 0.0, 1.0]], tag_hlt2_tos1=[[0.0, 0.0, 0.0]])
     mask, report = cut_utils.tos_mask(tree, LEVELS)
     assert mask.tolist() == [[True, False, False]]
-    assert [report[lv]['candidates_tos'] for lv in LEVELS] == [3, 2, 2]
-    assert [report[lv]['candidates_tos_cumulative'] for lv in LEVELS] == [3, 2, 1]
+    assert [report[lv]['lines'][LEVELS[lv][0]] for lv in LEVELS] == [3, 2, 2]
+    assert [report[lv]['tos_up_to_level'] for lv in LEVELS] == [3, 2, 1]
     assert list(report) == ['L0', 'HLT1', 'HLT2']
 
 
@@ -135,4 +133,4 @@ def test_empty_tree():
     tree = make_tree(**{b: [] for b in ['tag_dtf_m'] + sum(LEVELS.values(), [])})
     mask, report = cut_utils.tos_mask(tree, LEVELS)
     assert ak.num(mask, axis=0) == 0
-    assert report['HLT2']['candidates_tos_cumulative'] == 0
+    assert report['HLT2']['tos_up_to_level'] == 0

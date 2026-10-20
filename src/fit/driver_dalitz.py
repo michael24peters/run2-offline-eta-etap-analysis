@@ -114,7 +114,7 @@ branches = ([TAG_REF_BRANCH, METRIC_BRANCH, 'prt_idx_mom', 'prt_pid', 'prt_pnn_m
 tree = cut_utils.read_branches(args.infile, branches, entry_stop=args.max_events)
 tree, drop_report = cut_utils.drop_malformed(tree, tag_ref=TAG_REF_BRANCH)
 print(f"[INFO] events: read {drop_report['read']}, kept {drop_report['kept']}, "
-      f"dropped {drop_report['dropped_total']}")
+      f"dropped {drop_report['read'] - drop_report['kept']}")
 for reason in ('dropped_no_candidates', 'dropped_idx_out_of_range',
                'dropped_daughter_length_mismatch', 'dropped_partial_candidate_branch'):
     if drop_report[reason]:
@@ -143,9 +143,10 @@ if tos_lines:
     tos, tos_report = cut_utils.tos_mask(tree, tos_lines, tag_ref=TAG_REF_BRANCH)
     keep = keep & tos
     for level, report in tos_report.items():
-        cutflow.append((f'TOS up to {level}', report['candidates_tos_cumulative']))
-        if report['ignored']:
-            print(f"[WARN] {level} TOS lines absent in every event: {report['ignored']}")
+        cutflow.append((f'TOS up to {level}', report['tos_up_to_level']))
+        for line, n in report['lines'].items():
+            if n == 0:
+                print(f'[WARN] {level} TOS line {line} passes no candidate')
 
 # ProbNNmu on every muon daughter; a non-muon daughter passes.
 if args.pnn_mu_min is not None:

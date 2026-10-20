@@ -391,7 +391,7 @@ def main():
     tree, drop_report = cut_utils.drop_malformed(
         cut_utils.read_branches(args.infile, BRANCHES), tag_ref='tag_pid')
     print(f"[INFO] events: read {drop_report['read']:,d}, kept {drop_report['kept']:,d} "
-          f"(dropped {drop_report['dropped_total']:,d})", file=sys.stderr)
+          f"(dropped {drop_report['read'] - drop_report['kept']:,d})", file=sys.stderr)
     if args.pnnmu_cut is not None:
         print(f'[INFO] Applying PROBNNmu cut: {args.pnnmu_cut}', file=sys.stderr)
 

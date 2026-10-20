@@ -179,7 +179,7 @@ def select_masses(infile, tag, truth_match=False):
     masses = cut_utils.values(tree, MASS_BRANCH, best)  # <- awkward → numpy
 
     print(f"[INFO] [{tag}] events: read {drop_report['read']}, kept {drop_report['kept']}, "
-          f"dropped {drop_report['dropped_total']}", file=sys.stderr)
+          f"dropped {drop_report['read'] - drop_report['kept']}", file=sys.stderr)
     for reason in ('dropped_no_candidates', 'dropped_idx_out_of_range',
                    'dropped_daughter_length_mismatch',
                    'dropped_partial_candidate_branch'):
@@ -187,10 +187,7 @@ def select_masses(infile, tag, truth_match=False):
             print(f'[INFO] [{tag}]   {reason}: {drop_report[reason]}', file=sys.stderr)
     for level, r in (tos_report or {}).items():
         print(f"[INFO] [{tag}] TOS at every level up to {level}: "
-              f"{r['candidates_tos_cumulative']} candidates", file=sys.stderr)
-        if r['ignored']:
-            print(f"[WARN] [{tag}] {level} TOS lines absent in every event "
-                  f"(contributing nothing): {r['ignored']}", file=sys.stderr)
+              f"{r['tos_up_to_level']} candidates", file=sys.stderr)
 
     applied = ', '.join((['TOS'] if use_tos else [])
                         + ([f'pnn_mu>{pnn_mu_min}'] if pnn_mu_min is not None else [])) or 'none'

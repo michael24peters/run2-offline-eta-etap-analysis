@@ -121,7 +121,7 @@ masses = cut_utils.values(tree, MASS_BRANCH, best)  # <- awkward → numpy
 # cut_utils returns its diagnostics rather than printing them, so the driver
 # decides what to log. Everything here also goes into the results JSON below.
 print(f"[INFO] events: read {drop_report['read']}, kept {drop_report['kept']}, "
-      f"dropped {drop_report['dropped_total']}", file=sys.stderr)
+      f"dropped {drop_report['read'] - drop_report['kept']}", file=sys.stderr)
 for reason in ('dropped_no_candidates', 'dropped_idx_out_of_range',
                'dropped_daughter_length_mismatch',
                'dropped_partial_candidate_branch'):
@@ -129,10 +129,7 @@ for reason in ('dropped_no_candidates', 'dropped_idx_out_of_range',
         print(f'[INFO]   {reason}: {drop_report[reason]}', file=sys.stderr)
 for level, r in (tos_report or {}).items():
     print(f"[INFO] TOS at every level up to {level}: "
-          f"{r['candidates_tos_cumulative']} candidates", file=sys.stderr)
-    if r['ignored']:
-        print(f"[WARN] {level} TOS lines absent in every event (contributing "
-              f"nothing): {r['ignored']}", file=sys.stderr)
+          f"{r['tos_up_to_level']} candidates", file=sys.stderr)
 
 applied = ', '.join((['TOS'] if use_tos else [])
                     + ([f'pnn_mu>{pnn_mu_min}'] if pnn_mu_min is not None else [])) or 'none'

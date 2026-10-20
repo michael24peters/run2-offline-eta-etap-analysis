@@ -28,8 +28,7 @@ def good_event():
 def test_well_formed_event_is_kept():
     """Baseline: nothing wrong, nothing dropped, all counters zero."""
     kept, report = cut_utils.drop_malformed(make_tree(**good_event()))
-    assert report['kept'] == 1
-    assert report['dropped_total'] == 0
+    assert report['kept'] == report['read'] == 1
     assert len(kept) == 1
 
 
@@ -100,7 +99,6 @@ def test_every_prt_branch_is_checked_not_just_the_listed_ones():
     fields = good_event()
     fields['prt_idx_gen'] = [[1, 2, 3]]           # 3 entries, not 4
     _, report = cut_utils.drop_malformed(make_tree(**fields))
-    assert 'prt_idx_gen' in report['daughter_fields_checked']
     assert report['dropped_daughter_length_mismatch'] == 1
 
 
@@ -159,15 +157,14 @@ def test_partial_by_branch_omits_clean_branches():
 
 def test_field_lists_are_derived_from_branch_prefixes():
     """prt_* are daughter fields, tag_* are candidate fields, worked out from
-    the names of idx_branch and tag_ref rather than passed in."""
+    the names of idx_branch and tag_ref rather than passed in: an unlisted
+    tag_ branch holding a partial list drops the event."""
     fields = good_event()
     fields['prt_idx_gen'] = [[1, 2, 3, 4]]
-    fields['tag_dtf_chi2'] = [[17.0, 14.0]]
+    fields['tag_dtf_chi2'] = [[17.0]]             # 1 entry, not 2
     _, report = cut_utils.drop_malformed(make_tree(**fields))
-    assert set(report['daughter_fields_checked']) == {
-        'prt_idx_mom', 'prt_pid', 'prt_idx_gen'}
-    assert set(report['candidate_fields_checked']) == {
-        'tag_dtf_m', 'tag_hlt2_tos0', 'tag_dtf_chi2'}
+    assert report['partial_by_branch'] == {'tag_dtf_chi2': 1}
+    assert report['kept'] == 0
 
 
 def test_other_collections_are_not_checked():
@@ -178,8 +175,6 @@ def test_other_collections_are_not_checked():
     fields['pvr_z'] = [[1.0]]
     _, report = cut_utils.drop_malformed(make_tree(**fields))
     assert report['kept'] == 1
-    assert not any(f.startswith('mc_') for f in report['daughter_fields_checked'])
-    assert not any(f.startswith('mc_') for f in report['candidate_fields_checked'])
 
 
 def test_custom_tag_ref_and_idx_branch():
@@ -189,14 +184,12 @@ def test_custom_tag_ref_and_idx_branch():
     kept, report = cut_utils.drop_malformed(tree, tag_ref='sig_mass',
                                             idx_branch='trk_idx_mom')
     assert report['kept'] == 1
-    assert set(report['daughter_fields_checked']) == {'trk_idx_mom', 'trk_pid'}
-    assert report['candidate_fields_checked'] == ['sig_mass']
 
 
 # --- report arithmetic and multiple faults -----------------------------------
 
 def test_report_counts_are_self_consistent():
-    """read == kept + dropped_total, on a mixed input."""
+    """Per-reason counts and kept, on a mixed input."""
     tree = make_tree(
         tag_dtf_m=[[550.0, 549.0], [], [550.0], [550.0, 549.0]],
         tag_hlt2_tos0=[[1.0, 0.0], [], [1.0], [1.0]],
@@ -205,7 +198,6 @@ def test_report_counts_are_self_consistent():
     )
     _, report = cut_utils.drop_malformed(tree)
     assert report['read'] == 4
-    assert report['read'] == report['kept'] + report['dropped_total']
     assert report['dropped_no_candidates'] == 1          # event 1
     assert report['dropped_partial_candidate_branch'] == 1  # event 3
     assert report['kept'] == 2                            # events 0 and 2
@@ -220,7 +212,7 @@ def test_one_event_can_have_two_faults():
     _, report = cut_utils.drop_malformed(make_tree(**fields))
     assert report['dropped_daughter_length_mismatch'] == 1
     assert report['dropped_partial_candidate_branch'] == 1
-    assert report['dropped_total'] == 1
+    assert report['read'] - report['kept'] == 1
 
 
 def test_dropped_counters_exclude_empty_events():
