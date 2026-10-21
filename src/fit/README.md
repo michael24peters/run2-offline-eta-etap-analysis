@@ -20,122 +20,58 @@ Most everything is a library, so the drivers are the only entry point for fittin
 
 ## Usage
 
-One-shot fit + plot. The flag values given below are the defaults.
-
-For double crystal ball:
+`driver_mass_fit.py` reads a ROOT file, selects, keeps the best candidate per
+event, and runs the Gaussian fit, then the DCB fit seeded with the Gaussian
+sigma. The flag values below are the defaults.
 
 ```
-python src/fit/driver_dcb.py data.root \
-    --outdir out \
-    --max-events 500000 \
+python src/fit/driver_mass_fit.py data.root \
+    --outdir OUT \
+    --tos-levels L0 HLT1 HLT2 --pnn-mu-min 0.4 \
     --xmin 480 --xmax 620 --nbins 80 \
-    --mean-init 547.862 --sigma-init 10.0 \
-    --alphaL-init 1.5 --nL-init 2.0 \
-    --alphaR-init 1.5 --nR-init 2.0
+    --mean-init 547.862 --sigma-init 5.0 \
+    --alphaL-init 1.5 --nL-init 2.0 --alphaR-init 1.5 --nR-init 2.0
 ```
 
-For gaussian:
+It writes into `--outdir`:
 
-```
-python src/fit/driver_gauss.py data.root \
-    --outdir out \
-    --max-events 500000 \
-    --xmin 480 --xmax 620 --nbins 80 \
-    --mean-init 547.862 --sigma-init 10.0
-```
+- `selection.json`: the selection settings, the events dropped as malformed,
+  the candidates TOS on each trigger line, and the cutflow
+- `results_gauss.json`, `gauss_mass_fit.png`
+- `results_dcb.json`, `dcb_mass_fit.png`
 
-Each driver runs the fit, saves `results_*.json`, and writes `*_mass_fit.png`
-into `--outdir`. `--max-events` caps how many events are read, for quick
-iteration on large files; omit it to read everything (which is usually what you
-want to do).
-
-The drivers only expose fit hyperparameters as flags. Plot styling (font,
+`--max-events N` reads only the first N events, for quick iteration on large
+files. The drivers only expose fit hyperparameters as flags. Plot styling (font,
 colors, ticks, stats box, etc.) is fixed in `plot_mass_fit.py`/`plot_style.py`,
 and must be changed there manually.
 
-## Running a full fit, start to finish (eta2mumu / eta2mumugamma)
+## DCB tails from signal MC
 
-The full fit is done in two stages. No MC is needed for either of them. `fit_dcb()` / `fit_gauss()` already run their own internal two-stage MIGRAD (background -- and for DCB, tails -- fixed first, then floated from that result) on every call, so this is the outer loop on top of that: a quick Gaussian check, then the DCB fit seeded from what it found.
+On data the DCB tails are poorly constrained. They come from truth-matched
+signal MC instead, as a `NormalConstraint` prior on (alphaL, nL, alphaR, nR)
+centred on the MC values, with the MC covariance widened by
+`TAIL_PRIOR_FACTOR` (5) standard deviations rather than hard-fixed:
 
-### 1. Gaussian
-
-Confirms the selection gives a clean peak and gives a rough sigma to seed the DCB fit with.
-
-eta2mumu:
 ```
-python src/fit/driver_gauss.py ntuple/lhcb/eta2mumu/20261006/combined_files.root \
-    --outdir out/eta2mumu/turbo/$(date +%Y%m%d) \
-    --pnn-mu-min 0.95 \
-    --mean-init 547.862 \
-    --sigma-init 5.0
-```
-
-eta2mumugamma:
-```
-python src/fit/driver_gauss.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
-    --outdir out/eta2mumugamma/turbo/$(date +%Y%m%d) \
-    --xmin 450 --xmax 650 \
-    --pnn-mu-min 0.95 \
-    --mean-init 547.862 \
-    --sigma-init 10.0
+# 1. truth-matched signal MC: DCB only, from --sigma-init, no background (n_bkg = 0, c0 = c1 = 0)
+python src/fit/driver_mass_fit.py ntuple/mc/eta2mumugamma/signal_20261006/combined_files.root \
+    --outdir out/eta2mumugamma/signal/$(date +%Y%m%d)/truth --truth-match -13 13 22
+# 2. data, tails under the MC prior
+python src/fit/driver_mass_fit.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
+    --outdir out/eta2mumugamma/turbo/$(date +%Y%m%d)/mc_prior \
+    --tail-prior out/eta2mumugamma/signal/$(date +%Y%m%d)/truth/results_dcb.json
 ```
 
-Read the `[INFO] ... mean=...  σ=...` line on stderr and look at `gauss_mass_fit.png`. `--mean-init` defaults to `kinematics.M_ETA`. TOS is on by default; add `--no-tos` to turn it off.
+`--truth-match` takes the signal daughter PIDs: `-13 13` for eta -> mu+ mu-,
+`-13 13 22` for eta -> mu+ mu- gamma. It skips the Gaussian fit: with no
+background, a Gaussian has no stable minimum on the radiative tail of
+eta -> mu+ mu- gamma MC.
 
-### 2. DCB fit, seeded from stage 1
-
-Same thing, but set `--sigma-init` to whatever stage 1 reported:
-```
-python src/fit/driver_dcb.py ntuple/lhcb/eta2mumu/20261006/combined_files.root \
-    --outdir out/eta2mumu/turbo/$(date +%Y%m%d) \
-    --pnn-mu-min 0.95 \
-    --sigma-init <σ from step 1> \
-    --alphaL-init 1.5 --nL-init 2.0 --alphaR-init 1.5 --nR-init 2.0
-```
-```
-python src/fit/driver_dcb.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
-    --outdir out/eta2mumugamma/turbo/$(date +%Y%m%d) \
-    --xmin 450 --xmax 650 \
-    --pnn-mu-min 0.95 \
-    --sigma-init <σ from step 1> \
-    --alphaL-init 1.5 --nL-init 2.0 --alphaR-init 1.5 --nR-init 2.0
-```
-
-## Fixing tails from an MC fit
-
-Fit signal MC first to pin down the tail-shape parameters (alphaL, nL, alphaR,
-nR), then constrain them in the data fit with a `NormalConstraint` prior
-centered on the MC values, its covariance widened by `--tail-prior-factor`
-standard deviations (default 5) rather than hard-fixed.
-
-```python
-import sys
-sys.path.insert(0, "src/utils")
-sys.path.insert(0, "src/fit")
-import numpy as np
-from fit_dcb import fit_dcb, TAIL_PARAMS
-
-# 1. Fit signal MC -- same selection driver_dcb.py would apply
-#    (read_branches -> drop_malformed -> cuts -> best_candidate_mask ->
-#    values), against ntuple/mc/<channel>/signal_*/combined_files.root.
-#    fixed_params holds n_bkg/c0/c1 at 0: a truth-matched sample shouldn't
-#    have any background.
-mc_masses = ...
-_, m_mc = fit_dcb(mc_masses, sigma_init=..., alphaL_init=1.5, nL_init=2.0,
-                  alphaR_init=1.5, nR_init=2.0,
-                  fixed_params={'n_bkg': 0.0, 'c0': 0.0, 'c1': 0.0})
-
-tail_values = np.array([m_mc.values[p] for p in TAIL_PARAMS])
-tail_cov = np.array(m_mc.covariance[list(TAIL_PARAMS)])
-
-# 2. Fit data with the tail shape as a widened prior, not fixed -- gives the
-#    data fit TAIL_PRIOR_FACTOR MC-fit standard deviations of slack per tail
-#    parameter to move away from the MC value where the data disagrees.
-TAIL_PRIOR_FACTOR = 5.0
-data_masses = ...
-result, m_data = fit_dcb(data_masses, sigma_init=...,
-                         tail_prior=(tail_values, tail_cov * TAIL_PRIOR_FACTOR**2))
-```
+`src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma"]` runs the full
+sequence for each channel on the 20261006 ntuples, into
+`out/<channel>/<turbo|signal>/<today>/`: data and signal MC with no prior, the
+truth-matched MC (`signal/<today>/truth/`), and data with its tail prior
+(`turbo/<today>/mc_prior/`).
 
 ## Changing the selection
 
@@ -217,7 +153,7 @@ up inside `reduce()` much later.
 
 Nothing in `cut_utils` prints. `drop_malformed()` and `tos_mask()` return their
 diagnostics as a second return value, and the driver decides what to log and what
-to write into the results JSON under `selection_report`.
+to write into `selection.json` under `selection_report`.
 
 When traversing `mc_idx_mom`, AND in `cut_utils.valid(tree, 'mc_idx_mom')` first.
 A generator particle with no mother stores -1, which `follow()`/`reduce()` treat
@@ -292,8 +228,7 @@ mass and the daughters together:
 | `tag_m` | `tag_m` | `prt_px/py/pz/e` | 0.07 MeV, 4.1 MeV | 0.7% |
 | `tag_dtf_m` | `tag_dtf_m` | `prt_dtf_px/py/pz/e` | 0.00 MeV, 0.04 MeV | 8 of 3.0M |
 
-(20261006 Turbo data; the driver prints and records these numbers in
-`selection.json`.) `tag_dtf_m` with the DTF daughters satisfies the identity
+(20261006 Turbo data; the driver prints these numbers.) `tag_dtf_m` with the DTF daughters satisfies the identity
 like the rebuilt mass, at the DTF resolution (sigma ~14 MeV vs ~16.5 MeV
 rebuilt).
 
@@ -308,8 +243,7 @@ happened.
 The global fit carries a widened MC tail prior (`--tail-prior`): on the
 rebuilt mass the unconstrained tails run off to n ~ 50-150 and the fit is
 invalid. The prior of each mass is the global fit of truth-matched signal MC
-of the same mass (`driver_dalitz.py --truth-match`, then
-`driver_dalitz_fit.py --signal-only`).
+of the same mass (`driver_dalitz.py --truth-match`).
 
 Known limitation: f assumes background is uniform across the bin. Near the
 low-m12 boundary (the i = 1 column) it isn't, and the data turn on more
@@ -319,32 +253,47 @@ slowly than f predicts, which is where the worst per-bin chi2 values are.
 
 ```
 python src/fit/driver_dalitz.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
-    --outdir OUT [--mass rebuilt|tag_m|tag_dtf_m] [--tos-levels L0 HLT1 HLT2]
-    [--pnn-mu-min X] [--truth-match] [--max-events N]
-python src/plot/plot_dalitz.py OUT/dalitz_events.npz
-python src/fit/driver_dalitz_fit.py OUT/dalitz_events.npz \
-    [--phase-space [--dalitz-factor]] [--tail-prior PATH | --signal-only] [--horizontal]
+    --outdir OUT (--truth-match | --tail-prior TRUTH_OUT/dalitz_fit_<factor>.json) \
+    [--mass rebuilt|tag_m|tag_dtf_m] [--factor none|flat|weighted] \
+    [--tos-levels L0 HLT1 HLT2] [--pnn-mu-min X] [--max-events N] [--horizontal]
+python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_<factor>.json [--horizontal]   # re-plot only
 ```
 
-- `driver_dalitz.py`: read ROOT -> TOS (default L0, HLT1 and HLT2) -> best
-  candidate (min `tag_dtf_chi2`) -> `dalitz_events.npz` (m12, m23 and the
-  `--mass` mass of every event) and `selection.json` (cutflow, mass
-  consistency). `--truth-match` (signal MC) keeps the events whose best
-  candidate is truth-matched to eta -> mu+ mu- gamma.
-- `plot_dalitz.py`: raw Dalitz histograms (`dalitz_raw.png`,
-  `dalitz_raw_zoom.png`).
-- `driver_dalitz_fit.py`: `fit_dalitz.fit_dalitz` on the 14 x 14 grid ->
-  `dalitz_fit_<none|flat|dalitz>.json`, then `plot_dalitz_bins.plot_dalitz_fit`
-  (`global_fit.png`, yield maps, `*_per_bin_fits.pdf`, with `--horizontal`
-  also `*_per_bin_fits_horizontal.pdf`). No flag: no factor. `--phase-space`:
-  `kinematics.phase_space_factor` on both shapes (`flat`). `--dalitz-factor`
-  in addition: `kinematics.dalitz_factor` on the signal (`dalitz`), the
-  fraction of the bin reachable at M with each point weighted by the
-  eta -> gamma gamma* -> gamma mu+ mu- (Kroll-Wada) density with the NA60 2016
-  pole form factor (`FF_LAMBDA`). The default `--tail-prior` is a rebuilt-mass
-  MC fit; other masses need it given. `--signal-only` fixes the background to
-  0 and uses no prior (truth-matched MC).
-- `fit_dalitz.ipynb`: the same fit, interactively, on one events file.
+`driver_dalitz.py` reads ROOT -> TOS (default L0, HLT1 and HLT2) -> best
+candidate (min `tag_dtf_chi2`) -> m12, m23 and the `--mass` mass of every
+event, then fits them on the 14 x 14 grid (`fit_dalitz.fit_dalitz`). It writes
+into `--outdir`:
+
+- `selection.json`: the selection settings, the events dropped as malformed,
+  the candidates TOS on each trigger line, and the cutflow
+- `dalitz_raw.png`, `dalitz_raw_zoom.png`: raw Dalitz histograms
+- `dalitz_fit_<factor>.json`: the global fit, one entry per Dalitz bin, the
+  outcome counts, the yield closure, and the mean, median and max chi2/ndof of
+  the valid bins
+- `global_fit.png`, `dalitz_fit_<factor>_{signal,bkg}_yield.png`,
+  `dalitz_fit_<factor>_per_bin_fits.pdf` (with `--horizontal` also
+  `*_per_bin_fits_horizontal.pdf`)
+
+`--factor`: `none` (default) fits the plain shapes. `flat` puts
+`kinematics.phase_space_factor` on both shapes. `weighted` puts
+`kinematics.dalitz_factor` on the signal instead: the fraction of the bin
+reachable at M with each point weighted by the eta -> gamma gamma* -> gamma
+mu+ mu- (Kroll-Wada) density with the NA60 2016 pole form factor
+(`FF_LAMBDA`).
+
+`--truth-match` (signal MC) keeps the events whose best candidate is
+truth-matched to eta -> mu+ mu- gamma, and fits with the background fixed to 0
+and no prior. Every other run needs `--tail-prior`: the `dalitz_fit_<factor>.json`
+of the truth-matched run of the same `--mass`.
+
+`fit_dalitz.ipynb` runs the same selection (`driver_dalitz.select_candidates`)
+and fit interactively on one ROOT file.
+
+`src/fit/run_dalitz.sh [--mass "rebuilt tag_m tag_dtf_m"] [--factor "none flat weighted"]`
+runs the full sequence for each mass and factor on the 20261006 ntuples: the
+truth-matched MC (`out/eta2mumugamma/signal/<today>/dalitz_truth/<mass>`), then
+all selected signal MC (`signal/<today>/dalitz/<mass>`) and data
+(`turbo/<today>/dalitz/<mass>`) with its tail prior.
 
 The library and the scripts reproduce the per-bin fits of the previous
 `fit_dalitz.ipynb` (`PHASE_SPACE` True and False) bin for bin on the 20261006
