@@ -63,6 +63,10 @@ python src/fit/driver_mass_fit.py ntuple/lhcb/eta2mumugamma/20261006/combined_fi
 ```
 
 `--truth-match` takes the signal daughter PIDs: `-13 13` for eta -> mu+ mu-,
+Inside `fit_dcb` Minuit varies inv_nL = 1/nL and inv_nR = 1/nR, so an
+exponential tail (n -> infinity) is the reachable value inv_n = 0; the result
+JSON, plots and priors keep nL and nR.
+
 `-13 13 22` for eta -> mu+ mu- gamma. It skips the Gaussian fit: with no
 background, a Gaussian has no stable minimum on the radiative tail of
 eta -> mu+ mu- gamma MC.
