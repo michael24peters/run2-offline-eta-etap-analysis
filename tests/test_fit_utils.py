@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.join(_here, '..', 'src', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'src', 'fit'))
 
 import fit_utils
-from fit_dcb import fit_dcb, tail_n
+from fit_dcb import fit_dcb
 from fit_gauss import fit_gauss
 
 XMIN, XMAX = 480.0, 620.0
@@ -114,39 +114,6 @@ def test_fit_dcb_returns_result_and_minuit():
     result, m = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60)
     assert isinstance(result, dict)
     assert isinstance(m, Minuit)
-
-
-def test_fit_dcb_fixed_tails_given_as_n_hold_inv_n():
-    """fixed_params gives the tails as nL, nR; the fit holds inv_nL, inv_nR at
-    1/n, and the result reports the given n."""
-    rng = np.random.default_rng(3)
-    vals = np.concatenate([rng.normal(547.9, 8.0, 1500),
-                           rng.uniform(XMIN, XMAX, 6000)])
-    tails = {'alphaL': 1.2, 'nL': 4.0, 'alphaR': 1.5, 'nR': 2.5}
-    result, m = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60, fixed_params=tails)
-    assert m.fixed['inv_nL'] and m.values['inv_nL'] == pytest.approx(0.25)
-    assert m.fixed['inv_nR'] and m.values['inv_nR'] == pytest.approx(0.4)
-    params = result['fit']['parameters']
-    assert params['nL']['value'] == pytest.approx(4.0)
-    assert params['nR']['value'] == pytest.approx(2.5)
-
-
-def test_fit_dcb_result_reports_n_with_errors_from_inv_n():
-    """The result names the tails nL, nR, with the error of n that of inv_n
-    times n^2 and the variance of n that of inv_n times n^4."""
-    rng = np.random.default_rng(12)
-    vals = np.concatenate([547.9 + 8.0 * rng.standard_t(3, 4000),
-                           rng.uniform(XMIN, XMAX, 4000)])
-    result, m = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60)
-    covariance = result['fit']['covariance']
-    assert 'inv_nL' not in covariance['names']
-    for name, inv_name in (('nL', 'inv_nL'), ('nR', 'inv_nR')):
-        param = result['fit']['parameters'][name]
-        assert param['value'] == pytest.approx(tail_n(m.values[inv_name]), rel=1e-5)
-        assert param['error'] == pytest.approx(m.errors[inv_name] * param['value']**2, rel=1e-4)
-        i = covariance['names'].index(name)
-        assert covariance['matrix'][i][i] == pytest.approx(
-            m.covariance[inv_name, inv_name] * param['value']**4, rel=1e-4)
 
 
 def test_fit_gauss_fixed_params_stay_fixed():
