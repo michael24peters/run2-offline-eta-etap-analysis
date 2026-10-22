@@ -95,7 +95,6 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
     # their init values (also anything in fixed_params).
     # Stage 2: float everything except fixed_params, starting from stage 1's
     # result.
-    # TODO: Try just fixing the background params (also fixed_params) for stage 1.
     # stage1_fixed = set(TAIL_PARAMS) | set(fit_utils.BKG_PARAMS) | set(fixed_params or {})
     stage1_fixed = set(TAIL_PARAMS) | set(fixed_params or {})
     stage1 = fit_utils.run_fit(cost, init, limits, fixed=list(stage1_fixed))
