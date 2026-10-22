@@ -18,7 +18,8 @@ fixed to 0 and the background shape at its init values: no Gaussian fit and
 no results_gauss.json. Its results_dcb.json is the --tail-prior of the data
 fit.
 
---tail-prior RESULTS_JSON floats the DCB tails under
+--tail-prior RESULTS_JSON fixes the DCB tails at the MC values with
+TAIL_PRIOR_FACTOR = 0; otherwise it floats them under
 NormalConstraint(TAIL_PARAMS, MC values, MC covariance * TAIL_PRIOR_FACTOR**2),
 starting from the MC values.
 
@@ -69,7 +70,7 @@ TOS_LINES = {
     'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1'],   # Hlt2ExoticaPrmptDiMuonTurbo, Hlt2ExoticaDiMuonNoIPTurbo
 }
 
-TAIL_PRIOR_FACTOR = 5.0   # --tail-prior: MC tail-fit stdevs times this
+TAIL_PRIOR_FACTOR = 1.0   # --tail-prior: MC tail-fit stdevs times this; 0 fixes the tails
 
 parser = argparse.ArgumentParser(
     description='Gaussian and DCB + Chebyshev mass fits',
@@ -203,7 +204,8 @@ else:
     fits.append(('gauss', gauss_result, gauss_text))
     sigma_init = m_gauss.values['sigma']
 
-# DCB tails: from the MC tail prior, widened by TAIL_PRIOR_FACTOR, or free.
+# DCB tails: fixed at the MC values (TAIL_PRIOR_FACTOR 0), from the MC tail
+# prior widened by TAIL_PRIOR_FACTOR, or free.
 tail_init = (args.alphaL_init, args.nL_init, args.alphaR_init, args.nR_init)
 tail_prior = None
 if args.tail_prior:
@@ -211,10 +213,13 @@ if args.tail_prior:
         mc_fit = json.load(f)['fit']
     tail_prior = fit_utils.build_prior_from_result(mc_fit, TAIL_PARAMS, factor=TAIL_PRIOR_FACTOR)
     tail_init = tail_prior[0]
-    print(f'[INFO] MC tail shape (prior, x{TAIL_PRIOR_FACTOR:.0f} widened stdev): '
+    print(f'[INFO] MC tail shape (prior, x{TAIL_PRIOR_FACTOR:.0f} widened stdev; 0 = fixed): '
           + ', '.join(f"{name}={mc_fit['parameters'][name]['value']:.4f}"
                       f"±{mc_fit['parameters'][name]['error']:.4f}" for name in TAIL_PARAMS),
           file=sys.stderr)
+    if TAIL_PRIOR_FACTOR == 0:
+        fixed_params = dict(zip(TAIL_PARAMS, tail_init))
+        tail_prior = None
 
 dcb_result, m_dcb = fit_dcb(
     masses, xmin=args.xmin, xmax=args.xmax, nbins=args.nbins,

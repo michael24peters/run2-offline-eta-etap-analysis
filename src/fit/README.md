@@ -48,9 +48,10 @@ and must be changed there manually.
 ## DCB tails from signal MC
 
 On data the DCB tails are poorly constrained. They come from truth-matched
-signal MC instead, as a `NormalConstraint` prior on (alphaL, nL, alphaR, nR)
-centred on the MC values, with the MC covariance widened by
-`TAIL_PRIOR_FACTOR` (5) standard deviations rather than hard-fixed:
+signal MC instead: fixed at the MC values with `TAIL_PRIOR_FACTOR` 0 in
+`driver_mass_fit.py`, or otherwise a `NormalConstraint` prior on
+(alphaL, nL, alphaR, nR) centred on the MC values, with the MC covariance
+widened by `TAIL_PRIOR_FACTOR` standard deviations:
 
 ```
 # 1. truth-matched signal MC: DCB only, from --sigma-init, no background (n_bkg = 0, c0 = c1 = 0)
@@ -62,11 +63,11 @@ python src/fit/driver_mass_fit.py ntuple/lhcb/eta2mumugamma/20261006/combined_fi
     --tail-prior out/eta2mumugamma/signal/$(date +%Y%m%d)/truth/results_dcb.json
 ```
 
-`--truth-match` takes the signal daughter PIDs: `-13 13` for eta -> mu+ mu-,
 Inside `fit_dcb` Minuit varies inv_nL = 1/nL and inv_nR = 1/nR, so an
 exponential tail (n -> infinity) is the reachable value inv_n = 0; the result
 JSON, plots and priors keep nL and nR.
 
+`--truth-match` takes the signal daughter PIDs: `-13 13` for eta -> mu+ mu-,
 `-13 13 22` for eta -> mu+ mu- gamma. It skips the Gaussian fit: with no
 background, a Gaussian has no stable minimum on the radiative tail of
 eta -> mu+ mu- gamma MC.
