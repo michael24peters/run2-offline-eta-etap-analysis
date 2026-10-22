@@ -23,10 +23,18 @@ def gauss_text(params, chi2_per_ndof):
     """Stats box of a Gaussian + Chebyshev fit: (plot_text, term_text)."""
     mean, mean_err = plot_utils.val_err(params['mean'])
     sigma, sigma_err = plot_utils.val_err(params['sigma'])
+    n_sig, n_sig_err = plot_utils.val_err(params['n_sig'])
+    n_bkg, n_bkg_err = plot_utils.val_err(params['n_bkg'])
+    c0, c0_err       = plot_utils.val_err(params['c0'])
+    c1, c1_err       = plot_utils.val_err(params['c1'])
 
     stats = [
         [(r'\mu', 'μ', mean, mean_err, '.2f', 'MeV')],
         [(r'\sigma', 'σ', sigma, sigma_err, '.2f', 'MeV')],
+        [(r'n_{sig}', 'n_sig', n_sig, n_sig_err, '.0f', '')],
+        [(r'n_{bkg}', 'n_bkg', n_bkg, n_bkg_err, '.0f', '')],
+        [('c0', 'c0', c0, c0_err, '.3f', ''),
+         ('c1', 'c1', c1, c1_err, '.3f', '')],
     ]
     extra = (
         fr'$\chi^2/ndof$ = {chi2_per_ndof:.2f}',
