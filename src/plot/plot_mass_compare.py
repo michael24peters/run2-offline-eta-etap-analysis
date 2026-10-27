@@ -64,7 +64,7 @@ fig, ax = plt.subplots(figsize=(12, 9))
 
 bins = 200
 if args.full_range: hist_range = (400, 1200)
-else: hist_range = (450, 600)
+else: hist_range = (400, 700)
 
 # Each sample: low-opacity fill plus full-opacity outline, so the overlap of
 # the two fills stays readable.
