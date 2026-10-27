@@ -239,6 +239,41 @@ def align(tree, field, tag_ref='tag_dtf_m', fill_value=-1.0):
     return ak.unflatten(out, n_tag)
 
 
+def align_muons(tree, field, fill_value=0.0):
+    """
+    Expand a branch the ntuple stores for muon daughters only (prt_mu,
+    prt_loose_mu, prt_tight_mu) to exactly one value per daughter, filling the
+    non-muon daughters with `fill_value`.
+
+    The values are stored one per muon, in daughter order, so in eta -> mu mu
+    gamma the branch has 2 entries per 3-daughter candidate and does not line
+    up with prt_pid by position. In eta -> mu mu every daughter is a muon and
+    the branch is returned unchanged.
+
+        prt_pid      = [-13, 13, 22, -13, 13, 22]    2 candidates
+        prt_tight_mu = [1.0, 1.0, 0.0, 1.0]          4 muons
+        -> [1.0, 1.0, 0.0, 0.0, 1.0, 0.0]            fill_value = 0.0
+
+    Raises ValueError if an event's branch does not hold one entry per muon
+    daughter. Run it before drop_malformed(), which checks every prt_* branch
+    against prt_idx_mom.
+    """
+    # Per-daughter flag: is this daughter a muon?
+    is_muon = abs(tree['prt_pid']) == 13
+    # One entry per muon daughter in every event, e.g., [4, 2, 0] == [4, 2, 0]
+    if not ak.all(ak.num(tree[field]) == ak.sum(is_muon, axis=1)):
+        raise ValueError(f'{field} does not hold one entry per muon daughter '
+                         f'in every event')
+
+    # Fill with `fill_value`, one per daughter, then overwrite the muons in
+    # order with the stored values.
+    n_daughters = ak.num(tree['prt_pid'])
+    out = np.full(int(ak.sum(n_daughters)), fill_value)
+    out[ak.to_numpy(ak.flatten(is_muon))] = ak.to_numpy(ak.flatten(tree[field]))
+    # Unflatten back to the original event structure
+    return ak.unflatten(out, n_daughters)
+
+
 def tos_mask(tree, levels, tag_ref='tag_dtf_m'):
     """
     Per-candidate mask: True where the candidate is TOS on at least one line at
