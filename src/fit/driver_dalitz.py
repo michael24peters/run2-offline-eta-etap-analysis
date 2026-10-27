@@ -109,10 +109,13 @@ MOTHER_PID = 221                                      # eta, for --truth-match
 TRUTH_BRANCHES = ['prt_idx_gen', 'mc_idx_mom', 'mc_pid']   # read with --truth-match
 
 # TOS lines per trigger level.
+# TODO: use the commented-out lines again.
 TOS_LINES = {
     'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
-    'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass
-    'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1'],   # Hlt2ExoticaPrmptDiMuonTurbo, Hlt2ExoticaDiMuonNoIPTurbo
+    'HLT1': ['tag_hlt1_tos0'],                    # Hlt1DiMuonNoIP
+    # 'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass
+    'HLT2': ['tag_hlt2_tos0'],                    # Hlt2ExoticaPrmptDiMuonTurbo
+    # 'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1'],   # Hlt2ExoticaPrmptDiMuonTurbo, Hlt2ExoticaDiMuonNoIPTurbo
 }
 
 GEV = 1000.0   # MeV per GeV

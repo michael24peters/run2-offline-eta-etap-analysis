@@ -76,10 +76,13 @@ MU_GHOST_MAX    = 0.2              # ghost probability
 MU_IP_CHI2_MAX  = 6.0              # IP chi2
 
 # TOS lines per trigger level.
+# TODO: use the commented-out lines again.
 TOS_LINES = {
     'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
-    'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass
-    'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1'],   # Hlt2ExoticaPrmptDiMuonTurbo, Hlt2ExoticaDiMuonNoIPTurbo
+    'HLT1': ['tag_hlt1_tos0'],                    # Hlt1DiMuonNoIP
+    # 'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass
+    'HLT2': ['tag_hlt2_tos0'],                    # Hlt2ExoticaPrmptDiMuonTurbo
+    # 'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1'],   # Hlt2ExoticaPrmptDiMuonTurbo, Hlt2ExoticaDiMuonNoIPTurbo
 }
 
 TAIL_PRIOR_FACTOR = 1.0   # --tail-prior: MC tail-fit stdevs times this; 0 fixes the tails
