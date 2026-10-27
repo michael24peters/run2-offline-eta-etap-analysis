@@ -109,6 +109,27 @@ def test_report_counts_per_line_and_cumulative():
     assert list(report) == ['L0', 'HLT1', 'HLT2']
 
 
+def test_base_restricts_the_mask_and_the_report():
+    """Only the candidates in `base` count: the mask is False elsewhere and the
+    per-line and cumulative counts start from `base`."""
+    tree = make_tree(tag_dtf_m=[[550.0, 551.0, 552.0]],
+                     tag_l0_tos0=[[1.0, 1.0, 1.0]], tag_l0_tos1=[[0.0, 0.0, 0.0]],
+                     tag_hlt1_tos0=[[1.0, 1.0, 0.0]], tag_hlt1_tos1=[[0.0, 0.0, 0.0]],
+                     tag_hlt2_tos0=[[1.0, 0.0, 1.0]], tag_hlt2_tos1=[[0.0, 0.0, 0.0]])
+    base = ak.Array([[False, True, True]])
+    mask, report = cut_utils.tos_mask(tree, LEVELS, base=base)
+    assert mask.tolist() == [[False, False, False]]
+    assert [report[lv]['lines'][LEVELS[lv][0]] for lv in LEVELS] == [2, 1, 1]
+    assert [report[lv]['tos_up_to_level'] for lv in LEVELS] == [2, 1, 0]
+
+
+def test_base_none_is_every_candidate():
+    tree = tree_with()
+    everything = ak.Array([[True]])
+    assert cut_utils.tos_mask(tree, LEVELS, base=everything)[0].tolist() \
+        == cut_utils.tos_mask(tree, LEVELS)[0].tolist()
+
+
 def test_single_level():
     """One level is just an OR over its lines."""
     tree = tree_with(tag_l0_tos0=[[0.0]])

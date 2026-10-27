@@ -57,7 +57,8 @@ The typical pipeline, with TOS_LINES = {'L0': [...], 'HLT1': [...], 'HLT2': [...
 (TOS on at least one line at every level, see tos_mask):
 
     tree, report = drop_malformed(read_branches(infile, BRANCHES))
-    tos, _       = tos_mask(tree, TOS_LINES)
+    truth        = bkg_utils.signal_candidate_mask(tree, 221, [-13, 13], 'tag_dtf_m')   # MC only, first
+    tos, _       = tos_mask(tree, TOS_LINES, base=truth)    # data: tos_mask(tree, TOS_LINES)
     keep         = tos & reduce(tree, muon_ok, 'prt_idx_mom', how='all')
     best         = best_candidate_mask(tree, 'tag_dtf_chi2', keep)
     masses       = values(tree, 'tag_dtf_m', best)   # flat numpy, ready to fit
@@ -274,7 +275,7 @@ def align_muons(tree, field, fill_value=0.0):
     return ak.unflatten(out, n_daughters)
 
 
-def tos_mask(tree, levels, tag_ref='tag_dtf_m'):
+def tos_mask(tree, levels, tag_ref='tag_dtf_m', base=None):
     """
     Per-candidate mask: True where the candidate is TOS on at least one line at
     every trigger level -- AND across levels, OR within a level.
@@ -294,6 +295,10 @@ def tos_mask(tree, levels, tag_ref='tag_dtf_m'):
     tree    : awkward array, the event tree
     levels  : dict, trigger level -> list of that level's TOS branches
     tag_ref : str, the branch defining the candidate level
+    base    : optional per-candidate mask of the candidates to start from (e.g.
+              the truth-matched ones); the returned mask is False wherever
+              `base` is, and the report counts only the candidates in `base`.
+              Default: every candidate
 
     Returns:
     --------
@@ -311,7 +316,8 @@ def tos_mask(tree, levels, tag_ref='tag_dtf_m'):
         raise TypeError("levels must be a dict of trigger level -> list of TOS "
                         "branches, e.g. {'L0': [...], 'HLT1': [...], 'HLT2': [...]}")
 
-    mask = ak.ones_like(tree[tag_ref], dtype=bool)
+    base = ak.ones_like(tree[tag_ref], dtype=bool) if base is None else base
+    mask = base
     report = {}
     for level, triggers in levels.items():
         if not triggers:
@@ -322,7 +328,7 @@ def tos_mask(tree, levels, tag_ref='tag_dtf_m'):
             # Makes sure the trigger branch has one entry per candidate,
             # filling absent lines with -1.0, which reads as not fired.
             line_tos = align(tree, trigger, tag_ref) > 0.5
-            lines[trigger] = int(ak.sum(line_tos))
+            lines[trigger] = int(ak.sum(line_tos & base))
             level_tos = level_tos | line_tos
         mask = mask & level_tos
         report[level] = {'lines': lines, 'tos_up_to_level': int(ak.sum(mask))}
