@@ -5,7 +5,7 @@ Rough plot of a branch from a ROOT file, using uproot and matplotlib. Useful for
 quick checks of distributions.
 
 Usage:
-    python plot_branch.py input.root branch_name [output.png]
+    python plot_branch.py input.root branch_name [output.png] [--n-evts N]
 '''
 
 import argparse
@@ -45,16 +45,20 @@ def plot_branch(input, branch_name, n_evts=-1, output='branch_plot.png'):
     if n_evts > 0:
         branch_data = branch_data[:n_evts]
         print(f'[INFO] Using first {n_evts} entries for plotting.')
-    # Convert branch_data from array of arrays to a flat array
-    branch_data = np.concatenate(branch_data)
+    # Flatten array (only if the branch is a jagged array)
+    if branch_data.dtype == object:
+        branch_data = np.concatenate(branch_data)
     print('[INFO] Plotting histogram...')
     # Provide warning if the branch_data is probably too large to plot
     if len(branch_data) > 1e6:
         print(f'[WARNING] Branch data has {len(branch_data)} entries, which '
-              f'may be too large to plot.')
+              f'may take a long time to plot.')
+    # Apply font and style
     plot_utils.apply_font()
     fig, ax = plt.subplots()
-    ax.hist(branch_data, bins=100, histtype='step', color=plot_style.COLORS['data'])
+    # Look only at 0.1-99.9 percentiles so outliers don't stretch the axis
+    x_range = np.percentile(branch_data, [0.1, 99.9])
+    ax.hist(branch_data, bins=150, range=x_range, histtype='step', color=plot_style.COLORS['data'])
     ax.set_xlabel(branch_name)
     ax.set_ylabel('Counts')
     plot_style.style_axes(ax)
