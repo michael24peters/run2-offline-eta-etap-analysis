@@ -103,14 +103,11 @@ def test_two_candidates_from_one_generator_decay():
     assert n_reco_per_gen.tolist() == [[0.0, 2.0, 2.0]]
 
 
-def test_best_candidate_survives_a_shared_track(shared_track):
-    """Sharing a track must not stop best_candidate_mask picking exactly one."""
-    tree = ak.with_field(shared_track,
-                         ak.Array([[17.0, 14.0]]), 'tag_dtf_chi2')
+def test_random_candidate_survives_a_shared_track(shared_track):
+    """Sharing a track must not stop random_candidate_mask picking exactly one."""
     eligible = ak.Array([[True, True]])
-    best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', eligible)
-    assert best.tolist() == [[False, True]]      # lower chi2 wins
-    assert int(ak.sum(best)) == 1
+    picked = cut_utils.random_candidate_mask(eligible, 0)
+    assert int(ak.sum(picked)) == 1
 
 
 # --- generator particles with no daughters -----------------------------------

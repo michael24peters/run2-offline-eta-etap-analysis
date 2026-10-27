@@ -285,11 +285,11 @@ def test_use_candidate_kinematics_at_the_daughter_level(reco):
     assert out.tolist() == [[10.0, 10.0, 20.0, 20.0], [30.0, 30.0]]
 
 
-def test_use_best_candidate_selects_its_daughters(reco):
+def test_use_picked_candidate_selects_its_daughters(reco):
     """2. tag_* -> prt_* : the commonest call in the drivers -- reach the
-    daughter branches of the winning candidate."""
-    best = ak.Array([[False, True], [True]])
-    dmask = cut_utils.follow(reco, best, 'prt_idx_mom')
+    daughter branches of the picked candidate."""
+    picked = ak.Array([[False, True], [True]])
+    dmask = cut_utils.follow(reco, picked, 'prt_idx_mom')
     assert dmask.tolist() == [[False, False, True, True], [True, True]]
     kept = reco['prt_pid'][dmask]
     assert kept.tolist() == [[-13.0, 13.0], [-13.0, 13.0]]

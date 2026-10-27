@@ -66,9 +66,9 @@ def test_decay_mask_on_zero_events(zero_events):
     assert cut_utils.decay_mask(zero_events, 221, [-13, 13]).tolist() == []
 
 
-def test_best_candidate_mask_on_zero_events(zero_events):
+def test_random_candidate_mask_on_zero_events(zero_events):
     eligible = zero_events['tag_dtf_m'] > 0
-    out = cut_utils.best_candidate_mask(zero_events, 'tag_dtf_m', eligible)
+    out = cut_utils.random_candidate_mask(eligible, 0)
     assert out.tolist() == []
 
 
@@ -116,8 +116,8 @@ def test_pipeline_survives_an_emptied_tree():
     muon_ok = kept['prt_pid'] > 0
     sel = cut_utils.reduce(kept, muon_ok, 'prt_idx_mom', how='all',
                            target_ref='tag_dtf_m')
-    best = cut_utils.best_candidate_mask(kept, 'tag_dtf_m', sel)
-    masses = cut_utils.values(kept, 'tag_dtf_m', best)
+    picked = cut_utils.random_candidate_mask(sel, 0)
+    masses = cut_utils.values(kept, 'tag_dtf_m', picked)
     assert len(masses) == 0
 
 
@@ -237,13 +237,13 @@ def test_mixed_events_one_reconstructed_one_not():
 # --- 4. zero matches (data is fine, nothing qualifies) -----------------------
 
 def test_no_candidate_passes_the_cut():
-    """Every candidate cut, so best_candidate_mask must select nothing rather
+    """Every candidate cut, so random_candidate_mask must select nothing rather
     than falling back to candidate 0."""
-    tree = make_tree(tag_dtf_m=[[550.0, 549.0]], tag_dtf_chi2=[[17.0, 14.0]])
+    tree = make_tree(tag_dtf_m=[[550.0, 549.0]])
     nothing = ak.Array([[False, False]])
-    best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', nothing)
-    assert best.tolist() == [[False, False]]
-    assert len(cut_utils.values(tree, 'tag_dtf_m', best)) == 0
+    picked = cut_utils.random_candidate_mask(nothing, 0)
+    assert picked.tolist() == [[False, False]]
+    assert len(cut_utils.values(tree, 'tag_dtf_m', picked)) == 0
 
 
 def test_no_decay_matches_the_request():

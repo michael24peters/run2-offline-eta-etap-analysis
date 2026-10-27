@@ -60,8 +60,8 @@ The typical pipeline, with TOS_LINES = {'L0': [...], 'HLT1': [...], 'HLT2': [...
     truth        = bkg_utils.signal_candidate_mask(tree, 221, [-13, 13], 'tag_dtf_m')   # MC only, first
     tos, _       = tos_mask(tree, TOS_LINES, base=truth)    # data: tos_mask(tree, TOS_LINES)
     keep         = tos & reduce(tree, muon_ok, 'prt_idx_mom', how='all')
-    best         = best_candidate_mask(tree, 'tag_dtf_chi2', keep)
-    masses       = values(tree, 'tag_dtf_m', best)   # flat numpy, ready to fit
+    picked       = random_candidate_mask(keep, seed=0)
+    masses       = values(tree, 'tag_dtf_m', picked)   # flat numpy, ready to fit
 """
 
 import collections
@@ -335,25 +335,17 @@ def tos_mask(tree, levels, tag_ref='tag_dtf_m', base=None):
     return mask, report
 
 
-def best_candidate_mask(tree, metric_branch, eligible):
+def random_candidate_mask(eligible, seed):
     """
-    Per-candidate mask, True only for each event's single best candidate.
+    Per-candidate mask, True only for one randomly chosen eligible candidate per
+    event.
 
-    tree          : awkward array, the event tree
-    metric_branch : str, per-candidate branch to rank on (e.g. 'tag_dtf_chi2'),
-                    shaped like the tag branch -- the FULL candidate axis, not a
-                    pre-filtered one
-    eligible      : per-candidate mask of the candidates allowed to compete, i.e.
-                    the combined cuts
+    eligible : per-candidate mask of the candidates allowed to be picked, i.e.
+               the combined cuts, on the FULL candidate axis
+    seed     : int, seed of the random number generator; the same `eligible` and
+               seed always give the same mask
 
-    The smallest metric wins. Every call site ranks on tag_dtf_chi2, where
-    smaller is better; to rank on something where larger is better, negate it
-    at the call site.
-
-    `eligible` is required, because we want to find the best SURVIVING
-    candidate. If the best candidate is independently selected and then ANDed
-    with the cuts, the best could be a cut candidate and the entire event would
-    be dropped when it should have been kept.
+    Every eligible candidate of an event is equally likely to be picked.
 
     Returns a mask on the full candidate axis, so it composes with `&` like every
     other mask here and indexes any other per-candidate branch directly. Events
@@ -361,63 +353,65 @@ def best_candidate_mask(tree, metric_branch, eligible):
     events first, and no option type, so ak.to_numpy gives a plain ndarray rather
     than a MaskedArray.
 
-    To reach the daughter branches of the winning candidates, pass this mask to
+    To reach the daughter branches of the picked candidates, pass this mask to
     follow(tree, mask, 'prt_idx_mom').
     """
-    # Get metrics from the tree. Smallest wins, so the metric IS the score.
-    metrics = tree[metric_branch]
-
     # -------------------------------------------------------------------------
     # Example:
-    #     metrics  = [[0.42, 0.95, 1.82], [7.0, 2.0], [4.0, 9.0], []]
     #     eligible = [[T,    F,    T   ], [F,   F  ], [T,   T  ], []]
     #                  event 0             event 1     event 2    event 3
     #                  normal (mixed)      NONE pass   all pass   no candidates
     # -------------------------------------------------------------------------
 
-    # Push ineligible candidates out of the running before the argmin, so the
-    # winner is the best candidate that actually survived the cuts.
-    #     score -> [[0.42, inf, 1.82], [inf, inf], [4.0, 9.0], []]
-    score = ak.where(eligible, metrics, np.inf)
+    # One uniform random key per candidate, shaped like `eligible`.
+    #     keys -> [[0.77, 0.12, 0.45], [0.91, 0.30], [0.08, 0.63], []]
+    n_candidates = ak.num(eligible, axis=1)
+    rng = np.random.default_rng(seed)
+    keys = ak.unflatten(rng.random(int(ak.sum(n_candidates))), n_candidates)
 
-    # argmin(axis=1) asks each event separately "which position in YOUR list
-    # holds the smallest score?". keepdims=True keeps the result nested 
+    # Push ineligible candidates out of the running before the argmax, so the
+    # pick is a candidate that survived the cuts.
+    #     score -> [[0.77, -inf, 0.45], [-inf, -inf], [0.08, 0.63], []]
+    score = ak.where(eligible, keys, -np.inf)
+
+    # argmax(axis=1) asks each event separately "which position in YOUR list
+    # holds the largest score?". keepdims=True keeps the result nested
     # one-per-event as [[0]] rather than flattening to [0].
-    #     idx -> [[0], [0], [0], [None]]
+    #     idx -> [[0], [0], [1], [None]]
     #             ^     ^          ^
     #             |     |          event 3 has nothing to pick, so None.
-    #             |     event 1 is ALL inf -- argmin returns 0, but we still
-    #             |     want to exclide ineligible events, so we make sure to
+    #             |     event 1 is ALL -inf -- argmax returns 0, but we still
+    #             |     want to exclude ineligible events, so we make sure to
     #             |     include `& eligible` in the return below.
-    #             event 0: 0.42 < 1.82, so candidate 0 wins.
-    idx = ak.argmin(score, axis=1, keepdims=True)
+    #             event 0: 0.77 > 0.45, so candidate 0 is picked.
+    idx = ak.argmax(score, axis=1, keepdims=True)
 
     # local_index(axis=1) numbers each candidate by its position within its own
     # event -- essentially an index of its indices.
-    #     ak.local_index(metrics, axis=1) -> [[0, 1, 2], [0, 1], [0, 1], []]
+    #     ak.local_index(eligible, axis=1) -> [[0, 1, 2], [0, 1], [0, 1], []]
     #
     # fill_none(idx, -1) turns event 3's None into -1, which no position can
     # equal.
-    #     fill_none(idx, -1) -> [[0], [0], [0], [-1]]
+    #     fill_none(idx, -1) -> [[0], [0], [1], [-1]]
     #
-    # Comapring the two looks like:
-    #     [[0], [0], [0], [-1]] == [[0, 1, 2], [0, 1], [0, 1], []]
+    # Comparing the two looks like:
+    #     [[0], [0], [1], [-1]] == [[0, 1, 2], [0, 1], [0, 1], []]
     #
     # The two sides do not have the same shape, but awkward broadcasts them to
     # the same shape, so the comparison is done by event. The broadcasted
     # comparison looks like:
-    #     [[0, 0, 0], [0, 0], [0, 0], [-1, -1, -1]] == [[0, 1, 2], [0, 1], [0, 1], []]
-    # 
+    #     [[0, 0, 0], [0, 0], [1, 1], [-1, -1, -1]] == [[0, 1, 2], [0, 1], [0, 1], []]
+    #
     # The result is True at exactly one position per event, where the
-    # candidate's local index matches the event's winning index. The result
+    # candidate's local index matches the event's picked index. The result
     # looks like:
-    #    [[T, F, F], [T, F], [T, F], []]
+    #    [[T, F, F], [T, F], [F, T], []]
     #                 ^
-    #                 event 1's phantom winner, an ineligible candidate
+    #                 event 1's phantom pick, an ineligible candidate
     #
     # We get rid of this ineligible candidate with the final `& eligible`:
-    #    return [[T, F, F], [F, F], [T, F], []]
-    return (ak.local_index(metrics, axis=1) == ak.fill_none(idx, -1)) & eligible
+    #    return [[T, F, F], [F, F], [F, T], []]
+    return (ak.local_index(eligible, axis=1) == ak.fill_none(idx, -1)) & eligible
 
 
 def values(tree, branch, mask):

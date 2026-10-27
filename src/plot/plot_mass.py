@@ -4,7 +4,7 @@ plot_mass.py
 Plots the mass distribution of candidates from a ROOT file.
 
 Usage:
-    python plot_mass.py input.root [output.png] [--best] [--full-range]
+    python plot_mass.py input.root [output.png] [--random-candidate] [--full-range]
                         [--mass tag_dtf_m|tag_m]
 """
 
@@ -31,10 +31,10 @@ parser.add_argument('input',
                     help='Input ROOT file')
 parser.add_argument('output', nargs='?', default='mass_plot.png',
                     help='Output PNG file (default: mass_plot.png)')
-# Flag to only plot "best" candidate (one candidate per event),
-# using cut_utils.best_candidate_mask() to select the best candidate.
-parser.add_argument('--best', action='store_true', default=False,
-                    help='Only plot best candidate per event (default: False)')
+# Flag to only plot one randomly picked candidate per event, using
+# cut_utils.random_candidate_mask() to pick it.
+parser.add_argument('--random-candidate', action='store_true', default=False,
+                    help='Only plot one randomly picked candidate per event (default: False)')
 # Flag to plot full mass range (400-1200 MeV) instead of zoomed-in range 
 # (450-600 MeV).
 parser.add_argument('--full-range', action='store_true', default=False,
@@ -53,7 +53,7 @@ args = parser.parse_args()
 print(f'Reading from {args.input} and writing to {args.output}.')
 
 # Raw, per-event jagged array of candidate masses (always needed for the
-# candidate-multiplicity diagnostics below, regardless of --best).
+# candidate-multiplicity diagnostics below, regardless of --random-candidate).
 # The prt_/trigger branches are read and validated unconditionally so that every
 # selection variant runs over the same event sample and differs only by the cut.
 DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']
@@ -68,7 +68,7 @@ TOS_LINES = {
 TOS_BRANCHES = [branch for lines in TOS_LINES.values() for branch in lines]
 tree = cut_utils.read_branches(
     args.input,
-    [args.mass, 'tag_dtf_chi2', 'prt_idx_mom'] + DAUGHTER_FIELDS + TOS_BRANCHES)
+    [args.mass, 'prt_idx_mom'] + DAUGHTER_FIELDS + TOS_BRANCHES)
 tree, _ = cut_utils.drop_malformed(tree, tag_ref=args.mass)
 
 # Get lengths of arrays in the mass branch to see how many candidates per event
@@ -79,15 +79,15 @@ print(f'Events with 1 candidate:  {np.sum(lengths == 1)}')
 print(f'Events with 2+ candidates: {np.sum(lengths >= 2)}')
 print(f'Events with 3+ candidates: {np.sum(lengths >= 3)}')
 print(f'Max candidates in an event: {lengths.max()}')
-# Candidates plotted with --best=False is every candidate (lengths.sum());
-# with --best=True it's one per event that has at least one candidate.
-# Report both so the effect of --best is visible regardless of which
-# mode this run actually uses.
+# Candidates plotted with --random-candidate=False is every candidate
+# (lengths.sum()); with --random-candidate=True it's one per event that has at
+# least one candidate. Report both so the effect of --random-candidate is
+# visible regardless of which mode this run actually uses.
 n_all_candidates = int(lengths.sum())
-n_best_candidates = int(np.sum(lengths >= 1))
-print(f'Candidates plotted (--best=False): {n_all_candidates}')
-print(f'Candidates plotted (--best=True):  {n_best_candidates}')
-print(f'Difference (candidates dropped by --best selection): {n_all_candidates - n_best_candidates}')
+n_random_candidates = int(np.sum(lengths >= 1))
+print(f'Candidates plotted (--random-candidate=False): {n_all_candidates}')
+print(f'Candidates plotted (--random-candidate=True):  {n_random_candidates}')
+print(f'Difference (candidates dropped by --random-candidate selection): {n_all_candidates - n_random_candidates}')
 print(f"{'─' * 48}")
 
 # Apply the selection. pnn_mu_min defaults to the upstream floor, so a bare run
@@ -109,12 +109,12 @@ mass = tree[args.mass][keep]
 print(f'Selection [{applied or "none"}]: '
       f'{int(ak.sum(ak.num(mass)))} / {n_all_candidates} candidates pass')
 
-if args.best:
-    # Select the best candidate for each event, by lowest tag_dtf_chi2. `keep` is
-    # the eligibility mask, so each event keeps the best candidate that survived
-    # the selection; events with none left simply contribute nothing.
-    best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', keep)
-    tag_m = cut_utils.values(tree, args.mass, best)
+if args.random_candidate:
+    # Pick one candidate per event at random. `keep` is the eligibility mask, so
+    # each event keeps a random candidate that survived the selection; events
+    # with none left simply contribute nothing.
+    picked = cut_utils.random_candidate_mask(keep, seed=0)
+    tag_m = cut_utils.values(tree, args.mass, picked)
 # Flatten to every surviving candidate
 else: tag_m = ak.to_numpy(ak.flatten(mass))
 

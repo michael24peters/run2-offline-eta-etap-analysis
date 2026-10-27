@@ -3,7 +3,7 @@ driver_mass_fit.py
 
 Gaussian and DCB + Chebyshev mass fits of one ROOT file:
 
-    read ROOT → select → best candidate → fit_gauss → fit_dcb (seeded with the Gauss σ)
+    read ROOT → [truth-match] → select → random candidate → fit_gauss → fit_dcb (seeded with the Gauss σ)
               → selection.json, results_gauss.json, gauss_mass_fit.png,
                 results_dcb.json, dcb_mass_fit.png
 
@@ -11,12 +11,15 @@ This script owns everything about the input: which file, which branches, which
 selection. fit_gauss() and fit_dcb() downstream see only a numpy array of
 masses.
 
+One candidate per event is picked at random among those that pass the cuts
+(cut_utils.random_candidate_mask, seed SEED).
+
 --truth-match PID... (signal MC only) keeps the candidates whose every daughter
-matches eta -> PIDs (bkg_utils.signal_candidate_mask), before the best
-candidate is chosen, and runs only the DCB fit, from --sigma-init, with n_bkg
-fixed to 0 and the background shape at its init values: no Gaussian fit and
-no results_gauss.json. Its results_dcb.json is the --tail-prior of the data
-fit.
+matches eta -> PIDs (bkg_utils.signal_candidate_mask). It is the first cut,
+before TOS, pnn_mu and the candidate pick. It runs only the DCB fit, from
+--sigma-init, with n_bkg fixed to 0 and the background shape at its init
+values: no Gaussian fit and no results_gauss.json. Its results_dcb.json is the
+--tail-prior of the data fit.
 
 --tail-prior RESULTS_JSON fixes the DCB tails at the MC values with
 TAIL_PRIOR_FACTOR = 0; otherwise it floats them under
@@ -30,7 +33,7 @@ sigma). See README.md.
 Usage:
     python src/fit/driver_mass_fit.py INFILE --outdir OUTDIR
         [--truth-match PID [PID ...] | --tail-prior RESULTS_JSON]
-        [--tos-levels L0 HLT1 HLT2] [--pnn-mu-min 0.4] [--max-events N]
+        [--max-events N]
         [--xmin 480] [--xmax 620] [--nbins 80] [--mean-init 548] [--sigma-init 5]
         [--alphaL-init 1.5] [--nL-init 2] [--alphaR-init 1.5] [--nR-init 2]
 """
@@ -56,14 +59,23 @@ from plot_mass_fit import dcb_text, gauss_text, plot_fit
 # --- Selection ---------------------------------------------------------------
 
 MASS_BRANCH     = 'tag_dtf_m'      # the quantity being fit
-METRIC_BRANCH   = 'tag_dtf_chi2'   # ranks candidates within an event
-DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']   # branches the cuts below read
-PNN_MU_MIN      = 0.4              # every muon daughter must exceed this
-MUON_PID        = 13               # |pid| the pnn_mu cut applies to
+SEED            = 0                # random candidate pick
+DAUGHTER_FIELDS = ['prt_pid', 'prt_px', 'prt_py', 'prt_pz', 'prt_pnn_mu',
+                   'prt_prb_ghost', 'prt_ip_chi2', 'prt_tight_mu']   # branches the cuts below read
+MUON_PID        = 13               # |pid| the muon cuts apply to
 MOTHER_PID      = 221              # eta, for --truth-match
 TRUTH_BRANCHES  = ['prt_idx_gen', 'mc_idx_mom', 'mc_pid']   # read with --truth-match
 
-# TOS lines per trigger level; --tos-levels picks the levels to require.
+# Muon requirements of the dark-photon ananote (LHCb-ANA-2017-027, Tables 1 and 3).
+# Every muon daughter must pass each; a non-muon daughter passes.
+MU_PT_MIN       = 1000.0           # pT [MeV]
+MU_P_MIN        = 20000.0          # p [MeV]
+MU_ETA_RANGE    = (2.0, 4.5)       # pseudorapidity
+PNN_MU_MIN      = 0.9              # ProbNNmu
+MU_GHOST_MAX    = 0.2              # ghost probability
+MU_IP_CHI2_MAX  = 6.0              # IP chi2
+
+# TOS lines per trigger level.
 TOS_LINES = {
     'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
     'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass
@@ -83,12 +95,6 @@ parser.add_argument('--truth-match', nargs='+', type=int, default=None, metavar=
                          'PIDs (-13 13, or -13 13 22) and fit with no background')
 parser.add_argument('--tail-prior', default=None,
                     help='results_dcb.json of a --truth-match fit whose tails are the DCB prior')
-parser.add_argument('--tos-levels', nargs='*', default=list(TOS_LINES), choices=list(TOS_LINES),
-                    help='Trigger levels the candidate must be TOS at (default: L0 HLT1 HLT2). '
-                         'Pass none for no TOS cut')
-parser.add_argument('--pnn-mu-min', type=float, default=PNN_MU_MIN,
-                    help=f'Muon PID threshold (default: {PNN_MU_MIN}, the floor already '
-                         'applied upstream in the ntuple, i.e. no additional cut)')
 parser.add_argument('--max-events', type=int, default=None,
                     help='Only read the first N events (default: all)')
 parser.add_argument('--xmin', type=float, default=480.0, help='Lower mass bound [MeV]')
@@ -106,14 +112,14 @@ if args.truth_match and args.tail_prior:
     parser.error('--truth-match and --tail-prior are exclusive')
 os.makedirs(args.outdir, exist_ok=True)
 
-tos_lines = {level: TOS_LINES[level] for level in args.tos_levels}
-branches = ([MASS_BRANCH, METRIC_BRANCH, 'prt_idx_mom'] + DAUGHTER_FIELDS
-            + [line for lines in tos_lines.values() for line in lines]
+branches = ([MASS_BRANCH, 'prt_idx_mom'] + DAUGHTER_FIELDS
+            + [line for lines in TOS_LINES.values() for line in lines]
             + (TRUTH_BRANCHES if args.truth_match else []))
 
 # --- Read --------------------------------------------------------------------
 
 tree = cut_utils.read_branches(args.infile, branches, entry_stop=args.max_events)
+tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
 tree, drop_report = cut_utils.drop_malformed(tree, tag_ref=MASS_BRANCH)
 print(f"[INFO] events: read {drop_report['read']}, kept {drop_report['kept']}, "
       f"dropped {drop_report['read'] - drop_report['kept']}", file=sys.stderr)
@@ -128,37 +134,48 @@ for reason in ('dropped_no_candidates', 'dropped_idx_out_of_range',
 
 keep = ak.ones_like(tree[MASS_BRANCH], dtype=bool)
 cutflow = [('all candidates', int(ak.sum(ak.num(keep))))]
-triggers = None
 
-# TOS on at least one line at every requested level.
-if tos_lines:
-    tos, tos_report = cut_utils.tos_mask(tree, tos_lines, tag_ref=MASS_BRANCH)
-    keep = keep & tos
-    triggers = {level: report['lines'] for level, report in tos_report.items()}
-    for level, report in tos_report.items():
-        cutflow.append((f'TOS up to {level}', report['tos_up_to_level']))
-        for line, n in report['lines'].items():
-            if n == 0:
-                print(f'[WARN] {level} TOS line {line} passes no candidate', file=sys.stderr)
-
-# ProbNNmu on every muon daughter; a non-muon daughter passes.
-if args.pnn_mu_min is not None:
-    muon_ok = ((tree['prt_pnn_mu'] > args.pnn_mu_min)
-               | (abs(tree['prt_pid']) != MUON_PID))
-    keep = keep & cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all',
-                                   target_ref=MASS_BRANCH)
-    cutflow.append((f'pnn_mu > {args.pnn_mu_min}', int(ak.sum(keep))))
-
-# Truth match: every daughter matches eta -> args.truth_match.
+# Truth match first: every daughter matches eta -> args.truth_match.
 if args.truth_match:
     keep = keep & bkg_utils.signal_candidate_mask(tree, MOTHER_PID, args.truth_match,
                                                   target_ref=MASS_BRANCH)
     cutflow.append(('truth-matched', int(ak.sum(keep))))
 
-# One candidate per event: smallest METRIC_BRANCH among those kept.
-best = cut_utils.best_candidate_mask(tree, METRIC_BRANCH, keep)
-masses = cut_utils.values(tree, MASS_BRANCH, best)  # <- awkward → numpy
-cutflow.append(('best candidates', len(masses)))
+# TOS on at least one line at every trigger level.
+tos, tos_report = cut_utils.tos_mask(tree, TOS_LINES, tag_ref=MASS_BRANCH, base=keep)
+keep = keep & tos
+triggers = {level: report['lines'] for level, report in tos_report.items()}
+for level, report in tos_report.items():
+    cutflow.append((f'TOS up to {level}', report['tos_up_to_level']))
+    for line, n in report['lines'].items():
+        if n == 0:
+            print(f'[WARN] {level} TOS line {line} passes no candidate', file=sys.stderr)
+
+# Muon cuts, each on every muon daughter; a non-muon daughter passes.
+px, py, pz = tree['prt_px'], tree['prt_py'], tree['prt_pz']
+eta = ak.unflatten(kinematics.eta(ak.to_numpy(ak.flatten(px)), ak.to_numpy(ak.flatten(py)),
+                                  ak.to_numpy(ak.flatten(pz))), ak.num(px))
+muon_cuts = {
+    f'pT > {MU_PT_MIN:g}':   kinematics.pt(px, py) > MU_PT_MIN,
+    f'p > {MU_P_MIN:g}':     kinematics.p(px, py, pz) > MU_P_MIN,
+    f'{MU_ETA_RANGE[0]:g} < eta < {MU_ETA_RANGE[1]:g}':
+        (eta > MU_ETA_RANGE[0]) & (eta < MU_ETA_RANGE[1]),
+    f'pnn_mu > {PNN_MU_MIN}': tree['prt_pnn_mu'] > PNN_MU_MIN,
+    f'ghost_prob < {MU_GHOST_MAX}': tree['prt_prb_ghost'] < MU_GHOST_MAX,
+    f'ip_chi2 < {MU_IP_CHI2_MAX:g}':   # -1 is stored when there is no PV
+        (tree['prt_ip_chi2'] >= 0) & (tree['prt_ip_chi2'] < MU_IP_CHI2_MAX),
+    'IsMuonTight':           tree['prt_tight_mu'] > 0.5,
+}
+for label, passes in muon_cuts.items():
+    muon_ok = passes | (abs(tree['prt_pid']) != MUON_PID)
+    keep = keep & cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all',
+                                   target_ref=MASS_BRANCH)
+    cutflow.append((label, int(ak.sum(keep))))
+
+# One candidate per event: picked at random among those kept.
+picked = cut_utils.random_candidate_mask(keep, SEED)
+masses = cut_utils.values(tree, MASS_BRANCH, picked)  # <- awkward → numpy
+cutflow.append(('random candidates', len(masses)))
 for label, n in cutflow:
     print(f'[INFO]   {label:24s} {n:9d}', file=sys.stderr)
 
@@ -167,10 +184,16 @@ selection = {
         'input_file': args.infile,
         'mass_branch': MASS_BRANCH,
         'selection': {
-            'tos': tos_lines or None,
-            'pnn_mu_min': args.pnn_mu_min,
+            'tos': TOS_LINES,
+            'mu_pt_min': MU_PT_MIN,
+            'mu_p_min': MU_P_MIN,
+            'mu_eta_range': MU_ETA_RANGE,
+            'pnn_mu_min': PNN_MU_MIN,
+            'mu_ghost_max': MU_GHOST_MAX,
+            'mu_ip_chi2_max': MU_IP_CHI2_MAX,
+            'mu_tight': True,
             'truth_match': args.truth_match,
-            'best_candidate': f'min {METRIC_BRANCH}',
+            'random_candidate': {'seed': SEED},
             'max_events': args.max_events,
         },
     },

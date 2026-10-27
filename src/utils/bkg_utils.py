@@ -3,6 +3,9 @@ bkg_utils.py
 
 MC truth-matching against a signal decay (signal_daughter_mask,
 signal_candidate_mask) -- imported by ana_bkg.py, trig_eff.py, driver_mass_fit.py and driver_dalitz.py.
+
+For MC, truth-matching is always the first cut: before TOS, pnn_mu and the
+candidate pick.
 """
 
 import cut_utils

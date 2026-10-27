@@ -16,7 +16,8 @@ them), so the per-level efficiencies multiply to the total.
 With --daughter-pids, the candidates are the MC-truth-matched ones (every
 daughter matches eta -> daughter-pids, bkg_utils.signal_candidate_mask) whose
 generated decay is in the fiducial region (fid_reqs.fiducial_candidate_mask);
-decays outside it are not counted. Without, every candidate.
+decays outside it are not counted. Truth-matching is the first selection, before
+any trigger level. Without, every candidate.
 
 Errors are binomial: sqrt(eff (1 - eff) / denominator).
 

@@ -1,8 +1,7 @@
 """
-Script to compare "all candidates" vs "best candidate per event" mass plots on
-one overlaid plot. In this script the "best candidate" is defined as the 
-candidate with the lowest tag_dtf_chi2 value per event, but this could be
-changed since the best candidate method is more generic than this.
+Script to compare "all candidates" vs "random candidate per event" mass plots on
+one overlaid plot. The random candidate is picked by
+cut_utils.random_candidate_mask().
 
 Usage:
     python plot_mass_compare.py input.root [output.png] [--full-range]
@@ -26,7 +25,7 @@ import plot_style
 import plot_utils
 
 # IO
-parser = argparse.ArgumentParser(description='Compare all-candidate vs best-candidate mass distributions')
+parser = argparse.ArgumentParser(description='Compare all-candidate vs random-candidate mass distributions')
 parser.add_argument('input',
                     help='Input ROOT file')
 parser.add_argument('output', nargs='?', default='mass_plot_compare.png',
@@ -37,22 +36,22 @@ args = parser.parse_args()
 print(f'Reading from {args.input} and writing to {args.output}.')
 
 # Get mass info as awkward arrays
-tree = cut_utils.read_branches(args.input, ['tag_dtf_m', 'tag_dtf_chi2'])
+tree = cut_utils.read_branches(args.input, ['tag_dtf_m'])
 
 # All candidates, flattened
 tag_m_all = ak.to_numpy(ak.flatten(tree['tag_dtf_m']))
 
-# Best candidate per event (lowest tag_dtf_chi2). This script applies no cuts --
-# it exists to compare "all candidates" against "best candidate" -- so every
-# candidate is eligible to win. Events with no candidates contribute nothing.
+# Random candidate per event. This script applies no cuts -- it exists to compare
+# "all candidates" against "random candidate" -- so every candidate is eligible
+# to be picked. Events with no candidates contribute nothing.
 eligible = ak.ones_like(tree['tag_dtf_m'], dtype=bool)
-best = cut_utils.best_candidate_mask(tree, 'tag_dtf_chi2', eligible)
-tag_m_best = cut_utils.values(tree, 'tag_dtf_m', best)
+picked = cut_utils.random_candidate_mask(eligible, seed=0)
+tag_m_random = cut_utils.values(tree, 'tag_dtf_m', picked)
 
 print(f"{'─' * 48}")
 print(f'Candidates plotted (all):  {len(tag_m_all)}')
-print(f'Candidates plotted (best): {len(tag_m_best)}')
-print(f'Difference (candidates dropped by best selection): {len(tag_m_all) - len(tag_m_best)}')
+print(f'Candidates plotted (random): {len(tag_m_random)}')
+print(f'Difference (candidates dropped by random selection): {len(tag_m_all) - len(tag_m_random)}')
 print(f"{'─' * 48}")
 
 # Plot
@@ -69,7 +68,7 @@ else: hist_range = (400, 700)
 # Each sample: low-opacity fill plus full-opacity outline, so the overlap of
 # the two fills stays readable.
 for values, color, label in [(tag_m_all, C['pull'], 'All candidates'),
-                             (tag_m_best, C['fit'], 'Best candidate')]:
+                             (tag_m_random, C['fit'], 'Random candidate')]:
     ax.hist(values, bins=bins, range=hist_range, histtype='stepfilled',
             color=color, alpha=0.25, label=label)
     ax.hist(values, bins=bins, range=hist_range, histtype='step',

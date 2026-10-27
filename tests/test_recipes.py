@@ -238,10 +238,9 @@ def test_multiplicity_check_catches_a_malformed_candidate():
 
 def test_propagate_a_candidate_selection_to_its_daughters(event):
     """follow() down. The result is daughter-shaped, so it indexes prt_* directly."""
-    best = cut_utils.best_candidate_mask(event, 'tag_dtf_chi2',
-                                         ak.Array([[True, True]]))
-    dmask = cut_utils.follow(event, best, 'prt_idx_mom')
-    assert best.tolist() == [[True, False]]          # lower chi2 wins
+    picked = cut_utils.random_candidate_mask(ak.Array([[True, False]]), 0)
+    dmask = cut_utils.follow(event, picked, 'prt_idx_mom')
+    assert picked.tolist() == [[True, False]]        # the only eligible candidate
     assert dmask.tolist() == [[True, True, True, False, False, False]]
 
 
@@ -256,9 +255,8 @@ def test_propagate_a_daughter_flag_up_to_its_candidate(event):
 def test_full_chain_candidate_to_generator_mother(event):
     """The composite crossing: candidate -> daughter -> gen particle -> gen
     mother. There is no direct link, so it is three hops."""
-    best = cut_utils.best_candidate_mask(event, 'tag_dtf_chi2',
-                                         ak.Array([[True, True]]))
-    dmask = cut_utils.follow(event, best, 'prt_idx_mom')
+    picked = cut_utils.random_candidate_mask(ak.Array([[True, False]]), 0)
+    dmask = cut_utils.follow(event, picked, 'prt_idx_mom')
     gen = cut_utils.reduce(event, dmask, 'prt_idx_gen', how='any',
                            target_ref='mc_pid')
     mother = cut_utils.reduce(event, gen & cut_utils.valid(event, 'mc_idx_mom'),
