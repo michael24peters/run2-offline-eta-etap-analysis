@@ -116,6 +116,33 @@ def test_fit_dcb_returns_result_and_minuit():
     assert isinstance(m, Minuit)
 
 
+def test_fit_dcb_limits_replace_the_defaults():
+    """limits replaces the default limits of the parameters it names and
+    leaves the others; the fitted tails stay within them."""
+    rng = np.random.default_rng(3)
+    vals = np.concatenate([rng.normal(547.9, 8.0, 1500),
+                           rng.uniform(XMIN, XMAX, 6000)])
+    _, m = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60,
+                   limits={'nL': (0.0, 50.0), 'nR': (0.0, 50.0)})
+    assert tuple(m.limits['nL']) == (0.0, 50.0)
+    assert tuple(m.limits['nR']) == (0.0, 50.0)
+    assert m.limits['sigma'][0] == 0.0
+    assert m.values['nL'] <= 50.0 and m.values['nR'] <= 50.0
+
+
+def test_fit_dcb_sigma_prior_pulls_sigma_towards_its_value():
+    """A tight (values, cov) sigma_prior holds sigma near its value even though
+    the data prefer a larger one; without it sigma follows the data."""
+    rng = np.random.default_rng(3)
+    vals = np.concatenate([rng.normal(547.9, 8.0, 3000),
+                           rng.uniform(XMIN, XMAX, 6000)])
+    _, free = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60)
+    prior = (np.array([5.0]), np.array([[0.01]]))
+    _, pulled = fit_dcb(vals, xmin=XMIN, xmax=XMAX, nbins=60, sigma_prior=prior)
+    assert free.values['sigma'] > 7.0
+    assert abs(pulled.values['sigma'] - 5.0) < 0.5
+
+
 def test_fit_gauss_fixed_params_stay_fixed():
     """fixed_params holds its parameters at the given values through both
     stages, as for a signal-only fit of truth-matched MC."""

@@ -31,7 +31,7 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
             mean_init=kinematics.M_ETA, sigma_init=5.0,
             alphaL_init=1.5, nL_init=2.0,
             alphaR_init=1.5, nR_init=2.0,
-            tail_prior=None, fixed_params=None):
+            tail_prior=None, sigma_prior=None, fixed_params=None, limits=None):
     """
     Run the asymmetric DCB + background fit and return (result, m).
 
@@ -49,10 +49,17 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
              the tails float but are penalized for straying from `values`
              (e.g. an MC-derived tail shape) by an amount set by `cov` --
              looser than hard-fixing them via `fixed_params`.
+    sigma_prior : optional (values, cov) for sigma -- `values` a length-1
+             array, `cov` its 1x1 covariance. Adds
+             NormalConstraint(('sigma',), values, error=cov) to the cost, as
+             tail_prior does for the tails.
     fixed_params : optional dict {param_name: value}, any of mean, sigma,
              alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1. Each is seeded at
              the given value and held fixed through both fit stages instead
              of floating.
+    limits : optional dict {param_name: (lo, hi)} replacing the default
+             limits of those parameters, e.g. {'nL': (0, 50), 'nR': (0, 50)};
+             either bound may be None.
 
     Returns:
     --------
@@ -71,6 +78,8 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
     cost = fit_utils.make_dcb_cost(counts, bin_edges, xmin, xmax)
     if tail_prior is not None:
         cost = cost + NormalConstraint(TAIL_PARAMS, tail_prior[0], error=tail_prior[1])
+    if sigma_prior is not None:
+        cost = cost + NormalConstraint(('sigma',), sigma_prior[0], error=sigma_prior[1])
 
     init = dict(
         mean   = mean_init,
@@ -85,11 +94,12 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
     )
     if fixed_params:
         init.update(fixed_params)
+    # Default limits, with any given in `limits` replacing them
     limits = dict(
         sigma=(0.0, None), alphaL=(0.0, None), alphaR=(0.0, None),
         nL=(0.0, None), nR=(0.0, None),
         n_sig=(0.0, None), n_bkg=(0.0, None),
-    )
+    ) | (limits or {})
 
     # Stage 1: fit with the background params, and the tail params fixed at
     # their init values (also anything in fixed_params).
