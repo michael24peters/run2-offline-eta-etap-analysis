@@ -10,12 +10,11 @@ Usage:
         [--infile  ntuple/lhcb/eta2mumugamma/20261006/combined_files.root [--mass rebuilt]] \
         [--outdir  out/phase-space-factor]
 
-Pure kinematics (always made): f(m_eta) map, the step-by-step
-construction of f for one bin, and f(M) for a set of example bins.
-With --results: per-bin decompositions (what f and renormalization do to the
-signal and background shapes). With --infile: the mass-slice, worked-example
-and within-bin uniformity figures, which need the candidates' Dalitz
-positions (driver_dalitz.select_candidates of the file).
+Pure kinematics (always made): f(m_eta) map and the step-by-step
+construction of f for one bin. With --results: the decomposition of one bin
+(what f and renormalization do to its signal and background shapes). With
+--infile: the worked-example and within-bin uniformity figures, which need the
+candidates' Dalitz positions (driver_dalitz.select_candidates of the file).
 """
 
 import argparse
@@ -48,13 +47,10 @@ M12_LABEL = r'$m^2_{12} = m^2(\gamma\mu^+)$ [GeV$^2$]'
 M23_LABEL = r'$m^2_{23} = m^2(\mu^+\mu^-)$ [GeV$^2$]'
 M_LABEL = r'$M = m(\gamma\mu^+\mu^-)$ [MeV]'
 
-# Example bins, (i, j) = (m12 index, m23 index).
-FACTOR_BINS = [(4, 4), (6, 8), (7, 2), (1, 13), (1, 4), (12, 7)]
-DECOMP_BINS = [(4, 4), (6, 8), (7, 2), (1, 13), (12, 7)]
+# Example bin, (i, j) = (m12 index, m23 index).
 CONSTRUCTION_BIN, CONSTRUCTION_MASSES = (6, 8), [505.0, 520.0, 530.0, 540.0, 550.0]
+DECOMP_BIN = (6, 8)
 UNIFORMITY_BIN = (1, 8)
-MASS_SLICES = [(475.0, 485.0), (525.0, 535.0), (545.0, 551.0), (640.0, 650.0)]
-MASS_POINTS, MASS_HALF_WIDTH = [475.0, 530.0, 548.0, 645.0], 1.0   # [MeV]
 WORKED_POINT = (0.020, 0.300)   # (m12, m23) [GeV^2] of the worked example
 STRIPS_MASS, STRIPS_N = 530.0, 20
 
@@ -155,22 +151,6 @@ def fig_construction(outdir):
     fig.tight_layout()
     out = os.path.join(outdir, f'f_construction_{i}_{j}.png')
     fig.savefig(out, dpi=150); print(f'[DONE] Plot saved to {out}.')
-
-
-def fig_factors(outdir):
-    Mg = np.linspace(XMIN, XMAX, 1500)
-    fig, axes = plt.subplots(2, 3, figsize=(14, 7.5), sharex=True, sharey=True)
-    for ax, (i, j) in zip(axes.flat, FACTOR_BINS, strict=True):
-        f = f_of(Mg, i, j)
-        ax.plot(Mg, f, color=C['phase_space'], lw=2)
-        ax.axvline(kinematics.M_ETA, color=C['reference'], ls='--')
-        ax.set_title(fr'Bin ({i},{j}):  $f(m_\eta)$ = {f_of(kinematics.M_ETA, i, j)[0]:.2f}',
-                     fontsize=12)
-        ax.set_xlim(XMIN, XMAX); ax.set_ylim(-0.05, 1.08)
-        plot_style.style_axes(ax)
-    for ax in axes[1]: ax.set_xlabel('M [MeV]')
-    for ax in axes[:, 0]: ax.set_ylabel('f(M)')
-    plot_style.save_plot(fig, os.path.join(outdir, 'phase_space_factors.png'), dpi=150)
 
 
 def fig_decomposition(outdir, results, i, j):
@@ -307,81 +287,6 @@ def fig_strips(outdir):
     fig.savefig(out, dpi=150); print(f'[DONE] Plot saved to {out}.')
 
 
-def fig_mass_slices(outdir, events):
-    """The candidates' Dalitz plot in narrow slices of M, each with the
-    Dalitz boundaries at the slice's edges, and the construction bin outlined."""
-    m12, m23, M = (events[k].astype(float) for k in ('m12s', 'm23s', 'masses'))
-    i, j = CONSTRUCTION_BIN
-    (a, b), (lo, hi) = bin_ranges(i, j)
-    fig, axes = plt.subplots(1, len(MASS_SLICES), figsize=(5 * len(MASS_SLICES), 5.6),
-                             sharex=True, sharey=True)
-    for ax, (m_lo, m_hi) in zip(axes, MASS_SLICES, strict=True):
-        sel = (M >= m_lo) & (M < m_hi)
-        ax.hist2d(m12[sel], m23[sel], bins=(M12_EDGES.size - 1) * 6,
-                  range=[[0, M12_EDGES[-1]], [0, M23_EDGES[-1]]],
-                  cmap='Greys', cmin=1)
-        ax.plot(*dalitz_boundary(kinematics.M_ETA), color=C['reference'], ls='--', lw=1.2)
-        for M_edge, ls in ((m_lo, ':'), (m_hi, '-')):
-            ax.plot(*dalitz_boundary(M_edge), color=C['phase_space'], ls=ls, lw=1.4)
-        ax.add_patch(Rectangle((a, lo), b - a, hi - lo, fill=False, ec=C['pull'], lw=2))
-        in_bin = sel & (m12 >= a) & (m12 < b) & (m23 >= lo) & (m23 < hi)
-        ax.set_title(f'{m_lo:.0f} < M < {m_hi:.0f} MeV\n'
-                     f'{sel.sum()} candidates, {in_bin.sum()} in bin ({i},{j})', fontsize=12)
-        ax.set_xlim(0, M12_EDGES[-1]); ax.set_ylim(0, M23_EDGES[-1])
-        ax.set_xlabel(r'$m^2_{12}$ [GeV$^2$]')
-        plot_style.style_axes(ax)
-    axes[0].set_ylabel(r'$m^2_{23}$ [GeV$^2$]')
-    handles = [plt.Line2D([], [], color=C['phase_space'], ls=':', lw=1.4),
-               plt.Line2D([], [], color=C['phase_space'], ls='-', lw=1.4),
-               plt.Line2D([], [], color=C['reference'], ls='--', lw=1.2),
-               Rectangle((0, 0), 1, 1, fill=False, ec=C['pull'], lw=2)]
-    fig.legend(handles, ['Dalitz boundary at the lower edge of the slice',
-                         'Dalitz boundary at the upper edge of the slice',
-                         r'Dalitz boundary at $M = m_\eta$',
-                         f'bin ({i},{j})'],
-               loc='lower center', ncol=4, frameon=False)
-    fig.tight_layout(rect=(0, 0.07, 1, 1))
-    out = os.path.join(outdir, 'mass_slices.png')
-    fig.savefig(out, dpi=150); print(f'[DONE] Plot saved to {out}.')
-
-
-def fig_mass_points(outdir, events):
-    """The candidates' Dalitz plot at single values of M, each with the
-    Dalitz boundary at that M, and the construction bin outlined. Candidates
-    are those within MASS_HALF_WIDTH of M."""
-    m12, m23, M = (events[k].astype(float) for k in ('m12s', 'm23s', 'masses'))
-    i, j = CONSTRUCTION_BIN
-    (a, b), (lo, hi) = bin_ranges(i, j)
-    fig, axes = plt.subplots(1, len(MASS_POINTS), figsize=(5 * len(MASS_POINTS), 5.6),
-                             sharex=True, sharey=True)
-    for ax, M0 in zip(axes, MASS_POINTS, strict=True):
-        sel = abs(M - M0) < MASS_HALF_WIDTH
-        ax.hist2d(m12[sel], m23[sel], bins=(M12_EDGES.size - 1) * 6,
-                  range=[[0, M12_EDGES[-1]], [0, M23_EDGES[-1]]],
-                  cmap='Greys', cmin=1)
-        ax.plot(*dalitz_boundary(kinematics.M_ETA), color=C['reference'], ls='--', lw=1.2)
-        ax.plot(*dalitz_boundary(M0), color=C['phase_space'], lw=1.4)
-        ax.add_patch(Rectangle((a, lo), b - a, hi - lo, fill=False, ec=C['pull'], lw=2))
-        in_bin = sel & (m12 >= a) & (m12 < b) & (m23 >= lo) & (m23 < hi)
-        ax.set_title(f'M = {M0:.0f} MeV\n'
-                     f'{sel.sum()} candidates with |M - {M0:.0f}| < {MASS_HALF_WIDTH:.0f} MeV,\n'
-                     f'{in_bin.sum()} of them in bin ({i},{j})', fontsize=12)
-        ax.set_xlim(0, M12_EDGES[-1]); ax.set_ylim(0, M23_EDGES[-1])
-        ax.set_xlabel(r'$m^2_{12}$ [GeV$^2$]')
-        plot_style.style_axes(ax)
-    axes[0].set_ylabel(r'$m^2_{23}$ [GeV$^2$]')
-    handles = [plt.Line2D([], [], color=C['phase_space'], lw=1.4),
-               plt.Line2D([], [], color=C['reference'], ls='--', lw=1.2),
-               Rectangle((0, 0), 1, 1, fill=False, ec=C['pull'], lw=2)]
-    fig.legend(handles, ['Dalitz boundary at the panel\'s M',
-                         r'Dalitz boundary at $M = m_\eta$',
-                         f'bin ({i},{j})'],
-               loc='lower center', ncol=3, frameon=False)
-    fig.tight_layout(rect=(0, 0.07, 1, 1))
-    out = os.path.join(outdir, 'mass_points.png')
-    fig.savefig(out, dpi=150); print(f'[DONE] Plot saved to {out}.')
-
-
 def fig_uniformity(outdir, events, i, j):
     """How the bin's candidates are actually spread across it, and f
     computed from that spread instead of from area."""
@@ -416,10 +321,10 @@ def fig_uniformity(outdir, events, i, j):
 def main():
     parser = argparse.ArgumentParser(description='Phase-space factor figures.')
     parser.add_argument('--results', default=None,
-                        help='dalitz_fit_<factor>.json, for the decomposition figures')
+                        help='dalitz_fit_<factor>.json, for the decomposition figure')
     parser.add_argument('--infile', default=None,
-                        help='ROOT file whose selected candidates make the mass-slice, '
-                             'worked-example and uniformity figures')
+                        help='ROOT file whose selected candidates make the worked-example '
+                             'and uniformity figures')
     parser.add_argument('--mass', default='rebuilt',
                         help='driver_dalitz.py --mass of the --infile candidates (default: rebuilt)')
     parser.add_argument('--outdir', default=os.path.join(_here, '..', '..', 'out',
@@ -430,19 +335,15 @@ def main():
     fig_f_at_meta_map(args.outdir)
     fig_construction(args.outdir)
     fig_strips(args.outdir)
-    fig_factors(args.outdir)
     if args.results:
         with open(args.results) as fh:
             results = json.load(fh)
-        for (i, j) in DECOMP_BINS:
-            fig_decomposition(args.outdir, results, i, j)
+        fig_decomposition(args.outdir, results, *DECOMP_BIN)
     if args.infile:
         sys.path.insert(0, os.path.join(_here, '..', 'fit'))
         import driver_dalitz
         m12s, m23s, masses, _ = driver_dalitz.select_candidates(args.infile, mass=args.mass)
         events = {'m12s': m12s, 'm23s': m23s, 'masses': masses}
-        fig_mass_slices(args.outdir, events)
-        fig_mass_points(args.outdir, events)
         fig_worked_example(args.outdir, events)
         fig_uniformity(args.outdir, events, *UNIFORMITY_BIN)
     plt.close('all')
