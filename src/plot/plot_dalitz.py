@@ -1,8 +1,7 @@
 """
 plot_dalitz.py
 
-Raw Dalitz histograms (no fit) of the candidates driver_dalitz.py selects,
-with the eta's Dalitz region. driver_dalitz.py writes HISTOGRAMS:
+Plot Dalitz plots without any fit.
 
     dalitz_raw.png       m12 in [0, 1.0], m23 in [0, 1.2] GeV^2 (every candidate)
     dalitz_raw_zoom.png  m12 in [0, 0.22], m23 in [0, 0.35] GeV^2 (the eta's region)

@@ -189,14 +189,6 @@ def dalitz_factor(M, m12_range, m23_range, n_m23=400):
     True, gen-level eta decays fill D(m_eta) with this density. The formula is
     defined at any (m12, q^2) above threshold, including outside D(m_eta),
     where it is the same expression continued.
-
-    References:
-        Matrix element: Kampf, Knecht, Novotny, Eur. Phys. J. C 46 (2006) 191
-            (hep-ph/0510021), Eq. (3.2) for |M_LO|^2 with M = m_eta, m = m_mu;
-            Eq. (2.11) for the form factor F(q^2) multiplying the amplitude;
-            Eq. (2.8) for the (1 - x) dx dy = 2 dm12 dm23 / m_eta^4 measure.
-        Form factor and angular factor: NA60, Phys. Lett. B 757 (2016) 437
-            (arXiv:1608.07898), Eq. (6) and Eq. (1).
     """
     m_mu2 = (M_MU / 1000.0)**2
     m_eta2 = (M_ETA / 1000.0)**2
@@ -213,18 +205,12 @@ def dalitz_factor(M, m12_range, m23_range, n_m23=400):
     reach_lo12 = np.clip(lo12, bin_lo12, bin_hi12)
     reach_hi12 = np.clip(hi12, bin_lo12, bin_hi12)
 
-    # |M|^2 = |F|^2 / q2 * (m_eta^2 - q2)^2 [1 + cos^2 theta* + (4 m_mu^2 / q2) sin^2 theta*]:
-    #   1 / q2                the virtual photon: 1/q2^2 from its propagator, times q2 from its decay to mu+ mu-
-    #   (m_eta^2 - q2)^2      the eta -> gamma gamma* coupling, from the photons' momenta
-    #   [...]                 the mu+ direction in the mu+ mu- frame; with
-    #                         m13 - m12 = (m_eta^2 - q2) beta cos theta*, (m_eta^2 - q2)^2 [...] is
-    #                         (m_eta^2 - q2)^2 (1 + 4 m_mu^2 / q2) + (m13 - m12)^2
-    # At fixed q2 this is a polynomial in m12,
-    #     density = q2_weight * (base_term + 4 (m12 - mid12)^2),
-    # since m13 - m12 = 2 (mid12 - m12).
+    # Make sure values are phsyical before evaluating the density. The density
+    # is 0 for q^2 <= 4 m_mu^2
     physical = q2 > 4.0 * m_mu2
-    q2_safe = np.where(physical, q2, 1.0)       # stand-in 1 below threshold, where q2_weight is 0
+    q2_safe = np.where(physical, q2, 1.0) # stand-in 1 below threshold, where q2_weight is 0
     q2_weight = np.where(physical, (1.0 - q2_safe / FF_LAMBDA**2)**-2 / q2_safe, 0.0)   # |F|^2 / q2
+
     base_term = (m_eta2 - q2_safe)**2 * (1.0 + 4.0 * m_mu2 / q2_safe)   # part not depending on m12
     mid12 = (m_eta2 + 2.0 * m_mu2 - q2_safe) / 2.0   # m12 where m13 = m12 (cos theta* = 0)
 
