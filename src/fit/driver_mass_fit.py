@@ -16,10 +16,14 @@ One candidate per event is picked at random among those that pass the cuts
 
 --truth-match PID... (signal MC only) keeps the candidates whose every daughter
 matches eta -> PIDs (bkg_utils.signal_candidate_mask). It is the first cut,
-before TOS, pnn_mu and the candidate pick. It runs only the DCB fit, from
---sigma-init, with n_bkg fixed to 0 and the background shape at its init
-values: no Gaussian fit and no results_gauss.json. Its results_dcb.json is the
---tail-prior of the data fit.
+before TOS, pnn_mu and the candidate pick. The DCB fit runs with n_bkg fixed to
+0 and the background shape at its init values; the Gaussian fit keeps its
+background floating. Its results_dcb.json is the --tail-prior of the data fit.
+
+--sigma-prior RESULTS_JSON (with --truth-match) takes the results_gauss.json of
+an earlier --truth-match run and adds
+NormalConstraint(sigma, Gaussian sigma, Gaussian variance * SIGMA_PRIOR_FACTOR**2)
+to the DCB fit.
 
 --tail-prior RESULTS_JSON fixes the DCB tails at the MC values with
 TAIL_PRIOR_FACTOR = 0; otherwise it floats them under
@@ -32,10 +36,10 @@ sigma). See README.md.
 
 Usage:
     python src/fit/driver_mass_fit.py INFILE --outdir OUTDIR
-        [--truth-match PID [PID ...] | --tail-prior RESULTS_JSON]
+        [--truth-match PID [PID ...] [--sigma-prior RESULTS_JSON] | --tail-prior RESULTS_JSON]
         [--max-events N]
         [--xmin 480] [--xmax 620] [--nbins 80] [--mean-init 548] [--sigma-init 5]
-        [--alphaL-init 1.5] [--nL-init 2] [--alphaR-init 1.5] [--nR-init 2]
+        [--alphaL-init 1.5] [--nL-init 2] [--alphaR-init 1.5] [--nR-init 2] [--n-max N]
 """
 
 import argparse
@@ -85,7 +89,8 @@ TOS_LINES = {
     # 'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1'],   # Hlt2ExoticaPrmptDiMuonTurbo, Hlt2ExoticaDiMuonNoIPTurbo
 }
 
-TAIL_PRIOR_FACTOR = 1.0   # --tail-prior: MC tail-fit stdevs times this; 0 fixes the tails
+TAIL_PRIOR_FACTOR = 5.0   # --tail-prior: MC tail-fit stdevs times this; 0 fixes the tails
+SIGMA_PRIOR_FACTOR = 5.0  # --sigma-prior: Gaussian sigma stdev times this
 
 parser = argparse.ArgumentParser(
     description='Gaussian and DCB + Chebyshev mass fits',
@@ -98,6 +103,9 @@ parser.add_argument('--truth-match', nargs='+', type=int, default=None, metavar=
                          'PIDs (-13 13, or -13 13 22) and fit with no background')
 parser.add_argument('--tail-prior', default=None,
                     help='results_dcb.json of a --truth-match fit whose tails are the DCB prior')
+parser.add_argument('--sigma-prior', default=None,
+                    help='results_gauss.json of a --truth-match fit whose sigma is the DCB sigma '
+                         'prior (with --truth-match)')
 parser.add_argument('--max-events', type=int, default=None,
                     help='Only read the first N events (default: all)')
 parser.add_argument('--xmin', type=float, default=480.0, help='Lower mass bound [MeV]')
@@ -105,14 +113,18 @@ parser.add_argument('--xmax', type=float, default=620.0, help='Upper mass bound 
 parser.add_argument('--nbins', type=int, default=80, help='Number of histogram bins')
 parser.add_argument('--mean-init', type=float, default=kinematics.M_ETA, help='Initial mean [MeV]')
 parser.add_argument('--sigma-init', type=float, default=5.0,
-                    help='Initial sigma [MeV] of the Gaussian, or of the DCB with --truth-match')
+                    help='Initial sigma [MeV] of the Gaussian')
 parser.add_argument('--alphaL-init', type=float, default=1.5, help='Initial left tail α_L')
 parser.add_argument('--nL-init', type=float, default=2.0, help='Initial left tail n_L')
 parser.add_argument('--alphaR-init', type=float, default=1.5, help='Initial right tail α_R')
 parser.add_argument('--nR-init', type=float, default=2.0, help='Initial right tail n_R')
+parser.add_argument('--n-max', type=float, default=None,
+                    help='Upper limit of the DCB tail exponents n_L and n_R (default: none)')
 args = parser.parse_args()
 if args.truth_match and args.tail_prior:
     parser.error('--truth-match and --tail-prior are exclusive')
+if args.sigma_prior and not args.truth_match:
+    parser.error('--sigma-prior needs --truth-match')
 os.makedirs(args.outdir, exist_ok=True)
 
 branches = ([MASS_BRANCH, 'prt_idx_mom'] + DAUGHTER_FIELDS
@@ -215,20 +227,31 @@ print(f'[DONE] JSON saved to: {selection_path}', file=sys.stderr)
 
 fits = []   # (name, result, stats-box builder) of each fit, written below
 
-# Truth-matched MC: no background, n_bkg fixed to 0 and the background shape
-# parameters at their init values (fit_utils.BKG_INIT); the DCB starts from
-# --sigma-init. Otherwise the Gaussian fit, whose sigma seeds the DCB.
+# The Gaussian fit's sigma seeds the DCB. Truth-matched MC: the DCB has no
+# background, n_bkg fixed to 0 and the background shape parameters at their
+# init values (fit_utils.BKG_INIT).
+gauss_result, m_gauss = fit_gauss(
+    masses, xmin=args.xmin, xmax=args.xmax, nbins=args.nbins,
+    mean_init=args.mean_init, sigma_init=args.sigma_init)
+gauss_result['meta']['input_file'] = args.infile
+fits.append(('gauss', gauss_result, gauss_text))
+sigma_init = abs(m_gauss.values['sigma'])   # the Gaussian fit's sigma can have either sign
 fixed_params = None
-sigma_init = args.sigma_init
 if args.truth_match:
     fixed_params = {'n_bkg': 0.0, **fit_utils.BKG_INIT}
-else:
-    gauss_result, m_gauss = fit_gauss(
-        masses, xmin=args.xmin, xmax=args.xmax, nbins=args.nbins,
-        mean_init=args.mean_init, sigma_init=args.sigma_init)
-    gauss_result['meta']['input_file'] = args.infile
-    fits.append(('gauss', gauss_result, gauss_text))
-    sigma_init = m_gauss.values['sigma']
+
+# DCB sigma: held near the Gaussian sigma of a --truth-match fit, with that fit's
+# stdev widened by SIGMA_PRIOR_FACTOR.
+sigma_prior = None
+if args.sigma_prior:
+    with open(args.sigma_prior) as f:
+        gauss_fit = json.load(f)['fit']
+    sigma_prior = fit_utils.build_prior_from_result(gauss_fit, ['sigma'],
+                                                    factor=SIGMA_PRIOR_FACTOR)
+    sigma_init = sigma_prior[0][0]
+    print(f"[INFO] Gaussian sigma (prior, x{SIGMA_PRIOR_FACTOR:.0f} widened stdev): "
+          f"{gauss_fit['parameters']['sigma']['value']:.4f}"
+          f"±{gauss_fit['parameters']['sigma']['error']:.4f}", file=sys.stderr)
 
 # DCB tails: fixed at the MC values (TAIL_PRIOR_FACTOR 0), from the MC tail
 # prior widened by TAIL_PRIOR_FACTOR, or free.
@@ -252,8 +275,13 @@ dcb_result, m_dcb = fit_dcb(
     mean_init=args.mean_init, sigma_init=sigma_init,
     alphaL_init=tail_init[0], nL_init=tail_init[1],
     alphaR_init=tail_init[2], nR_init=tail_init[3],
-    tail_prior=tail_prior, fixed_params=fixed_params)
+    tail_prior=tail_prior, sigma_prior=sigma_prior, fixed_params=fixed_params,
+    limits={'nL': (0.0, args.n_max), 'nR': (0.0, args.n_max)})
 dcb_result['meta']['input_file'] = args.infile
+dcb_result['meta']['n_max'] = args.n_max
+if args.sigma_prior:
+    dcb_result['meta']['sigma_prior_from'] = args.sigma_prior
+    dcb_result['meta']['sigma_prior_factor'] = SIGMA_PRIOR_FACTOR
 if args.tail_prior:
     dcb_result['meta']['tail_prior_from'] = args.tail_prior
     dcb_result['meta']['tail_prior_factor'] = TAIL_PRIOR_FACTOR
