@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Dalitz fits of eta -> mu+ mu- gamma from the NTUPLE ntuples into
-# out/eta2mumugamma/<turbo|signal>/<today>/, for each --mass and --factor
-# (all by default), one mass after the other:
+# Dalitz fits of eta -> mu+ mu- gamma data from the NTUPLE ntuples into
+# out/eta2mumugamma/turbo/<today>/, for each --mass and --factor (all by
+# default), one mass after the other:
 #
-#   1. truth-matched signal MC, signal only        signal/<date>/dalitz_truth/<mass>
-#   2. all selected signal MC candidates and data,  signal/<date>/dalitz/<mass>
-#      with the global-fit tails of 1 as prior      turbo/<date>/dalitz/<mass>
+#   1. with the DCB tails of TAIL_PRIOR as prior    turbo/<date>/dalitz/<mass>
+#   2. no prior                                     turbo/<date>/dalitz_no_prior/<mass>
+#
+# TAIL_PRIOR is the tag_dtf_m data DCB fit of run_mass_fits.sh; it is the prior
+# for every --mass. Both jobs pass --n-max N_MAX, the upper limit of the DCB
+# tail exponents n_L, n_R.
 #
 # Every job prints to the terminal with its lines prefixed [job]; failed jobs
 # are listed at the end. Jobs start READ_PAUSE seconds apart, so that only one
@@ -18,6 +21,8 @@ set -o pipefail
 cd "$(dirname "$0")/../.."
 PY=.venv/bin/python
 NTUPLE=20261006
+TAIL_PRIOR=out/eta2mumugamma/turbo/20261027/mc_prior/results_dcb.json
+N_MAX=50
 DATE=$(date +%Y%m%d)
 READ_PAUSE=20
 MASSES="rebuilt tag_m tag_dtf_m"
@@ -33,7 +38,6 @@ FAILED=$(mktemp)
 trap 'rm -f "$FAILED"' EXIT
 
 DATA=ntuple/lhcb/eta2mumugamma/$NTUPLE/combined_files.root
-MC=ntuple/mc/eta2mumugamma/signal_$NTUPLE/combined_files.root
 
 # run LABEL CMD...: run CMD with its output prefixed [LABEL]; list LABEL in FAILED if it fails
 run() {
@@ -44,24 +48,15 @@ run() {
 }
 
 for mass in $MASSES; do
-    truth=out/eta2mumugamma/signal/$DATE/dalitz_truth/$mass
-    mc_all=out/eta2mumugamma/signal/$DATE/dalitz/$mass
     turbo=out/eta2mumugamma/turbo/$DATE/dalitz/$mass
+    no_prior=out/eta2mumugamma/turbo/$DATE/dalitz_no_prior/$mass
 
     for factor in $FACTORS; do
-        run "$mass $factor truth" $PY src/fit/driver_dalitz.py $MC --outdir $truth \
-            --mass $mass --factor $factor --truth-match --horizontal &
-        sleep $READ_PAUSE
-    done
-    wait
-
-    for factor in $FACTORS; do
-        prior=$truth/dalitz_fit_$factor.json
-        run "$mass $factor signal" $PY src/fit/driver_dalitz.py $MC --outdir $mc_all \
-            --mass $mass --factor $factor --tail-prior $prior --horizontal &
-        sleep $READ_PAUSE
         run "$mass $factor turbo" $PY src/fit/driver_dalitz.py $DATA --outdir $turbo \
-            --mass $mass --factor $factor --tail-prior $prior --horizontal &
+            --mass $mass --factor $factor --tail-prior $TAIL_PRIOR --n-max $N_MAX --horizontal &
+        sleep $READ_PAUSE
+        run "$mass $factor no_prior" $PY src/fit/driver_dalitz.py $DATA --outdir $no_prior \
+            --mass $mass --factor $factor --n-max $N_MAX --horizontal &
         sleep $READ_PAUSE
     done
     wait
@@ -72,4 +67,4 @@ if [ -s "$FAILED" ]; then
     cat "$FAILED"
     exit 1
 fi
-echo "all Dalitz fits done: out/eta2mumugamma/<turbo|signal>/$DATE/dalitz*"
+echo "all Dalitz fits done: out/eta2mumugamma/turbo/$DATE/dalitz*"

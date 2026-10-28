@@ -332,10 +332,11 @@ the background fixed to 0 and no prior. Without `--truth-match` or
 and fit interactively on one ROOT file.
 
 `src/fit/run_dalitz.sh [--mass "rebuilt tag_m tag_dtf_m"] [--factor "none flat weighted"]`
-runs the full sequence for each mass and factor on the 20261006 ntuples: the
-truth-matched MC (`out/eta2mumugamma/signal/<today>/dalitz_truth/<mass>`), then
-all selected signal MC (`signal/<today>/dalitz/<mass>`) and data
-(`turbo/<today>/dalitz/<mass>`) with its tail prior.
+runs the data fits for each mass and factor on the 20261006 ntuples, both with
+`--n-max 50`: with the tails of the 20261027 data DCB mass fit
+(`turbo/20261027/mc_prior/results_dcb.json`, `TAIL_PRIOR`) as prior
+(`out/eta2mumugamma/turbo/<today>/dalitz/<mass>`), and with no prior
+(`turbo/<today>/dalitz_no_prior/<mass>`).
 
 The library and the scripts reproduce the per-bin fits of the previous
 `fit_dalitz.ipynb` (`PHASE_SPACE` True and False) bin for bin on the 20261006
