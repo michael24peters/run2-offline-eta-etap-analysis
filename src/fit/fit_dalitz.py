@@ -160,7 +160,7 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
                xmin=420.0, xmax=680.0, nbins=80,
                mean_init=kinematics.M_ETA, sigma_init=10.0,
                tail_prior=None, signal_prior_factor=5.0, min_candidates=10,
-               signal_factor=None, bkg_factor=None, signal_only=False):
+               signal_factor=None, bkg_factor=None, signal_only=False, limits=None):
     """
     Global DCB + Chebyshev fit of every candidate, then one fit per Dalitz bin.
 
@@ -181,6 +181,7 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
              signal / background shape in each bin, or None
     signal_only : fix n_bkg to 0 and c0, c1 to fit_utils.BKG_INIT in the
              global and per-bin fits (truth-matched signal MC)
+    limits : the global fit's limits; see fit_dcb()
 
     Returns:
     --------
@@ -197,7 +198,8 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
     global_fixed = {'n_bkg': 0.0, **fit_utils.BKG_INIT} if signal_only else None
     result, global_fit = fit_dcb(masses, xmin=xmin, xmax=xmax, nbins=nbins,
                                  mean_init=mean_init, sigma_init=sigma_init,
-                                 tail_prior=tail_prior, fixed_params=global_fixed)
+                                 tail_prior=tail_prior, fixed_params=global_fixed,
+                                 limits=limits)
     global_params = result['fit']['parameters']
     seed = {name: global_params[name]['value'] for name in SIGNAL_PARAMS}
     bkg_seed = {name: global_params[name]['value'] for name in fit_utils.BKG_PARAMS}

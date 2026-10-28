@@ -280,10 +280,12 @@ still go negative inside the reachable region; the fit floors it at
 `fit_utils.BKG_FLOOR`, and `bkg_goes_negative` flags any bin where that
 happened.
 
-The global fit carries a widened MC tail prior (`--tail-prior`): on the
+The global fit carries a widened tail prior (`--tail-prior`): on the
 rebuilt mass the unconstrained tails run off to n ~ 50-150 and the fit is
-invalid. The prior of each mass is the global fit of truth-matched signal MC
-of the same mass (`driver_dalitz.py --truth-match`).
+invalid. The prior is the `fit` block of any results JSON: the data DCB fit of
+`driver_mass_fit.py` (`results_dcb.json`), or the global fit of a
+`driver_dalitz.py --truth-match` run (`dalitz_fit_<factor>.json`). `--n-max`
+caps n_L and n_R of the global fit.
 
 Known limitation: f assumes background is uniform across the bin. Near the
 low-m12 boundary (the i = 1 column) it isn't, and the data turn on more
@@ -293,9 +295,9 @@ slowly than f predicts, which is where the worst per-bin chi2 values are.
 
 ```
 python src/fit/driver_dalitz.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
-    --outdir OUT (--truth-match | --tail-prior TRUTH_OUT/dalitz_fit_<factor>.json) \
+    --outdir OUT [--truth-match | --tail-prior RESULTS_JSON] \
     [--mass rebuilt|tag_m|tag_dtf_m] [--factor none|flat|weighted] \
-    [--max-events N] [--horizontal]
+    [--n-max N] [--max-events N] [--horizontal]
 python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_<factor>.json [--horizontal]   # re-plot only
 ```
 
@@ -323,8 +325,8 @@ mu+ mu- (Kroll-Wada) density with the NA60 2016 pole form factor
 
 `--truth-match` (signal MC) keeps the candidates truth-matched to
 eta -> mu+ mu- gamma, before TOS, the muon cuts and the candidate pick, and fits with
-the background fixed to 0 and no prior. Every other run needs `--tail-prior`: the `dalitz_fit_<factor>.json`
-of the truth-matched run of the same `--mass`.
+the background fixed to 0 and no prior. Without `--truth-match` or
+`--tail-prior` the tails float free.
 
 `fit_dalitz.ipynb` runs the same selection (`driver_dalitz.select_candidates`)
 and fit interactively on one ROOT file.

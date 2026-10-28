@@ -37,12 +37,14 @@ One candidate per event is picked at random among those that pass the cuts
 truth-matched to eta -> mu+ mu- gamma (bkg_utils.signal_candidate_mask). It is
 the first cut, before TOS, pnn_mu and the candidate pick. The matched
 candidates are fit with no tail prior and the background fixed to 0
-(fit_dalitz signal_only). Its dalitz_fit_<factor>.json
-is the --tail-prior of the data and all-candidate MC fits of the same --mass;
-the global fit, whose tails make the prior, is the same for every factor.
+(fit_dalitz signal_only).
 
-Without --truth-match, --tail-prior is required: the global fit carries the
-tail prior of that fit, its stdevs times TAIL_PRIOR_FACTOR.
+--tail-prior takes the 'fit' block of a results JSON (results_dcb.json of
+driver_mass_fit.py, or dalitz_fit_<factor>.json): the global fit carries the
+tail prior of that fit, its stdevs times TAIL_PRIOR_FACTOR. Without it the
+tails float free.
+
+--n-max is the upper limit of the global fit's tail exponents n_L and n_R.
 
 The median and RMS of (mass - mass rebuilt from the same daughters) and the
 number of candidates outside their own kinematic limits
@@ -54,9 +56,9 @@ plot_phase_space.py.
 
 Usage:
     python src/fit/driver_dalitz.py INFILE --outdir OUTDIR
-        (--truth-match | --tail-prior DALITZ_FIT_JSON)
+        [--truth-match | --tail-prior RESULTS_JSON]
         [--mass rebuilt|tag_m|tag_dtf_m] [--factor none|flat|weighted]
-        [--max-events N] [--horizontal]
+        [--n-max N] [--max-events N] [--horizontal]
 """
 
 import argparse
@@ -323,8 +325,11 @@ def main():
                         help='Signal MC: keep only candidates truth-matched to eta -> mu+ mu- '
                              'gamma, and fit with no tail prior and no background')
     parser.add_argument('--tail-prior', default=None,
-                        help='dalitz_fit_<factor>.json of the --truth-match fit of the same '
-                             '--mass, whose global-fit tails are the prior')
+                        help='results_dcb.json or dalitz_fit_<factor>.json whose tails are '
+                             'the global-fit prior (default: none, tails free)')
+    parser.add_argument('--n-max', type=float, default=None,
+                        help='Upper limit of the global-fit tail exponents n_L and n_R '
+                             '(default: none)')
     parser.add_argument('--max-events', type=int, default=None,
                         help='Only read the first N events (default: all)')
     parser.add_argument('--horizontal', action='store_true',
@@ -332,8 +337,6 @@ def main():
     args = parser.parse_args()
     if args.truth_match and args.tail_prior is not None:
         parser.error('--truth-match and --tail-prior are exclusive')
-    if not args.truth_match and args.tail_prior is None:
-        parser.error('--tail-prior is required without --truth-match')
     os.makedirs(args.outdir, exist_ok=True)
 
     # --- Select ---
@@ -368,10 +371,12 @@ def main():
                                     signal_prior_factor=SIGNAL_PRIOR_FACTOR,
                                     min_candidates=MIN_CANDIDATES,
                                     signal_factor=signal_factor, bkg_factor=bkg_factor,
-                                    signal_only=args.truth_match)
+                                    signal_only=args.truth_match,
+                                    limits={'nL': (0.0, args.n_max), 'nR': (0.0, args.n_max)})
     result['meta']['input_file'] = args.infile
     result['meta']['tail_prior'] = (None if args.tail_prior is None else
                                     {'path': args.tail_prior, 'factor': TAIL_PRIOR_FACTOR})
+    result['meta']['n_max'] = args.n_max
     dalitz = result['dalitz']
 
     # --- Summary ---
