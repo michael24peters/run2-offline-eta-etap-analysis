@@ -127,7 +127,6 @@ def bin_page(result, b):
             'fit': {'parameters': params, 'chi2_per_ndof': chi2_per_ndof},
             'histogram': {
                 'bin_centers': mass_centers, 'bin_counts': counts,
-                'bin_errors': np.sqrt(counts), 'bin_fit': bin_sig + bin_bkg,
                 'bin_sig': bin_sig, 'bin_bkg': bin_bkg, 'bin_pulls': b['pulls'],
             },
         }

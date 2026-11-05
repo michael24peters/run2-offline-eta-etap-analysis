@@ -21,6 +21,9 @@ import kinematics
 
 # The DCB tail-shape parameters, as a group.
 TAIL_PARAMS = ('alphaL', 'nL', 'alphaR', 'nR')
+# Default limits: width, tails and yields at least 0
+DCB_LIMITS = {'sigma': (0.0, None), 'alphaL': (0.0, None), 'nL': (0.0, None),
+              'alphaR': (0.0, None), 'nR': (0.0, None), 'n_sig': (0.0, None), 'n_bkg': (0.0, None)}
 
 
 def fit_dcb(values, xmin=500.0, xmax=600.0, nbins=100,
@@ -59,8 +62,8 @@ def fit_dcb(values, xmin=500.0, xmax=600.0, nbins=100,
     """
     values = np.asarray(values, dtype=float)
 
-    centers, bin_edges, counts, errors = fit_utils.make_histogram(
-        values, xmin=xmin, xmax=xmax, nbins=nbins)
+    counts, bin_edges = np.histogram(values, bins=nbins, range=(xmin, xmax))
+    counts = counts.astype(float)
     n_total = counts.sum()
     print(f'[INFO] {int(n_total)} entries in [{xmin}, {xmax}] across {nbins} bins',
           file=sys.stderr)
@@ -86,25 +89,16 @@ def fit_dcb(values, xmin=500.0, xmax=600.0, nbins=100,
     if fixed_params:
         init.update(fixed_params)
     # Default limits, with any given in `limits` replacing them
-    limits = dict(
-        sigma=(0.0, None), alphaL=(0.0, None), alphaR=(0.0, None),
-        nL=(0.0, None), nR=(0.0, None),
-        n_sig=(0.0, None), n_bkg=(0.0, None),
-    ) | (limits or {})
+    all_limits = dict(DCB_LIMITS)
+    if limits:
+        all_limits.update(limits)
 
-    # Stage 1: fit with the background params, and the tail params fixed at their init values (also
-    # anything in fixed_params). Stage 2: float everything except fixed_params, starting from stage
-    # 1's result. stage1_fixed = set(TAIL_PARAMS) | set(fit_utils.BKG_PARAMS) |
-    # set(fixed_params or {})
+    # Stage 1: fit with the tail params fixed at their init values (also anything in fixed_params).
+    # Stage 2: float everything except fixed_params, starting from stage 1's result.
     stage1_fixed = set(TAIL_PARAMS) | set(fixed_params or {})
-    stage1 = fit_utils.run_fit(cost, init, limits, fixed=list(stage1_fixed))
-    # init2 = dict(init, mean=stage1.values['mean'], sigma=stage1.values['sigma'],
-    #             n_sig=stage1.values['n_sig'], n_bkg=stage1.values['n_bkg'])
-    init2 = dict(init, mean=stage1.values['mean'], sigma=stage1.values['sigma'],
-                 alphaL=stage1.values['alphaL'], nL=stage1.values['nL'],
-                 alphaR=stage1.values['alphaR'], nR=stage1.values['nR'],
-                 n_sig=stage1.values['n_sig'], n_bkg=stage1.values['n_bkg'])
-    m = fit_utils.run_fit(cost, init2, limits, fixed=list(fixed_params) if fixed_params else None)
+    stage1 = fit_utils.run_fit(cost, init, all_limits, fixed=list(stage1_fixed))
+    m = fit_utils.run_fit(cost, stage1.values.to_dict(), all_limits,
+                          fixed=list(fixed_params) if fixed_params else None)
     p, e = m.values, m.errors
 
     print(f"[INFO] valid={m.valid}  "
@@ -116,102 +110,11 @@ def fit_dcb(values, xmin=500.0, xmax=600.0, nbins=100,
     print(f"[INFO] α_R={p['alphaR']:.3f}±{e['alphaR']:.3f}  n_R={p['nR']:.3f}±{e['nR']:.3f}",
           file=sys.stderr)
 
-    # Compute bin predictions. Integrating the PDF over each bin (CDF at the upper edge minus the
-    # lower edge) is exact, unlike sampling the PDF at bin centres, which biases bins where the PDF
-    # has curvature (i.e. the peak).
-    bw = (xmax - xmin) / nbins
-    sig_cdf_edges = fit_utils.dcb_cdf(bin_edges, xmin, xmax, p['mean'], p['sigma'],
-                                    p['alphaL'], p['nL'], p['alphaR'], p['nR'])
-    bkg_cdf_edges = fit_utils.cheb_cdf(bin_edges, xmin, xmax, p['c0'], p['c1'])
-    # Both CDFs run 0 -> 1 across the window, so np.diff gives the fraction of each component in
-    # each bin; scale by the yields to get expected counts.
-    bin_sig = np.diff(sig_cdf_edges) * p['n_sig']
-    bin_bkg = np.diff(bkg_cdf_edges) * p['n_bkg']
-    bin_fit = bin_sig + bin_bkg
-
-    # Goodness of fit, over the filled mass bins
-    chi2 = fit_utils.neyman_chi2(counts, bin_fit)
-    ndof = int((counts > 0).sum()) - m.nfit
-    chi2_per_ndof = chi2 / ndof if ndof > 0 else float('nan')
-    pulls = fit_utils.data_pulls(counts, bin_fit)
-
-    print(f'[INFO] χ²/ndf = {chi2_per_ndof:.4f}  ({chi2:.2f} / {ndof})',
+    # Expected counts per mass bin, goodness of fit, and the result
+    prediction = fit_utils.bin_prediction(m, counts, bin_edges, xmin, xmax, fit_utils.dcb_cdf,
+                                          fit_utils.DCB_PARAMS, fit_utils.cheb_cdf)
+    result = fit_utils.fit_result(m, 'dcb_asym', values.size, bin_edges, counts, prediction)
+    fit = result['fit']
+    print(f"[INFO] χ²/ndf = {fit['chi2_per_ndof']:.4f}  ({fit['chi2']:.2f} / {fit['ndof']})",
           file=sys.stderr)
-
-    # Smooth curves for plotting
-    x_curve = np.linspace(xmin, xmax, 200)
-    curve_sig = fit_utils.dcb_pdf(x_curve, xmin, xmax, p['mean'], p['sigma'],
-                                 p['alphaL'], p['nL'], p['alphaR'], p['nR']) * p['n_sig'] * bw
-    curve_bkg = fit_utils.cheb_bkg_pdf(x_curve, xmin, xmax, p['c0'], p['c1']) * p['n_bkg'] * bw
-    curve_fit = curve_sig + curve_bkg
-
-    # Covariance
-    covariance = None
-    if m.covariance is not None:
-        covariance = {
-            'names': list(m.parameters),
-            'matrix': np.asarray(m.covariance).tolist(),
-        }
-
-    # Build JSON. Everything a plotting script needs travels in the result, so plotting never has to
-    # re-open the ROOT file or re-run the fit: `meta` for metadata, `fit` for the numbers,
-    # `histogram` for the points/residuals, and `curve` for the overlays. Arrays are .tolist()'d
-    # since numpy types are not JSON-serialisable.
-    result = {
-        'meta': {
-            'n_input': int(values.size),
-            'model': 'dcb_asym',
-            'xmin': xmin,
-            'xmax': xmax,
-            'nbins': nbins,
-            'symmetric': False,  # left/right tails floated independently
-        },
-        'fit': {
-            'converged': bool(m.valid),
-            'valid': bool(m.valid),
-            'fval': round(float(m.fval), 4),
-            'chi2': round(chi2, 4),
-            'ndof': ndof,
-            'chi2_per_ndof': round(chi2_per_ndof, 6),
-            'n_free_params': m.nfit,
-            'covariance': covariance,
-            'parameters': {
-                'mean':  {'value': round(float(p['mean']), 6),
-                          'error': round(float(e['mean']), 6), 'unit': 'MeV'},
-                'sigma': {'value': round(float(p['sigma']), 6),
-                          'error': round(float(e['sigma']), 6), 'unit': 'MeV'},
-                'alphaL':{'value': round(float(p['alphaL']), 6),
-                          'error': round(float(e['alphaL']), 6)},
-                'nL':    {'value': round(float(p['nL']), 6),
-                          'error': round(float(e['nL']), 6)},
-                'alphaR':{'value': round(float(p['alphaR']), 6),
-                          'error': round(float(e['alphaR']), 6)},
-                'nR':    {'value': round(float(p['nR']), 6),
-                          'error': round(float(e['nR']), 6)},
-                'n_sig': {'value': round(float(p['n_sig']), 2),
-                          'error': round(float(e['n_sig']), 2),
-                          'note': 'DCB integral normalized over the full [xmin, xmax] window'},
-                'n_bkg': {'value': round(float(p['n_bkg']), 2),
-                          'error': round(float(e['n_bkg']), 2)},
-                **{name: {'value': round(float(p[name]), 6),
-                          'error': round(float(e[name]), 6)}
-                   for name in fit_utils.BKG_PARAMS},
-            },
-        },
-        'histogram': {
-            'bin_centers': centers.tolist(),
-            'bin_counts': counts.tolist(),
-            'bin_errors': errors.tolist(),
-            'bin_fit': bin_fit.tolist(),
-            'bin_sig': bin_sig.tolist(),
-            'bin_bkg': bin_bkg.tolist(),
-            'bin_pulls': pulls.tolist(),
-        },
-        'curve': {
-            'x': x_curve.tolist(),
-            'fit': curve_fit.tolist(),
-            'sig': curve_sig.tolist(),
-            'bkg': curve_bkg.tolist(),
-        },
-    }
     return result, m

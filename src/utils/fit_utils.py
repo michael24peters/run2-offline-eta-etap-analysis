@@ -1,7 +1,7 @@
 """
 fit_utils.py
 
-Histogramming, PDFs/CDFs, iminuit cost functions, and the fit driver. Pure numpy -- this module
+PDFs/CDFs, iminuit cost functions, the fit driver and fit results. Pure numpy -- this module
 knows nothing about ROOT files, awkward arrays, events, or candidates. Selection and candidate
 reduction happen upstream in cut_utils; by the time anything here is called, the data is a flat
 array of values.
@@ -14,33 +14,6 @@ from iminuit import Minuit
 from iminuit.cost import ExtendedBinnedNLL
 from scipy.integrate import cumulative_trapezoid, trapezoid
 from scipy.special import erf, xlogy
-
-
-def make_histogram(values, xmin, xmax, nbins):
-    """Bin a flat array of values into the fit window.
-
-    Arguments:
-    ----------
-    values : 1-D numpy array (e.g. one mass per event, already selected and reduced to one candidate
-             per event by cut_utils)
-    xmin : float
-        The minimum value of the fit window.
-    xmax : float
-        The maximum value of the fit window.
-    nbins : int
-        The number of bins to use.
-
-    Returns:
-    --------
-    centers ndarray (nbins,) : bin centre positions
-    edges   ndarray (nbins+1,) : bin edges
-    counts  ndarray (nbins,) : observed counts per bin (float)
-    errors  ndarray (nbins,) : per-bin uncertainty, max(sqrt(counts), 1)
-    """
-    counts, edges = np.histogram(values, bins=nbins, range=(xmin, xmax))
-    centers = 0.5 * (edges[:-1] + edges[1:])
-    errors  = np.maximum(np.sqrt(counts.astype(float)), 1.0)
-    return centers, edges, counts.astype(float), errors
 
 
 # --- Goodness of fit ---
@@ -139,6 +112,9 @@ A Gaussian core with independent power-law tails on each side of the peak:
 
   where   t = (x − μ) / σ.
 """
+
+# DCB shape parameters, in the order the DCB functions take them
+DCB_PARAMS = ('mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR')
 
 def _dcb_tail(u, alpha, n):
     """
@@ -412,8 +388,7 @@ def make_dcb_cost(counts, bin_edges, xmin, xmax, signal_factor_grid=None,
     if bkg_factor_grid is not None:
         bkg_cdf = weighted_cheb_cdf(bkg_factor_grid)
     # Combine into scaled_cdf = n_sig * signal CDF + n_bkg * background CDF
-    signal_params = ('mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR')
-    scaled_cdf, param_names = _make_scaled_cdf(signal_params, signal_cdf,
+    scaled_cdf, param_names = _make_scaled_cdf(DCB_PARAMS, signal_cdf,
                                                bkg_cdf, xmin, xmax)
     # Extended binned Poisson likelihood of counts in bin_edges
     return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf, name=param_names)
@@ -458,6 +433,87 @@ def run_fit(cost, initial_values, limits=None, fixed=None):
         m.migrad(ncall=100000)
         m.hesse()
     return m
+
+
+# --- Fit results ---
+
+def bin_prediction(m, counts, bin_edges, xmin, xmax, signal_cdf, signal_params, bkg_cdf):
+    """
+    Expected signal and background counts in each mass bin of fit `m`, with its chi2 and pulls.
+
+    m             : the fitted iminuit.Minuit
+    counts        : (nbins,) candidates in each mass bin
+    bin_edges     : (nbins + 1,) mass-bin edges [MeV] spanning [xmin, xmax]
+    signal_cdf    : signal CDF with the arguments of dcb_cdf: (x, xmin, xmax, *shape)
+    signal_params : names of the signal shape parameters in m, in signal_cdf's order
+    bkg_cdf       : background CDF with the arguments of cheb_cdf
+
+    Returns {'bin_sig', 'bin_bkg', 'pulls', 'chi2', 'ndof'}: neyman_chi2 and data_pulls over the
+    mass bins with data, and ndof the number of those bins minus the free parameters.
+    """
+    p = m.values
+    # Expected counts per mass bin: yield times the CDF difference across the bin
+    bin_sig = np.diff(signal_cdf(bin_edges, xmin, xmax,
+                                 *(p[name] for name in signal_params))) * p['n_sig']
+    bin_bkg = np.diff(bkg_cdf(bin_edges, xmin, xmax,
+                              *(p[name] for name in BKG_PARAMS))) * p['n_bkg']
+    bin_fit = bin_sig + bin_bkg
+    return {'bin_sig': bin_sig, 'bin_bkg': bin_bkg,
+            'pulls': data_pulls(counts, bin_fit),
+            'chi2': neyman_chi2(counts, bin_fit),
+            'ndof': int((counts > 0).sum()) - m.nfit}
+
+
+def fit_result(m, model, n_input, bin_edges, counts, prediction):
+    """
+    JSON-serialisable result of a mass fit.
+
+    m          : the fitted iminuit.Minuit
+    model      : name of the signal model, e.g. 'gauss'
+    n_input    : number of values given to the fit, in the window or not
+    bin_edges  : (nbins + 1,) mass-bin edges [MeV]
+    counts     : (nbins,) candidates in each mass bin
+    prediction : bin_prediction() of m
+
+    Returns {'meta', 'fit', 'histogram'}: the window and model; the fit status, chi2, every
+    parameter's value and error, and the covariance (None if HESSE failed); and the data, expected
+    signal and background, and pulls of each mass bin.
+    """
+    chi2, ndof = prediction['chi2'], prediction['ndof']
+    covariance = None
+    if m.covariance is not None:
+        covariance = {'names': list(m.parameters), 'matrix': np.asarray(m.covariance).tolist()}
+    parameters = {}
+    for name in m.parameters:
+        digits = 2 if name in ('n_sig', 'n_bkg') else 6
+        parameters[name] = {'value': round(float(m.values[name]), digits),
+                            'error': round(float(m.errors[name]), digits)}
+    return {
+        'meta': {
+            'n_input': int(n_input),
+            'model': model,
+            'xmin': float(bin_edges[0]),
+            'xmax': float(bin_edges[-1]),
+            'nbins': len(counts),
+        },
+        'fit': {
+            'valid': bool(m.valid),
+            'fval': round(float(m.fval), 4),
+            'chi2': round(chi2, 4),
+            'ndof': ndof,
+            'chi2_per_ndof': round(chi2 / ndof, 6) if ndof > 0 else float('nan'),
+            'n_free_params': m.nfit,
+            'covariance': covariance,
+            'parameters': parameters,
+        },
+        'histogram': {
+            'bin_centers': (0.5 * (bin_edges[:-1] + bin_edges[1:])).tolist(),
+            'bin_counts': counts.tolist(),
+            'bin_sig': prediction['bin_sig'].tolist(),
+            'bin_bkg': prediction['bin_bkg'].tolist(),
+            'bin_pulls': prediction['pulls'].tolist(),
+        },
+    }
 
 
 # --- Priors from a previous fit ---

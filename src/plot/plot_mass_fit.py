@@ -105,9 +105,9 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     hist = data['histogram']
     x = np.array(hist['bin_centers'])
     y = np.array(hist['bin_counts'])
-    yerr = np.array(hist['bin_errors'])
-    fit = np.array(hist['bin_fit'])
+    yerr = np.maximum(np.sqrt(y), 1.0)
     bkg = np.array(hist['bin_bkg'])
+    fit = np.array(hist['bin_sig']) + bkg
     pulls = np.array(hist['bin_pulls'])
     # Font
     plot_utils.apply_font()

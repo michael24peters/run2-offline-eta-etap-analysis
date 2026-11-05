@@ -43,9 +43,8 @@ _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 import fit_utils
 import kinematics
-from fit_dcb import TAIL_PARAMS, fit_dcb
+from fit_dcb import DCB_LIMITS, TAIL_PARAMS, fit_dcb
 
-SIGNAL_PARAMS = ('mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR')
 PRIOR_PARAMS = ('mean', 'sigma')
 
 
@@ -69,7 +68,7 @@ def fit_bin(counts, mass_edges, xmin, xmax, seed, prior_cov, bkg_seed,
 
     counts             (nbins,) candidates of the bin in each mass bin
     mass_edges         (nbins + 1,) mass-bin edges [MeV] spanning [xmin, xmax]
-    seed               {name: value} of SIGNAL_PARAMS from the global fit
+    seed               {name: value} of fit_utils.DCB_PARAMS from the global fit
     prior_cov          (2, 2) covariance of the mean/sigma NormalConstraint
     bkg_seed           {c0, c1} start values without bkg_factor_grid
     signal_factor_grid, bkg_factor_grid : (masses, factor) or None
@@ -97,45 +96,27 @@ def fit_bin(counts, mass_edges, xmin, xmax, seed, prior_cov, bkg_seed,
     # Signal only: every candidate is signal
     if signal_only:
         init.update(n_sig=n_cand, n_bkg=0.0, **fit_utils.BKG_INIT)
-    limits = dict(sigma=(0.0, None), alphaL=(0.0, None), alphaR=(0.0, None),
-                  nL=(0.0, None), nR=(0.0, None), n_sig=(0.0, None), n_bkg=(0.0, None))
     # Tails at the global fit's values; with no signal, its yield and shape too
     fixed = list(TAIL_PARAMS)
     if no_signal:
         fixed += ['n_sig', 'mean', 'sigma']
     if signal_only:
         fixed += ['n_bkg', *fit_utils.BKG_PARAMS]
-    return fit_utils.run_fit(cost, init, limits, fixed=fixed), no_signal
+    return fit_utils.run_fit(cost, init, DCB_LIMITS, fixed=fixed), no_signal
 
 
 def bin_prediction(fit, counts, mass_edges, xmin, xmax,
                    signal_factor_grid=None, bkg_factor_grid=None):
-    """Expected signal and background counts per mass bin, Neyman chi2 and data-based pulls of one
-    bin's fit.
-
-    Returns {bin_sig, bin_bkg, pulls, chi2, ndof}. chi2 = sum (d - f)^2 / d and pulls = (d - f) /
-    sqrt(d) over mass bins with d > 0.
-    """
-    values = fit.values
+    """fit_utils.bin_prediction of one bin's fit, with the bin's factors on the signal and
+    background CDFs."""
     signal_cdf = fit_utils.dcb_cdf
     if signal_factor_grid is not None:
         signal_cdf = fit_utils.weighted_dcb_cdf(signal_factor_grid)
     bkg_cdf = fit_utils.cheb_cdf
     if bkg_factor_grid is not None:
         bkg_cdf = fit_utils.weighted_cheb_cdf(bkg_factor_grid)
-
-    # Expected counts per mass bin: yield times CDF differences between edges
-    bin_sig = np.diff(signal_cdf(mass_edges, xmin, xmax,
-                                 *(values[name] for name in SIGNAL_PARAMS))) * values['n_sig']
-    bin_bkg = np.diff(bkg_cdf(mass_edges, xmin, xmax,
-                              *(values[name] for name in fit_utils.BKG_PARAMS))) * values['n_bkg']
-    bin_fit = bin_sig + bin_bkg
-
-    # Neyman chi2 and pulls, empty mass bins skipped
-    chi2 = fit_utils.neyman_chi2(counts, bin_fit)
-    ndof = int((counts > 0).sum()) - fit.nfit
-    pulls = fit_utils.data_pulls(counts, bin_fit)
-    return {'bin_sig': bin_sig, 'bin_bkg': bin_bkg, 'pulls': pulls, 'chi2': chi2, 'ndof': ndof}
+    return fit_utils.bin_prediction(fit, counts, mass_edges, xmin, xmax, signal_cdf,
+                                    fit_utils.DCB_PARAMS, bkg_cdf)
 
 
 def bkg_goes_negative(fit, xmin, xmax, bkg_factor_grid=None):
@@ -193,7 +174,7 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
                                  tail_prior=tail_prior, fixed_params=global_fixed,
                                  limits=limits)
     global_params = result['fit']['parameters']
-    seed = {name: global_params[name]['value'] for name in SIGNAL_PARAMS}
+    seed = {name: global_params[name]['value'] for name in fit_utils.DCB_PARAMS}
     bkg_seed = {name: global_params[name]['value'] for name in fit_utils.BKG_PARAMS}
     _, prior_cov = fit_utils.build_prior(global_fit, PRIOR_PARAMS, factor=signal_prior_factor)
 
