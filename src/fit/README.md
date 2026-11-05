@@ -57,8 +57,7 @@ MC gauss  -(sigma prior)->  MC dcb  -(tail prior)->  data dcb
 ```
 
 On data the DCB tails are poorly constrained. They come from truth-matched
-signal MC instead: fixed at the MC values with `TAIL_PRIOR_FACTOR` 0 in
-`driver_mass_fit.py`, or otherwise a `NormalConstraint` prior on
+signal MC instead: a `NormalConstraint` prior on
 (alphaL, nL, alphaR, nR) centred on the MC values, with the MC covariance
 widened by `TAIL_PRIOR_FACTOR` standard deviations (`--tail-prior`). The
 truth-matched MC DCB takes its sigma from the truth-matched MC Gaussian: a

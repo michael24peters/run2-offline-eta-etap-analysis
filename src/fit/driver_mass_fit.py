@@ -25,9 +25,8 @@ An input path with an eta2mumumumu segment (eta -> 4mu) takes TOS_LINES_4MU in p
 --truth-match run and adds NormalConstraint(sigma, Gaussian sigma, Gaussian variance *
 SIGMA_PRIOR_FACTOR**2) to the DCB fit.
 
---tail-prior RESULTS_JSON fixes the DCB tails at the MC values with TAIL_PRIOR_FACTOR = 0; otherwise
-it floats them under NormalConstraint(TAIL_PARAMS, MC values, MC covariance * TAIL_PRIOR_FACTOR**2),
-starting from the MC values.
+--tail-prior RESULTS_JSON floats the DCB tails under NormalConstraint(TAIL_PARAMS, MC values, MC
+covariance * TAIL_PRIOR_FACTOR**2), starting from the MC values.
 
 A single power-law tail cannot describe both the near and deep tails of MC:
 nL/nR are a compromise that over-predicts the deepest tail (~17% at 17-23 sigma). See README.md.
@@ -89,7 +88,7 @@ TOS_LINES = {
 # eta -> 4mu: HLT1 also takes Hlt1MultiDiMuonNoIP (two dimuon pairs)
 TOS_LINES_4MU = {**TOS_LINES, 'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos2']}   # + Hlt1MultiDiMuonNoIP
 
-TAIL_PRIOR_FACTOR = 5.0   # --tail-prior: MC tail-fit stdevs times this; 0 fixes the tails
+TAIL_PRIOR_FACTOR = 5.0   # --tail-prior: MC tail-fit stdevs times this
 SIGMA_PRIOR_FACTOR = 5.0  # --sigma-prior: Gaussian sigma stdev times this
 
 parser = argparse.ArgumentParser(
@@ -264,8 +263,7 @@ if args.sigma_prior:
           f"{gauss_fit['parameters']['sigma']['value']:.4f}"
           f"±{gauss_fit['parameters']['sigma']['error']:.4f}", file=sys.stderr)
 
-# DCB tails: fixed at the MC values (TAIL_PRIOR_FACTOR 0), from the MC tail prior widened by
-# TAIL_PRIOR_FACTOR, or free.
+# DCB tails: under the MC tail prior widened by TAIL_PRIOR_FACTOR, or free.
 tail_init = (args.alphaL_init, args.nL_init, args.alphaR_init, args.nR_init)
 tail_prior = None
 if args.tail_prior:
@@ -273,13 +271,10 @@ if args.tail_prior:
         mc_fit = json.load(f)['fit']
     tail_prior = fit_utils.build_prior_from_result(mc_fit, TAIL_PARAMS, factor=TAIL_PRIOR_FACTOR)
     tail_init = tail_prior[0]
-    print(f'[INFO] MC tail shape (prior, x{TAIL_PRIOR_FACTOR:.0f} widened stdev; 0 = fixed): '
+    print(f'[INFO] MC tail shape (prior, x{TAIL_PRIOR_FACTOR:.0f} widened stdev): '
           + ', '.join(f"{name}={mc_fit['parameters'][name]['value']:.4f}"
                       f"±{mc_fit['parameters'][name]['error']:.4f}" for name in TAIL_PARAMS),
           file=sys.stderr)
-    if TAIL_PRIOR_FACTOR == 0:
-        fixed_params = dict(zip(TAIL_PARAMS, tail_init))
-        tail_prior = None
 
 dcb_result, m_dcb = fit_dcb(
     masses, xmin=args.xmin, xmax=args.xmax, nbins=args.nbins,
