@@ -5,8 +5,8 @@ Figures for docs/phase-space-factor.md, explaining the Dalitz phase-space factor
 
 Usage:
     python src/plot/plot_phase_space.py \
-        [--results out/eta2mumugamma/turbo/<date>/dalitz/tag_dtf_m/dalitz_fit_flat.json] \
-        [--infile  ntuple/lhcb/eta2mumugamma/20261006/combined_files.root [--mass tag_dtf_m]] \
+        [--results out/eta2mumugamma/turbo/<date>/dalitz/dalitz_fit_flat.json] \
+        [--infile  ntuple/lhcb/eta2mumugamma/20261006/combined_files.root] \
         [--outdir  out/phase-space-factor]
 
 Pure kinematics (always made): f(m_eta) map and the step-by-step construction of f for one bin. With
@@ -323,8 +323,6 @@ def main():
     parser.add_argument('--infile', default=None,
                         help='ROOT file whose selected candidates make the worked-example '
                              'and uniformity figures')
-    parser.add_argument('--mass', default='tag_dtf_m',
-                        help='driver_dalitz.py --mass of the --infile candidates (default: tag_dtf_m)')
     parser.add_argument('--outdir', default=os.path.join(_here, '..', '..', 'out',
                                                          'phase-space-factor'))
     args = parser.parse_args()
@@ -340,7 +338,7 @@ def main():
     if args.infile:
         sys.path.insert(0, os.path.join(_here, '..', 'fit'))
         import driver_dalitz
-        m12s, m23s, masses, _ = driver_dalitz.select_candidates(args.infile, mass=args.mass)
+        m12s, m23s, masses, _ = driver_dalitz.select_candidates(args.infile)
         events = {'m12s': m12s, 'm23s': m23s, 'masses': masses}
         fig_worked_example(args.outdir, events)
         fig_uniformity(args.outdir, events, *UNIFORMITY_BIN)

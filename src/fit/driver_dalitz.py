@@ -16,10 +16,10 @@ Per-Dalitz-bin mass fits of eta -> mu+ mu- gamma from a ROOT file:
     m23s    m^2(mu+ mu-) = q^2    [GeV^2]
     masses  m(gamma mu+ mu-)      [MeV]
 
---mass picks the mass and the daughter momenta together (MASS_SOURCES):
+MASS_BRANCH picks the mass and, through MASS_SOURCES, the daughter momenta m12 and m23 come from:
 
-    tag_dtf_m  tag_dtf_m; m12, m23 from the DTF daughters prt_dtf_px/py/pz/e (default)
-    tag_m      tag_m; m12, m23 from prt_px/py/pz/e
+    tag_dtf_m  m12, m23 from the DTF daughters prt_dtf_px/py/pz/e (the default)
+    tag_m      m12, m23 from prt_px/py/pz/e
 
 --factor picks the per-bin factor on the signal and background shapes (FACTORS):
 
@@ -50,8 +50,7 @@ select_candidates() is the selection on its own, for fit_dalitz.ipynb and plot_p
 Usage:
     python src/fit/driver_dalitz.py INFILE --outdir OUTDIR
         [--truth-match | --tail-prior RESULTS_JSON]
-        [--mass tag_dtf_m|tag_m] [--factor none|flat|weighted]
-        [--n-max N] [--max-events N] [--horizontal]
+        [--factor none|flat|weighted] [--n-max N] [--max-events N]
 """
 
 import argparse
@@ -76,12 +75,11 @@ from plot_dalitz_bins import plot_dalitz_fit
 
 # --- Selection ---------------------------------------------------------------
 
-# Daughter four-momentum branches of each --mass choice
-PRT_MOMENTA = ['prt_px', 'prt_py', 'prt_pz', 'prt_e']
-DTF_MOMENTA = ['prt_dtf_px', 'prt_dtf_py', 'prt_dtf_pz', 'prt_dtf_e']
+# The fitted mass, and the daughter four-momentum branches m12, m23 come from for each mass
+MASS_BRANCH = 'tag_dtf_m'   # or 'tag_m'
 MASS_SOURCES = {
-    'tag_dtf_m': DTF_MOMENTA,
-    'tag_m':     PRT_MOMENTA,
+    'tag_dtf_m': ['prt_dtf_px', 'prt_dtf_py', 'prt_dtf_pz', 'prt_dtf_e'],
+    'tag_m':     ['prt_px', 'prt_py', 'prt_pz', 'prt_e'],
 }
 
 # Daughter name -> PID. Every candidate is built from exactly one of each.
@@ -110,7 +108,7 @@ FACTORS = {
 }
 
 
-def select_candidates(infile, mass='tag_dtf_m', truth_match=False, max_events=None):
+def select_candidates(infile, truth_match=False, max_events=None):
     """
     Read infile, select, and pick one candidate per event at random.
 
@@ -118,6 +116,7 @@ def select_candidates(infile, mass='tag_dtf_m', truth_match=False, max_events=No
     [MeV] of each event's picked candidate, and the selection settings and report (the contents of
     selection.json).
     """
+    mass = MASS_BRANCH
     momenta = MASS_SOURCES[mass]
     branches = ([mass, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
                 + [b for b in momenta if b not in selection.MUON_CUT_BRANCHES]
@@ -135,18 +134,12 @@ def select_candidates(infile, mass='tag_dtf_m', truth_match=False, max_events=No
                    'dropped_daughter_length_mismatch', 'dropped_partial_candidate_branch'):
         if drop_report[reason]:
             print(f'[INFO]   {reason}: {drop_report[reason]}')
-    n_multi = int(ak.sum(ak.num(tree[mass]) > 1))
-    print(f'[INFO] {n_multi} / {len(tree)} events have >1 candidate')
 
     # Every candidate must have exactly one daughter of each PID.
-    n_cand_total = int(ak.sum(ak.num(tree[mass])))
     for name, pid in DAUGHTERS.items():
         n_of_pid = cut_utils.reduce(tree, tree['prt_pid'] == pid, 'prt_idx_mom',
                                     how='sum', target_ref=mass)
-        print(f'[INFO] {name:5s} (pid {pid:>3}): {float(ak.mean(ak.flatten(n_of_pid))):.4f} '
-              f'daughters per candidate')
         assert ak.all(n_of_pid == 1), f'some candidates do not have exactly one {name}'
-    print(f'[INFO] {n_cand_total} candidates, each exactly (gamma, mu+, mu-)')
 
     # --- Cuts ---
 
@@ -197,14 +190,6 @@ def select_candidates(infile, mass='tag_dtf_m', truth_match=False, max_events=No
     print(f'[INFO] {n_outside} of {len(masses)} candidates outside the kinematic limits of '
           f'their m12, m23')
 
-    # Ranges, against the eta's Dalitz region [GeV^2] and the mass window.
-    m_mu, m_eta = kinematics.M_MU / GEV, kinematics.M_ETA / GEV
-    print(f'[INFO] m12 range [{m12s.min():.4f}, {m12s.max():.4f}]  '
-          f'(eta: [{m_mu**2:.4f}, {(m_eta - m_mu)**2:.4f}])')
-    print(f'[INFO] m23 range [{m23s.min():.4f}, {m23s.max():.4f}]  '
-          f'(eta: [{(2 * m_mu)**2:.4f}, {m_eta**2:.4f}])')
-    print(f'[INFO] mass range [{masses.min():.2f}, {masses.max():.2f}] MeV')
-
     selection_json = {
         'meta': {
             'input_file': infile,
@@ -240,8 +225,6 @@ def main():
     parser.add_argument('infile', help='Input ROOT file')
     parser.add_argument('--outdir', required=True,
                         help='Directory for selection.json, dalitz_fit_<factor>.json and plots')
-    parser.add_argument('--mass', default='tag_dtf_m', choices=list(MASS_SOURCES),
-                        help='Mass and daughter momenta (default: tag_dtf_m)')
     parser.add_argument('--factor', default='none', choices=list(FACTORS),
                         help='Per-bin factor on the signal and background shapes (default: none)')
     parser.add_argument('--truth-match', action='store_true',
@@ -255,8 +238,6 @@ def main():
                              '(default: none)')
     parser.add_argument('--max-events', type=int, default=None,
                         help='Only read the first N events (default: all)')
-    parser.add_argument('--horizontal', action='store_true',
-                        help='Also write the per-bin pages with j (m23) as the outer loop')
     args = parser.parse_args()
     if args.truth_match and args.tail_prior is not None:
         parser.error('--truth-match and --tail-prior are exclusive')
@@ -265,7 +246,7 @@ def main():
     # --- Select ---
 
     m12s, m23s, masses, selection_json = select_candidates(
-        args.infile, mass=args.mass, truth_match=args.truth_match, max_events=args.max_events)
+        args.infile, truth_match=args.truth_match, max_events=args.max_events)
     selection_path = os.path.join(args.outdir, 'selection.json')
     with open(selection_path, 'w') as f:
         json.dump(selection_json, f, indent=2)
@@ -356,7 +337,7 @@ def main():
         json.dump(result, f, indent=1)
     print(f'[DONE] {json_path}')
 
-    plot_dalitz_fit(result, os.path.splitext(json_path)[0], horizontal=args.horizontal)
+    plot_dalitz_fit(result, os.path.splitext(json_path)[0])
 
 
 if __name__ == '__main__':

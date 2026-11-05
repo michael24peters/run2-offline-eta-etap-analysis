@@ -10,14 +10,11 @@ Figures from one driver_dalitz_fit.py result, written with `prefix` (the results
     <prefix>_signal_yield.png           n_sig per bin
     <prefix>_bkg_yield.png              n_bkg per bin
     <prefix>_per_bin_fits.pdf           one page per bin, i (m12) outer, j (m23) inner
-    <prefix>_per_bin_fits_horizontal.pdf  the same pages, j outer, i inner
-                                        (horizontal=True / --horizontal)
 
-plot_dalitz_fit(result, prefix, horizontal=False) writes all of them; driver_dalitz_fit.py calls it
-after the fit.
+plot_dalitz_fit(result, prefix) writes all of them; driver_dalitz_fit.py calls it after the fit.
 
 Usage:
-    python src/plot/plot_dalitz_bins.py RESULTS.json [--horizontal]
+    python src/plot/plot_dalitz_bins.py RESULTS.json
 """
 
 import argparse
@@ -175,43 +172,30 @@ def bin_page(result, b):
     return fig
 
 
-def write_per_bin_pdf(result, pdf_path, horizontal=False):
-    """One bin_page per bin into pdf_path: i (m12) outer and j (m23) inner, or j outer and i inner
-    with horizontal=True."""
-    bins = {(b['i'], b['j']): b for b in result['dalitz']['bins']}
-    n12 = len(result['dalitz']['m12_edges']) - 1
-    n23 = len(result['dalitz']['m23_edges']) - 1
-    if horizontal:
-        order = [(i, j) for j in range(n23) for i in range(n12)]
-    else:
-        order = [(i, j) for i in range(n12) for j in range(n23)]
+def write_per_bin_pdf(result, pdf_path):
+    """One bin_page per bin into pdf_path, i (m12) outer and j (m23) inner."""
     with PdfPages(pdf_path) as pdf:
-        for i, j in order:
-            fig = bin_page(result, bins[(i, j)])
+        for b in result['dalitz']['bins']:
+            fig = bin_page(result, b)
             fig.tight_layout()
             pdf.savefig(fig)
             plt.close(fig)
     print(f'[DONE] {pdf_path}')
 
 
-def plot_dalitz_fit(result, prefix, horizontal=False):
-    """global_fit.png next to prefix, the yield maps, and the per-bin pages (also in horizontal
-    order with horizontal=True)."""
+def plot_dalitz_fit(result, prefix):
+    """global_fit.png next to prefix, the yield maps, and the per-bin pages."""
     plot_fit(result, os.path.join(os.path.dirname(os.path.abspath(prefix)), 'global_fit.png'),
              dcb_text)
     plot_yield_maps(result, prefix)
     write_per_bin_pdf(result, f'{prefix}_per_bin_fits.pdf')
-    if horizontal:
-        write_per_bin_pdf(result, f'{prefix}_per_bin_fits_horizontal.pdf', horizontal=True)
 
 
 if __name__ == '__main__':
     plt.switch_backend('Agg')
     parser = argparse.ArgumentParser(description='Figures from a driver_dalitz_fit.py results JSON')
     parser.add_argument('results', help='dalitz_fit_<factor>.json')
-    parser.add_argument('--horizontal', action='store_true',
-                        help='Also write the per-bin pages with j (m23) as the outer loop')
     args = parser.parse_args()
     with open(args.results) as f:
         result = json.load(f)
-    plot_dalitz_fit(result, os.path.splitext(args.results)[0], horizontal=args.horizontal)
+    plot_dalitz_fit(result, os.path.splitext(args.results)[0])
