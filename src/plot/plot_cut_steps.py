@@ -13,8 +13,6 @@ each muon cut, random candidate, then the fit window [--fit-xmin, --fit-xmax) (d
 --xmin/--xmax defaults), so the last step is exactly what the mass fit sees. The selection constants
 are copied from driver_mass_fit.py; keep them in step.
 
-plot_ip_chi2.py (muon IP chi2) and plot_p_scan.py (muon p thresholds) import read_tree, cut_steps
-and plot_pair from here.
 
 Usage:
     python src/plot/plot_cut_steps.py INFILE --outdir OUTDIR
