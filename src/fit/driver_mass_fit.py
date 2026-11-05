@@ -182,7 +182,7 @@ gauss_result, m_gauss = fit_gauss(
     mean_init=args.mean_init, sigma_init=args.sigma_init)
 gauss_result['meta']['input_file'] = args.infile
 fits.append(('gauss', gauss_result, gauss_text))
-sigma_init = abs(m_gauss.values['sigma'])   # the Gaussian fit's sigma can have either sign
+sigma_init = m_gauss.values['sigma']
 fixed_params = None
 if args.truth_match:
     fixed_params = {'n_bkg': 0.0, **fit_utils.BKG_INIT}

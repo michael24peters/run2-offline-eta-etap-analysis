@@ -55,6 +55,7 @@ def fit_gauss(values, xmin=500.0, xmax=600.0, nbins=100,
     if fixed_params:
         init.update(fixed_params)
     limits = dict(
+        sigma=(0.0, None),
         n_sig=(0.0, None),
         n_bkg=(0.0, None),
     )
