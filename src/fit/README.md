@@ -104,7 +104,7 @@ DAUGHTER_FIELDS = ['prt_pid', 'prt_px', 'prt_py', 'prt_pz', 'prt_pnn_mu',
                    'prt_prb_ghost', 'prt_ip_chi2', 'prt_tight_mu']
 MUON_PID        = 13
 MU_PT_MIN       = 1000.0       # muon pT [MeV]
-MU_P_MIN        = 20000.0      # muon p [MeV]
+MU_P_MIN        = 10000.0      # muon p [MeV]
 MU_ETA_RANGE    = (2.0, 4.5)   # muon pseudorapidity
 PNN_MU_MIN      = 0.9          # ProbNNmu minimum for selection
 MU_GHOST_MAX    = 0.2          # muon ghost probability
@@ -114,7 +114,8 @@ TOS_LINES       = {'L0': [...], 'HLT1': [...], 'HLT2': [...]}   # ntuple-specifi
 
 The muon cuts are the muon requirements of the dark-photon ananote
 (LHCb-ANA-2017-027, Tables 1 and 3) that the existing ntuples can apply, plus
-`IsMuonTight`. Both drivers hold the same constants, applied in this order after
+`IsMuonTight`, with p > 10 GeV (the 2018 Hlt1DiMuonNoIP threshold) in place of the
+ananote's 20 GeV. Both drivers hold the same constants, applied in this order after
 TOS, each as its own `selection.json` cutflow line. They are constants, not flags.
 
 Every cut is structured as a per-candidate boolean mask shaped like `tag_dtf_m`, so they combine with a plain `&` and adding one is a line or two.

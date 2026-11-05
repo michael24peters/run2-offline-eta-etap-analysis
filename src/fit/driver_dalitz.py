@@ -83,10 +83,10 @@ from plot_dalitz_bins import plot_dalitz_fit
 
 SEED = 0                          # random candidate pick
 
-# Muon requirements of the dark-photon ananote (LHCb-ANA-2017-027, Tables 1 and 3).
-# Every muon daughter must pass each; a non-muon daughter passes.
+# Muon requirements of the dark-photon ananote (LHCb-ANA-2017-027, Tables 1 and 3), with p at
+# the 2018 Hlt1DiMuonNoIP threshold. Every muon daughter must pass each; a non-muon daughter passes.
 MU_PT_MIN = 1000.0                # pT [MeV]
-MU_P_MIN = 20000.0                # p [MeV]
+MU_P_MIN = 10000.0                # p [MeV]
 MU_ETA_RANGE = (2.0, 4.5)         # pseudorapidity
 PNN_MU_MIN = 0.9                  # ProbNNmu
 MU_GHOST_MAX = 0.2                # ghost probability

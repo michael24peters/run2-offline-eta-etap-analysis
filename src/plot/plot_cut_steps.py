@@ -52,7 +52,7 @@ MOTHER_PID      = 221
 TRUTH_BRANCHES  = ['prt_idx_gen', 'mc_idx_mom', 'mc_pid']
 
 MU_PT_MIN       = 1000.0           # pT [MeV]
-MU_P_MIN        = 20000.0          # p [MeV]
+MU_P_MIN        = 10000.0          # p [MeV]
 MU_ETA_RANGE    = (2.0, 4.5)       # pseudorapidity
 PNN_MU_MIN      = 0.9              # ProbNNmu
 MU_GHOST_MAX    = 0.2              # ghost probability
