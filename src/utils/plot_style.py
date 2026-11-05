@@ -33,6 +33,7 @@ RESONANCES = [
 CHANNEL_LABELS = {
     'eta2mumu':      r'\eta \to \mu^+ \mu^-',
     'eta2mumugamma': r'\eta \to \mu^+ \mu^- \gamma',
+    'eta2mumumumu':  r'\eta \to \mu^+ \mu^- \mu^+ \mu^-',
 }
 
 def decay_label(meta):

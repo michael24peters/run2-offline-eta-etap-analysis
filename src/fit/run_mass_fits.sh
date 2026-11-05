@@ -47,6 +47,7 @@ daughter_pids() {
     case $1 in
         eta2mumu)      echo "-13 13" ;;
         eta2mumugamma) echo "-13 13 22" ;;
+        eta2mumumumu)  echo "-13 -13 13 13" ;;
     esac
 }
 

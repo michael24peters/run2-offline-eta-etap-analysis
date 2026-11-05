@@ -81,8 +81,10 @@ python src/fit/driver_mass_fit.py ntuple/lhcb/eta2mumugamma/20261006/combined_fi
 ```
 
 `--truth-match` takes the signal daughter PIDs: `-13 13` for eta -> mu+ mu-,
-`-13 13 22` for eta -> mu+ mu- gamma. The Gaussian fit keeps its Chebyshev
-background floating: with no background, a Gaussian has no stable minimum on
+`-13 13 22` for eta -> mu+ mu- gamma, `-13 -13 13 13` for eta -> 4mu. For an
+`eta2mumumumu` input path, HLT1 TOS also accepts Hlt1MultiDiMuonNoIP
+(`TOS_LINES_4MU`); every muon cut applies to all four muons. The Gaussian fit
+keeps its Chebyshev background floating: with no background, a Gaussian has no stable minimum on
 the radiative tail of the MC. The DCB fit runs with no background.
 
 `src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma"]` runs the chain

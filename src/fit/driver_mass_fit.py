@@ -19,6 +19,11 @@ matches eta -> PIDs (bkg_utils.signal_candidate_mask). It is the first cut,
 before TOS, pnn_mu and the candidate pick. The DCB fit runs with n_bkg fixed to
 0 and the background shape at its init values; the Gaussian fit keeps its
 background floating. Its results_dcb.json is the --tail-prior of the data fit.
+The PIDs are -13 13 (eta -> mu+ mu-), -13 13 22 (eta -> mu+ mu- gamma) or
+-13 -13 13 13 (eta -> 4mu).
+
+An input path with an eta2mumumumu segment (eta -> 4mu) takes TOS_LINES_4MU in place
+of TOS_LINES.
 
 --sigma-prior RESULTS_JSON (with --truth-match) takes the results_gauss.json of
 an earlier --truth-match run and adds
@@ -88,6 +93,8 @@ TOS_LINES = {
     'HLT2': ['tag_hlt2_tos0'],                    # Hlt2ExoticaPrmptDiMuonTurbo
     # 'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1'],   # Hlt2ExoticaPrmptDiMuonTurbo, Hlt2ExoticaDiMuonNoIPTurbo
 }
+# eta -> 4mu: HLT1 also takes Hlt1MultiDiMuonNoIP (two dimuon pairs)
+TOS_LINES_4MU = {**TOS_LINES, 'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos2']}   # + Hlt1MultiDiMuonNoIP
 
 TAIL_PRIOR_FACTOR = 5.0   # --tail-prior: MC tail-fit stdevs times this; 0 fixes the tails
 SIGMA_PRIOR_FACTOR = 5.0  # --sigma-prior: Gaussian sigma stdev times this
@@ -100,7 +107,7 @@ parser.add_argument('--outdir', required=True,
                     help='Directory for selection.json, results_*.json and *_mass_fit.png')
 parser.add_argument('--truth-match', nargs='+', type=int, default=None, metavar='PID',
                     help='Signal MC: keep candidates truth-matched to eta -> these daughter '
-                         'PIDs (-13 13, or -13 13 22) and fit with no background')
+                         'PIDs (-13 13, -13 13 22, or -13 -13 13 13) and fit with no background')
 parser.add_argument('--tail-prior', default=None,
                     help='results_dcb.json of a --truth-match fit whose tails are the DCB prior')
 parser.add_argument('--sigma-prior', default=None,
@@ -126,9 +133,10 @@ if args.truth_match and args.tail_prior:
 if args.sigma_prior and not args.truth_match:
     parser.error('--sigma-prior needs --truth-match')
 os.makedirs(args.outdir, exist_ok=True)
+tos_lines = TOS_LINES_4MU if 'eta2mumumumu' in args.infile.split('/') else TOS_LINES
 
 branches = ([MASS_BRANCH, 'prt_idx_mom'] + DAUGHTER_FIELDS
-            + [line for lines in TOS_LINES.values() for line in lines]
+            + [line for lines in tos_lines.values() for line in lines]
             + (TRUTH_BRANCHES if args.truth_match else []))
 
 # --- Read --------------------------------------------------------------------
@@ -157,7 +165,7 @@ if args.truth_match:
     cutflow.append(('truth-matched', int(ak.sum(keep))))
 
 # TOS on at least one line at every trigger level.
-tos, tos_report = cut_utils.tos_mask(tree, TOS_LINES, tag_ref=MASS_BRANCH, base=keep)
+tos, tos_report = cut_utils.tos_mask(tree, tos_lines, tag_ref=MASS_BRANCH, base=keep)
 keep = keep & tos
 triggers = {level: report['lines'] for level, report in tos_report.items()}
 for level, report in tos_report.items():
@@ -199,7 +207,7 @@ selection = {
         'input_file': args.infile,
         'mass_branch': MASS_BRANCH,
         'selection': {
-            'tos': TOS_LINES,
+            'tos': tos_lines,
             'mu_pt_min': MU_PT_MIN,
             'mu_p_min': MU_P_MIN,
             'mu_eta_range': MU_ETA_RANGE,
