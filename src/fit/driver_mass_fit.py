@@ -164,18 +164,14 @@ with open(selection_path, 'w') as f:
 print(f'[DONE] JSON saved to: {selection_path}', file=sys.stderr)
 
 # --- Fit ---------------------------------------------------------------------
-# The turbo DCB fit is the last of three runs of this script (run_mass_fits.sh):
+# Gaussian + Chebyshev, then DCB with sigma started at the Gaussian sigma:
 #
-#   1. MC, --truth-match              Gaussian, then DCB with no background and no prior
-#   2. MC, --truth-match              Gaussian, then DCB with no background, sigma under
-#      --sigma-prior <1>/results_gauss.json   a prior from the Gaussian sigma of 1
-#   3. turbo, --tail-prior            Gaussian, then DCB + Chebyshev, tails under a prior
-#      <2>/results_dcb.json                   from the DCB tails of 2
+#   no flag                        DCB + Chebyshev, tails free (up to --n-max)
+#   --tail-prior RESULTS_JSON      DCB + Chebyshev, tails under the prior of an MC DCB fit
+#   --truth-match PID...           DCB with no background
+#     [--sigma-prior RESULTS_JSON]   and sigma under the prior of an MC Gaussian fit
 #
-# Every run fits the Gaussian first and starts the DCB sigma from its sigma (or from the prior's).
-# fit_gauss() and fit_dcb() each run two MIGRAD stages: stage 1 with the background (Gaussian) or
-# the tails (DCB) fixed at their init values, stage 2 with every parameter floating except
-# fixed_params.
+# run_mass_fits.sh chains these into the data DCB fit.
 
 fits = []   # (name, result, stats-box builder) of each fit, written below
 

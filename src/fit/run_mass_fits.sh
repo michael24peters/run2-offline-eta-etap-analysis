@@ -1,16 +1,32 @@
 #!/usr/bin/env bash
 # Mass fits of the NTUPLE ntuples into out/<channel>/<turbo|signal>/<today>/, for each channel (both
-# by default):
+# by default). The data DCB fit is the end of a chain of three runs of driver_mass_fit.py, each
+# passing a prior to the next through its results JSON:
 #
-#   1. truth-matched signal MC, Gaussian then DCB, no prior   signal/<date>/truth_no_prior/
-#   2. truth-matched signal MC, Gaussian then DCB with the
-#      Gaussian sigma of 1 as prior                           signal/<date>/truth/
-#   3. data, Gaussian then DCB with the DCB tails of 2 as
-#      prior                                                  turbo/<date>/mc_prior/
-#   4. data, Gaussian then DCB, no prior                      turbo/<date>/no_prior/
+#   1. truth-matched signal MC                                  signal/<date>/truth_no_prior/
+#      a. Gaussian + Chebyshev
+#      b. DCB with no background (n_bkg, c0, c1 fixed at 0), sigma started at the sigma of 1a
+#   2. truth-matched signal MC, --sigma-prior 1a                signal/<date>/truth/
+#      a. Gaussian + Chebyshev (the same fit as 1a)
+#      b. DCB with no background, sigma under NormalConstraint(sigma of 1a, its stdev times
+#         SIGMA_PRIOR_FACTOR) and started there
+#   3. data, --tail-prior 2b                                    turbo/<date>/mc_prior/
+#      a. Gaussian + Chebyshev
+#      b. DCB + Chebyshev, sigma started at the sigma of 3a, the tails alphaL, nL, alphaR, nR
+#         under NormalConstraint(tails of 2b, their covariance with stdevs times TAIL_PRIOR_FACTOR)
+#         and started there
 #
-# 1 -> 2 -> 3 is the chain; 1 and 4 are the no-prior comparisons. The data jobs (3, 4) pass --n-max
-# N_MAX, the upper limit of the DCB tail exponents n_L, n_R.
+# Every fit runs MIGRAD in two stages, each followed by HESSE; stage 2 starts from the stage-1
+# values:
+#
+#   Gaussian   stage 1: c0, c1 fixed at 0 (flat background)     stage 2: every parameter floats
+#   DCB        stage 1: tails fixed at their start values        stage 2: every parameter floats
+#
+# with n_bkg, c0, c1 of the MC DCB fixed at 0 in both, and the priors in the cost of both.
+#
+# Comparisons, with no prior: the DCB of 1 (1b), and 4. data, Gaussian then DCB with the tails free
+# (turbo/<date>/no_prior/). The data jobs (3, 4) pass --n-max N_MAX, the upper limit of the DCB tail
+# exponents n_L, n_R.
 #
 # Every job prints to the terminal with its lines prefixed [job]; failed jobs are listed at the end.
 #
