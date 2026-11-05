@@ -42,9 +42,9 @@ SIGNAL_KEYS = {'mean', 'sigma', 'n_sig', 'n_bkg'}
 C = plot_style.COLORS
 
 
-def mass_binning(dalitz):
-    """(edges, centers, width) [MeV] of the per-bin mass histograms."""
-    xmin, xmax, nbins = (dalitz['mass_window'][key] for key in ('xmin', 'xmax', 'nbins'))
+def mass_binning(meta):
+    """(edges, centers, width) [MeV] of the per-bin mass histograms: the global fit's window."""
+    xmin, xmax, nbins = meta['xmin'], meta['xmax'], meta['nbins']
     edges = np.linspace(xmin, xmax, nbins + 1)
     return edges, 0.5 * (edges[:-1] + edges[1:]), (xmax - xmin) / nbins
 
@@ -105,7 +105,7 @@ def bin_page(result, b):
     """The figure of one bin's page: data, fit components, the bin's factors and pulls for a valid
     fit; otherwise the data and the reason there is no fit."""
     dalitz = result['dalitz']
-    mass_edges, mass_centers, mass_bin_width = mass_binning(dalitz)
+    mass_edges, mass_centers, mass_bin_width = mass_binning(result['meta'])
     xmin, xmax = mass_edges[0], mass_edges[-1]
     counts = np.array(b['counts'], dtype=float)
     title = (f"Bin ({b['i']}, {b['j']}): m12=[{b['m12_range'][0]:.4f}, {b['m12_range'][1]:.4f}], "
@@ -132,7 +132,8 @@ def bin_page(result, b):
         }
         # The bin's factors, when the fit used them
         if 'f_bkg' in b:
-            data['phase_space'] = {'x': dalitz['factor_masses'], 'f': b['f_bkg']}
+            factor_masses = np.linspace(xmin, xmax, len(b['f_bkg']))
+            data['phase_space'] = {'x': factor_masses, 'f': b['f_bkg']}
             if dalitz['signal_factor'] != dalitz['bkg_factor']:
                 data['phase_space']['f_sig'] = b['f_sig']
         fig, _ = build_fit_figure(data, make_build_text(b['n_cand']),

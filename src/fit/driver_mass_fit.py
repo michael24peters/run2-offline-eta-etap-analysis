@@ -207,7 +207,6 @@ selection = {
             'pnn_mu_min': PNN_MU_MIN,
             'mu_ghost_max': MU_GHOST_MAX,
             'mu_ip_chi2_max': MU_IP_CHI2_MAX,
-            'mu_tight': True,
             'truth_match': args.truth_match,
             'random_candidate': {'seed': SEED},
             'max_events': args.max_events,

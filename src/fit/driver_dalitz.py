@@ -272,7 +272,6 @@ def select_candidates(infile, mass='tag_dtf_m', truth_match=False, max_events=No
                 'pnn_mu_min': PNN_MU_MIN,
                 'mu_ghost_max': MU_GHOST_MAX,
                 'mu_ip_chi2_max': MU_IP_CHI2_MAX,
-                'mu_tight': True,
                 'truth_match': truth_match,
                 'random_candidate': {'seed': SEED},
                 'daughters': DAUGHTERS,
