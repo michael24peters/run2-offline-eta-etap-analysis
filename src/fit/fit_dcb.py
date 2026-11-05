@@ -1,14 +1,10 @@
 """
 fit_dcb.py
 
-Fit an asymmetric Double Crystal Ball (DCB) signal + 2nd-order Chebyshev
-background to a distribution of mass values, using iminuit ExtendedBinnedNLL.
+Fits an asymmetric Double Crystal Ball (DCB) signal + 2nd-order Chebyshev background to a
+distribution of mass values (as an array), using iminuit ExtendedBinnedNLL.
 
-Tail parameters for left and right sides are independent: α_L, n_L, α_R, n_R.
 
-This is a library module: it takes an array of numbers and fits it. Reading
-ROOT files, applying selection, and reducing to one candidate per event all
-happen upstream in driver_mass_fit.py via cut_utils.
 """
 
 import os
@@ -155,8 +151,7 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
     curve_bkg = fit_utils.cheb_bkg_pdf(x_curve, xmin, xmax, p['c0'], p['c1']) * p['n_bkg'] * bw
     curve_fit = curve_sig + curve_bkg
 
-    # Covariance, name-indexed so it survives the round trip through JSON.
-    # None if HESSE's matrix inversion failed (m.covariance is then None too).
+    # Covariance
     covariance = None
     if m.covariance is not None:
         covariance = {
@@ -166,7 +161,7 @@ def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
 
     # Build JSON. Everything a plotting script needs travels in the result, so
     # plotting never has to re-open the ROOT file or re-run the fit: `meta` for
-    # provenance, `fit` for the numbers, `histogram` for the points/residuals,
+    # metadata, `fit` for the numbers, `histogram` for the points/residuals,
     # and `curve` for the overlays. Arrays are .tolist()'d since numpy types
     # are not JSON-serialisable.
     result = {

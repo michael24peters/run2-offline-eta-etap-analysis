@@ -2,10 +2,7 @@
 bkg_utils.py
 
 MC truth-matching against a signal decay (signal_daughter_mask,
-signal_candidate_mask) -- imported by ana_bkg.py, trig_eff.py, driver_mass_fit.py and driver_dalitz.py.
-
-For MC, truth-matching is always the first cut: before TOS, pnn_mu and the
-candidate pick.
+signal_candidate_mask). For MC, truth-matching is always the first cut.
 """
 
 import cut_utils
@@ -30,11 +27,15 @@ def signal_daughter_mask(tree, mother_pid, daughter_pids):
                                     particle's mother is the signal decay
         is_signal_dtr             : pid_match & is_child_of_signal_mother
     """
+    # First, find the signal mothers in the event
     signal_mother = cut_utils.decay_mask(tree, mother_pid, daughter_pids)
 
+    # For each reco daughter, check if it has a gen match
     has_gen_match = cut_utils.valid(tree, 'prt_idx_gen')
+    # For each reco daughter, follow its gen match to find the gen PID
     pid_at_gen = cut_utils.follow(tree, tree['mc_pid'], 'prt_idx_gen')
     mc_mom_at_gen = cut_utils.follow(tree, tree['mc_idx_mom'], 'prt_idx_gen')
+    # For each reco daughter, check if its gen match's PID agrees with the reco PID
     pid_match = has_gen_match & (pid_at_gen == tree['prt_pid'])
 
     # Two-hop: daughter -> its gen particle (prt_idx_gen) -> that particle's

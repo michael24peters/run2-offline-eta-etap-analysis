@@ -1,10 +1,8 @@
 """
 fit_dalitz.py
 
-Per-Dalitz-bin mass fits of eta -> mu+ mu- gamma. Library module: takes one
-candidate per event as (m12s, m23s, masses) arrays and fits them. Reading
-ROOT files, selection and the choice of mass happen upstream in
-driver_dalitz.py.
+Per-Dalitz-bin mass fits of eta -> mu+ mu- gamma. Takes one candidate per event
+as (m12s, m23s, masses) arrays and fits them.
 
     global fit_dcb of every candidate in the mass window
       -> one fit per Dalitz bin, seeded and constrained by the global fit
@@ -91,7 +89,7 @@ def fit_bin(counts, mass_edges, xmin, xmax, seed, prior_cov, bkg_seed,
                                     bkg_factor_grid=bkg_factor_grid)
             + NormalConstraint(PRIOR_PARAMS, (seed['mean'], seed['sigma']), error=prior_cov))
 
-    # Global signal shape; half signal and half background; Chebyshev from
+    # Global init shape; half signal and half background default; Chebyshev from
     # bkg_seed, or flat when its variable spans the bin's reachable masses
     init = dict(seed,
                 n_sig=0.0 if no_signal else 0.5 * n_cand,
@@ -117,8 +115,7 @@ def bin_prediction(fit, counts, mass_edges, xmin, xmax,
     data-based pulls of one bin's fit.
 
     Returns {bin_sig, bin_bkg, pulls, chi2, ndof}. chi2 = sum (d - f)^2 / d
-    and pulls = (d - f) / sqrt(d) over mass bins with d > 0; empty mass bins
-    have pull 0 and do not count towards ndof.
+    and pulls = (d - f) / sqrt(d) over mass bins with d > 0.
     """
     values = fit.values
     signal_cdf = fit_utils.dcb_cdf

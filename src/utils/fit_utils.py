@@ -46,14 +46,15 @@ def make_histogram(values, xmin, xmax, nbins):
 # --- Goodness of fit ---
 
 def neyman_chi2(counts, bin_fit):
-    """Neyman (data-based) chi2, sum (d - f)^2 / d over the mass bins with
-    d > 0: the data, not the fit, estimate each bin's variance."""
+    """Data-based chi2, sum (data - fit)^2 / data over the mass bins with
+    data > 0."""
     filled = counts > 0
     return float(np.sum((counts[filled] - bin_fit[filled])**2 / counts[filled]))
 
 
 def data_pulls(counts, bin_fit):
-    """Data-based pull (d - f) / sqrt(d) of each mass bin; 0 for an empty bin."""
+    """Data-based pull (data - fit) / sqrt(data) of each mass bin; 0 for an
+    empty bin."""
     filled = counts > 0
     return np.where(filled, (counts - bin_fit) / np.sqrt(np.where(filled, counts, 1.0)), 0.0)
 
@@ -224,39 +225,6 @@ def dcb_cdf(x, xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR):
 #   factor_grid         (masses, factor) from sample_factor(), one per Dalitz
 #                       bin. `masses`: n_grid evenly spaced masses spanning
 #                       [xmin, xmax] [MeV]. `factor`: f at those masses.
-#
-# Fit of one Dalitz bin:
-#   1. Histogram the M of the candidates in the box: counts, bin_edges.
-#   2. sample_factor(f, xmin, xmax) -> factor_grid, once per Dalitz bin.
-#   3. make_dcb_cost(counts, bin_edges, xmin, xmax, signal_factor_grid=...,
-#      bkg_factor_grid=...):
-#      3.1 build weighted_dcb_cdf(factor_grid) and weighted_cheb_cdf(factor_grid),
-#          CDF functions with the same arguments as dcb_cdf and cheb_cdf,
-#      3.2 combine them into scaled_cdf = n_sig * signal CDF + n_bkg * background CDF,
-#      3.3 wrap scaled_cdf in an ExtendedBinnedNLL of counts.
-#   4. For each set of parameters MINUIT tries, ExtendedBinnedNLL calls
-#      scaled_cdf(bin_edges, ...), and each weighted CDF:
-#      4.1 evaluates the unnormalized shape at `masses`,
-#      4.2 multiplies it by `factor`, giving the weighted shape,
-#      4.3 integrates the weighted shape cumulatively from xmin (_grid_cdf),
-#      4.4 divides by the total, so the CDF runs from 0 at xmin to 1 at xmax,
-#      4.5 interpolates to bin_edges.
-#      Differences of scaled_cdf between neighbouring edges are the expected
-#      counts per mass bin, compared with `counts` in the Poisson likelihood.
-#   5. After the fit, the same weighted CDFs give the expected signal and
-#      background counts per mass bin; reachable_range gives the masses of the
-#      negative-background check.
-#
-# weighted_dcb_pdf and weighted_cheb_pdf divide the weighted shape by its
-# integral in place of 4.3-4.4. These are used for plotting the fit shape.
-# dcb_cdf runs 4.1 and 4.3-4.5 with f = 1 on its own grid; cheb_cdf is
-# closed-form.
-#
-# The weighted background's unnormalized shape is max(cheb_bkg_unnorm,
-# BKG_FLOOR): a negative density makes the likelihood undefined. The floor is
-# applied before the division by the integral, so the background still
-# integrates to 1. Bins whose fitted Chebyshev goes below 0 where f > 0 are
-# flagged after the fit (bkg_goes_negative).
 BKG_FLOOR = 1e-6
 
 
@@ -362,7 +330,8 @@ def weighted_cheb_cdf(factor_grid):
         # cheb_bkg_unnorm(M, *reachable_range(factor_grid), c0, c1) is the 
         # unweighted, unnormalized Chebyshev at the grid masses, which we floor
         # at BKG_FLOOR before multiplying by f.
-        cheb = np.clip(cheb_bkg_unnorm(masses, mass_lo, mass_hi, c0, c1), BKG_FLOOR, None)
+        cheb = np.clip(cheb_bkg_unnorm(masses, mass_lo, mass_hi, c0, c1),
+                       BKG_FLOOR, None)
         # Times f; integrate cumulatively, normalize to [0, 1], interpolate to x
         return _grid_cdf(x, masses, cheb * factor)
     return cdf
@@ -379,7 +348,8 @@ def weighted_cheb_pdf(factor_grid):
     mass_lo, mass_hi = reachable_range(factor_grid)
     def pdf(x, xmin, xmax, c0, c1):
         # Unnormalized Chebyshev at the grid masses, floored at BKG_FLOOR
-        cheb = np.clip(cheb_bkg_unnorm(masses, mass_lo, mass_hi, c0, c1), BKG_FLOOR, None)
+        cheb = np.clip(cheb_bkg_unnorm(masses, mass_lo, mass_hi, c0, c1),
+                       BKG_FLOOR, None)
         # Times f, divided by its integral
         return _grid_pdf(x, masses, cheb * factor)
     return pdf
@@ -427,11 +397,13 @@ def make_gauss_cost(counts, bin_edges, xmin, xmax):
     """ExtendedBinnedNLL cost for Gaussian signal + Chebyshev background.
     Free parameters: mean, sigma, n_sig, n_bkg, c0, c1.
     """
-    scaled_cdf, param_names = _make_scaled_cdf(('mean', 'sigma'), gauss_cdf, cheb_cdf, xmin, xmax)
+    scaled_cdf, param_names = _make_scaled_cdf(('mean', 'sigma'), gauss_cdf,
+                                               cheb_cdf, xmin, xmax)
     return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf, name=param_names)
 
 
-def make_dcb_cost(counts, bin_edges, xmin, xmax, signal_factor_grid=None, bkg_factor_grid=None):
+def make_dcb_cost(counts, bin_edges, xmin, xmax, signal_factor_grid=None,
+                  bkg_factor_grid=None):
     """
     ExtendedBinnedNLL cost for DCB signal + Chebyshev background.
     Free parameters: mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1.
@@ -452,7 +424,8 @@ def make_dcb_cost(counts, bin_edges, xmin, xmax, signal_factor_grid=None, bkg_fa
         bkg_cdf = weighted_cheb_cdf(bkg_factor_grid)
     # Combine into scaled_cdf = n_sig * signal CDF + n_bkg * background CDF
     signal_params = ('mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR')
-    scaled_cdf, param_names = _make_scaled_cdf(signal_params, signal_cdf, bkg_cdf, xmin, xmax)
+    scaled_cdf, param_names = _make_scaled_cdf(signal_params, signal_cdf,
+                                               bkg_cdf, xmin, xmax)
     # Extended binned Poisson likelihood of counts in bin_edges
     return ExtendedBinnedNLL(counts, bin_edges, scaled_cdf, name=param_names)
 
@@ -503,9 +476,9 @@ def run_fit(cost, initial_values, limits=None, fixed=None):
 
 def build_prior(fit, params, factor=1.0):
     """
-    Build a (values, cov) pair -- ready for
-    `NormalConstraint(params, values, error=cov)` -- from a previous fit's
-    parameters, with each parameter's uncertainty scaled by `factor`.
+    Build a (values, cov) pair for `NormalConstraint(params, values, error=cov)` 
+    from a previous fit's parameters, with each parameter's uncertainty scaled
+    by `factor`.
 
     fit    : an iminuit.Minuit.
     params : names to constrain. A parameter NOT in this list gets no prior
@@ -539,13 +512,15 @@ def build_prior_from_result(fit_block, params, factor=1.0):
     'fit' dict: 'parameters' {name: {'value', 'error'}} and 'covariance'
     {'names', 'matrix'}, or None if HESSE's matrix inversion failed."""
     params = list(params)
-    values = np.array([fit_block['parameters'][p]['value'] for p in params], dtype=float)
+    values = np.array([fit_block['parameters'][p]['value'] for p in params], 
+                      dtype=float)
     covariance = fit_block.get('covariance')
     if covariance is not None:
         index = [covariance['names'].index(p) for p in params]
         cov = np.array(covariance['matrix'], dtype=float)[np.ix_(index, index)]
     else:
-        errs = np.array([fit_block['parameters'][p]['error'] for p in params], dtype=float)
+        errs = np.array([fit_block['parameters'][p]['error'] for p in params], 
+                        dtype=float)
         cov = np.diag(errs**2)
 
     scaled = factor**2 * cov

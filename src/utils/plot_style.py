@@ -9,16 +9,13 @@ import math
 
 import matplotlib.ticker as mticker
 
-# Shared fit-plot palette. fit/background/pull validated pairwise
-# colorblind-safe (dataviz skill's validate_palette.js, all-pairs, light mode).
+# Shared fit-plot palette. fit/background/pull/phase_space colorblind-safe.
 COLORS = {
-    'data':       '#000000',
-    'fit':        '#2a78d6',
-    'background': '#1baf7a',
-    'pull':       '#eb6834',
-    'reference':  '#898781',
-    # Dalitz phase-space factor f(M). Violet (dataviz reference categorical
-    # slot 7); validated all-pairs against fit/background/pull, light mode.
+    'data':        '#000000',
+    'fit':         '#2a78d6',
+    'background':  '#1baf7a',
+    'pull':        '#eb6834',
+    'reference':   '#898781',
     'phase_space': '#4a3aa7',
 }
 
@@ -128,9 +125,7 @@ def reserve_top_margin(ax, content_max, artists, ymin=0, growth=1.15, max_iter=8
 
 def style_axes(ax, minor_y=True):
     """Inward, mirrored major+minor ticks on all four sides, and heavier
-    spines -- shared chrome for every panel of a fit plot. Set minor_y=False
-    to omit minor ticks on the y-axis only (e.g. the pull panel's integer
-    scale has no need for them)."""
+    spines. Set minor_y=False to disable minor ticks on the y-axis."""
     ax.minorticks_on()
     if not minor_y:
         ax.yaxis.set_minor_locator(mticker.NullLocator())

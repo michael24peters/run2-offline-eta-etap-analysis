@@ -57,7 +57,7 @@ The typical pipeline, with TOS_LINES = {'L0': [...], 'HLT1': [...], 'HLT2': [...
 (TOS on at least one line at every level, see tos_mask):
 
     tree, report = drop_malformed(read_branches(infile, BRANCHES))
-    truth        = bkg_utils.signal_candidate_mask(tree, 221, [-13, 13], 'tag_dtf_m')   # MC only, first
+    truth        = bkg_utils.signal_candidate_mask(tree, 221, [-13, 13], 'tag_dtf_m')   # MC only
     tos, _       = tos_mask(tree, TOS_LINES, base=truth)    # data: tos_mask(tree, TOS_LINES)
     keep         = tos & reduce(tree, muon_ok, 'prt_idx_mom', how='all')
     picked       = random_candidate_mask(keep, seed=0)
@@ -116,12 +116,6 @@ def drop_malformed(tree, tag_ref='tag_dtf_m', idx_branch='prt_idx_mom',
 
     These should never happen, but this is a just-in-case filter to ensure
     everything that happens later can assume a well-formed tree.
-
-    By default EVERY branch in the tree sharing idx_branch's prefix is checked as
-    a daughter field, and every branch sharing tag_ref's prefix as a candidate
-    field. That is the point: forgetting to list a branch here is how a ragged
-    event survives to blow up inside reduce() much later. Pass the lists
-    explicitly only to check less than everything.
 
     Arguments:
     ----------
@@ -285,19 +279,14 @@ def tos_mask(tree, levels, tag_ref='tag_dtf_m', base=None):
                   'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1']}
         TOS = (l0_tos0 | l0_tos1) & (hlt1_tos0 | hlt1_tos1) & (hlt2_tos0 | hlt2_tos1)
 
-    The only cut-specific helper here, because it is valid to have an absent
-    trigger line: a line that was never evaluated is stored as an empty list,
-    and must read as "did not fire" without changing the mask out of candidate
-    shape.
-
     Arguments:
     ----------
     tree    : awkward array, the event tree
-    levels  : dict, trigger level -> list of that level's TOS branches
+    levels  : dict, trigger level -> see example above
     tag_ref : str, the branch defining the candidate level
-    base    : optional per-candidate mask of the candidates to start from (e.g.
-              the truth-matched ones); the returned mask is False wherever
-              `base` is, and the report counts only the candidates in `base`.
+    base    : optional per-candidate mask of the candidates to start from; the
+              returned mask is False wherever `base` is, and the report counts
+              only the candidates in `base`.
               Default: every candidate
 
     Returns:
@@ -305,8 +294,8 @@ def tos_mask(tree, levels, tag_ref='tag_dtf_m', base=None):
     (mask, report) : per-candidate boolean mask, and a dict keyed by level
                      of how many candidates pass
 
-    Report keys, per level:
-    -----------------------
+    Report keys: (per level)
+    ------------
     lines            : branch -> int, candidates TOS on that line (0 for a
                        line absent in every event)
     tos_up_to_level  : int, candidates TOS at this level and every level
@@ -317,6 +306,8 @@ def tos_mask(tree, levels, tag_ref='tag_dtf_m', base=None):
                         "branches, e.g. {'L0': [...], 'HLT1': [...], 'HLT2': [...]}")
 
     base = ak.ones_like(tree[tag_ref], dtype=bool) if base is None else base
+    # Start with the base mask (which could be all True, or e.g., the
+    # truth-matched candidates)
     mask = base
     report = {}
     for level, triggers in levels.items():
