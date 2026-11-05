@@ -18,7 +18,7 @@ set -o pipefail
 cd "$(dirname "$0")/../.."
 PY=.venv/bin/python
 NTUPLE=20261006
-TAIL_PRIOR=out/eta2mumugamma/turbo/20261027/mc_prior/results_dcb.json
+TAIL_PRIOR=out/eta2mumugamma/turbo/20261105/mc_prior/results_dcb.json
 N_MAX=50
 DATE=$(date +%Y%m%d)
 READ_PAUSE=20

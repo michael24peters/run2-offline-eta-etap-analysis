@@ -199,7 +199,7 @@ python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_<factor>.json   # re-plot onl
 
 `fit_dalitz.ipynb` runs the same selection (`driver_dalitz.select_candidates`) and fit interactively on one ROOT file.
 
-`src/fit/run_dalitz.sh [--factor "none flat weighted"]` runs the data fits for each factor on the 20261006 ntuples, both with `--n-max 50`: with the tails of the 20261027 data DCB mass fit (`turbo/20261027/mc_prior/results_dcb.json`, `TAIL_PRIOR`) as prior (`out/eta2mumugamma/turbo/<today>/dalitz`), and with no prior (`turbo/<today>/dalitz_no_prior`).
+`src/fit/run_dalitz.sh [--factor "none flat weighted"]` runs the data fits for each factor on the 20261006 ntuples, both with `--n-max 50`: with the tails of the 20261105 data DCB mass fit (`turbo/20261105/mc_prior/results_dcb.json`, `TAIL_PRIOR`) as prior (`out/eta2mumugamma/turbo/<today>/dalitz`), and with no prior (`turbo/<today>/dalitz_no_prior`).
 
 
 ## Fitting an arbitrary array
