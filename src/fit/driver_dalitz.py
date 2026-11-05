@@ -29,7 +29,7 @@ Per-Dalitz-bin mass fits of eta -> mu+ mu- gamma from a ROOT file:
               kinematics.phase_space_factor on the background
 
 One candidate per event is picked at random among those that pass the cuts
-(cut_utils.random_candidate_mask, seed SEED).
+(cut_utils.random_candidate_mask, seed selection.SEED).
 
 --truth-match (signal MC only) keeps the candidates with every daughter truth-matched to eta -> mu+
 mu- gamma (bkg_utils.signal_candidate_mask). It is the first cut, before TOS, pnn_mu and the
@@ -65,27 +65,16 @@ import numpy as np
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
-import bkg_utils
 import cut_utils
 import fit_utils
 import kinematics
+import selection
 from fit_dalitz import fit_dalitz, hole_neighbors
 from fit_dcb import TAIL_PARAMS
 from plot_dalitz import HISTOGRAMS, plot_dalitz_hist
 from plot_dalitz_bins import plot_dalitz_fit
 
 # --- Selection ---------------------------------------------------------------
-
-SEED = 0                          # random candidate pick
-
-# Muon requirements of the dark-photon ananote (LHCb-ANA-2017-027, Tables 1 and 3), with p at the
-# 2018 Hlt1DiMuonNoIP threshold. Every muon daughter must pass each; a non-muon daughter passes.
-MU_PT_MIN = 1000.0                # pT [MeV]
-MU_P_MIN = 10000.0                # p [MeV]
-MU_ETA_RANGE = (2.0, 4.5)         # pseudorapidity
-PNN_MU_MIN = 0.9                  # ProbNNmu
-MU_GHOST_MAX = 0.2                # ghost probability
-MU_IP_CHI2_MAX = 6.0              # IP chi2
 
 # Daughter four-momentum branches of each --mass choice
 PRT_MOMENTA = ['prt_px', 'prt_py', 'prt_pz', 'prt_e']
@@ -97,18 +86,6 @@ MASS_SOURCES = {
 
 # Daughter name -> PID. Every candidate is built from exactly one of each.
 DAUGHTERS = {'gamma': 22, 'mu+': -13, 'mu-': 13}
-MOTHER_PID = 221                                      # eta, for --truth-match
-TRUTH_BRANCHES = ['prt_idx_gen', 'mc_idx_mom', 'mc_pid']   # read with --truth-match
-
-# TOS lines per trigger level.
-# TODO: use the commented-out lines again.
-TOS_LINES = {
-    'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
-    'HLT1': ['tag_hlt1_tos0'],                    # Hlt1DiMuonNoIP
-    # 'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass
-    'HLT2': ['tag_hlt2_tos0'],                    # Hlt2ExoticaPrmptDiMuonTurbo
-    # 'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1'],   # Hlt2ExoticaPrmptDiMuonTurbo, Hlt2ExoticaDiMuonNoIPTurbo
-}
 
 GEV = 1000.0   # MeV per GeV
 
@@ -142,11 +119,10 @@ def select_candidates(infile, mass='tag_dtf_m', truth_match=False, max_events=No
     selection.json).
     """
     momenta = MASS_SOURCES[mass]
-    branches = ([mass, 'prt_idx_mom', 'prt_pid', 'prt_pnn_mu',
-                 'prt_prb_ghost', 'prt_ip_chi2', 'prt_tight_mu']
-                + PRT_MOMENTA + [b for b in momenta if b not in PRT_MOMENTA]   # muon cuts read PRT_MOMENTA
-                + [line for lines in TOS_LINES.values() for line in lines]
-                + (TRUTH_BRANCHES if truth_match else []))
+    branches = ([mass, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
+                + [b for b in momenta if b not in selection.MUON_CUT_BRANCHES]
+                + [line for lines in selection.TOS_LINES.values() for line in lines]
+                + (selection.TRUTH_BRANCHES if truth_match else []))
 
     # --- Read ---
 
@@ -174,50 +150,20 @@ def select_candidates(infile, mass='tag_dtf_m', truth_match=False, max_events=No
 
     # --- Cuts ---
 
-    keep = ak.ones_like(tree[mass], dtype=bool)
-    cutflow = [('all candidates', n_cand_total)]
-
-    # Truth match first: every daughter matches eta -> gamma mu+ mu-.
-    if truth_match:
-        keep = keep & bkg_utils.signal_candidate_mask(tree, MOTHER_PID, list(DAUGHTERS.values()),
-                                                      target_ref=mass)
-        cutflow.append(('truth-matched', int(ak.sum(keep))))
-
-    # TOS on at least one line at every trigger level.
-    tos, tos_report = cut_utils.tos_mask(tree, TOS_LINES, tag_ref=mass, base=keep)
-    keep = keep & tos
-    triggers = {level: report['lines'] for level, report in tos_report.items()}
-    for level, report in tos_report.items():
-        cutflow.append((f'TOS up to {level}', report['tos_up_to_level']))
-        for line, n in report['lines'].items():
+    # [truth match to eta -> gamma mu+ mu-], TOS per trigger level, then each muon cut
+    truth_pids = list(DAUGHTERS.values()) if truth_match else None
+    steps, triggers = selection.cut_steps(tree, mass, selection.TOS_LINES, truth_pids=truth_pids)
+    keep = steps[-1][1]
+    cutflow = [(label, int(ak.sum(mask))) for label, mask in steps]
+    for level, lines in triggers.items():
+        for line, n in lines.items():
             if n == 0:
                 print(f'[WARN] {level} TOS line {line} passes no candidate')
-
-    # Muon cuts, each on every muon daughter; a non-muon daughter passes.
-    px, py, pz = tree['prt_px'], tree['prt_py'], tree['prt_pz']
-    eta = ak.unflatten(kinematics.eta(ak.to_numpy(ak.flatten(px)), ak.to_numpy(ak.flatten(py)),
-                                      ak.to_numpy(ak.flatten(pz))), ak.num(px))
-    muon_cuts = {
-        f'pT > {MU_PT_MIN:g}':   kinematics.pt(px, py) > MU_PT_MIN,
-        f'p > {MU_P_MIN:g}':     kinematics.p(px, py, pz) > MU_P_MIN,
-        f'{MU_ETA_RANGE[0]:g} < eta < {MU_ETA_RANGE[1]:g}':
-            (eta > MU_ETA_RANGE[0]) & (eta < MU_ETA_RANGE[1]),
-        f'pnn_mu > {PNN_MU_MIN}': tree['prt_pnn_mu'] > PNN_MU_MIN,
-        f'ghost_prob < {MU_GHOST_MAX}': tree['prt_prb_ghost'] < MU_GHOST_MAX,
-        f'ip_chi2 < {MU_IP_CHI2_MAX:g}':   # -1 is stored when there is no PV
-            (tree['prt_ip_chi2'] >= 0) & (tree['prt_ip_chi2'] < MU_IP_CHI2_MAX),
-        'IsMuonTight':           tree['prt_tight_mu'] > 0.5,
-    }
-    for label, passes in muon_cuts.items():
-        muon_ok = passes | (abs(tree['prt_pid']) != 13)
-        keep = keep & cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all',
-                                       target_ref=mass)
-        cutflow.append((label, int(ak.sum(keep))))
 
     # --- Random candidate and its daughters ---
 
     # One candidate per event: picked at random among those kept.
-    picked = cut_utils.random_candidate_mask(keep, SEED)
+    picked = cut_utils.random_candidate_mask(keep, selection.SEED)
     n_picked = int(ak.sum(picked))
     cutflow.append(('random candidates', n_picked))
     assert n_picked > 0, 'no event survives the selection'
@@ -259,21 +205,21 @@ def select_candidates(infile, mass='tag_dtf_m', truth_match=False, max_events=No
           f'(eta: [{(2 * m_mu)**2:.4f}, {m_eta**2:.4f}])')
     print(f'[INFO] mass range [{masses.min():.2f}, {masses.max():.2f}] MeV')
 
-    selection = {
+    selection_json = {
         'meta': {
             'input_file': infile,
             'mass': mass,
             'momenta': momenta,
             'selection': {
-                'tos': TOS_LINES,
-                'mu_pt_min': MU_PT_MIN,
-                'mu_p_min': MU_P_MIN,
-                'mu_eta_range': MU_ETA_RANGE,
-                'pnn_mu_min': PNN_MU_MIN,
-                'mu_ghost_max': MU_GHOST_MAX,
-                'mu_ip_chi2_max': MU_IP_CHI2_MAX,
+                'tos': selection.TOS_LINES,
+                'mu_pt_min': selection.MU_PT_MIN,
+                'mu_p_min': selection.MU_P_MIN,
+                'mu_eta_range': selection.MU_ETA_RANGE,
+                'pnn_mu_min': selection.PNN_MU_MIN,
+                'mu_ghost_max': selection.MU_GHOST_MAX,
+                'mu_ip_chi2_max': selection.MU_IP_CHI2_MAX,
                 'truth_match': truth_match,
-                'random_candidate': {'seed': SEED},
+                'random_candidate': {'seed': selection.SEED},
                 'daughters': DAUGHTERS,
                 'max_events': max_events,
             },
@@ -284,7 +230,7 @@ def select_candidates(infile, mass='tag_dtf_m', truth_match=False, max_events=No
             'cutflow': [{'cut': label, 'candidates': n} for label, n in cutflow],
         },
     }
-    return m12s, m23s, masses, selection
+    return m12s, m23s, masses, selection_json
 
 
 def main():
@@ -318,11 +264,11 @@ def main():
 
     # --- Select ---
 
-    m12s, m23s, masses, selection = select_candidates(
+    m12s, m23s, masses, selection_json = select_candidates(
         args.infile, mass=args.mass, truth_match=args.truth_match, max_events=args.max_events)
     selection_path = os.path.join(args.outdir, 'selection.json')
     with open(selection_path, 'w') as f:
-        json.dump(selection, f, indent=2)
+        json.dump(selection_json, f, indent=2)
     print(f'[DONE] {selection_path}')
     for name, hist_range in HISTOGRAMS:
         plot_dalitz_hist(m12s, m23s, hist_range, os.path.join(args.outdir, name))

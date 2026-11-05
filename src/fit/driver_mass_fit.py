@@ -7,11 +7,12 @@ Gaussian and DCB + Chebyshev mass fits of one ROOT file:
               → selection.json, results_gauss.json, gauss_mass_fit.png,
                 results_dcb.json, dcb_mass_fit.png
 
-This script owns everything about the input: which file, which branches, which selection.
-fit_gauss() and fit_dcb() downstream see only a numpy array of masses.
+This script owns everything about the input: which file, which branches, which selection (the
+constants and cut_steps of selection.py). fit_gauss() and fit_dcb() downstream see only a numpy array
+of masses.
 
 One candidate per event is picked at random among those that pass the cuts
-(cut_utils.random_candidate_mask, seed SEED).
+(cut_utils.random_candidate_mask, seed selection.SEED).
 
 --truth-match PID... (signal MC only) keeps the candidates whose every daughter matches eta -> PIDs
 (bkg_utils.signal_candidate_mask). It is the first cut, before TOS, pnn_mu and the candidate pick.
@@ -19,7 +20,8 @@ The DCB fit runs with n_bkg fixed to 0 and the background shape at its init valu
 keeps its background floating. Its results_dcb.json is the --tail-prior of the data fit. The PIDs
 are -13 13 (eta -> mu+ mu-), -13 13 22 (eta -> mu+ mu- gamma) or -13 -13 13 13 (eta -> 4mu).
 
-An input path with an eta2mumumumu segment (eta -> 4mu) takes TOS_LINES_4MU in place of TOS_LINES.
+An input path with an eta2mumumumu segment (eta -> 4mu) takes selection.TOS_LINES_4MU in place of
+selection.TOS_LINES.
 
 --sigma-prior RESULTS_JSON (with --truth-match) takes the results_gauss.json of an earlier
 --truth-match run and adds NormalConstraint(sigma, Gaussian sigma, Gaussian variance *
@@ -49,10 +51,10 @@ import awkward as ak
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
-import bkg_utils
 import cut_utils
 import fit_utils
 import kinematics
+import selection
 from fit_dcb import TAIL_PARAMS, fit_dcb
 from fit_gauss import fit_gauss
 from plot_mass_fit import dcb_text, gauss_text, plot_fit
@@ -60,33 +62,6 @@ from plot_mass_fit import dcb_text, gauss_text, plot_fit
 # --- Selection ---------------------------------------------------------------
 
 MASS_BRANCH     = 'tag_dtf_m'      # the quantity being fit
-SEED            = 0                # random candidate pick
-DAUGHTER_FIELDS = ['prt_pid', 'prt_px', 'prt_py', 'prt_pz', 'prt_pnn_mu',
-                   'prt_prb_ghost', 'prt_ip_chi2', 'prt_tight_mu']   # branches the cuts below read
-MUON_PID        = 13               # |pid| the muon cuts apply to
-MOTHER_PID      = 221              # eta, for --truth-match
-TRUTH_BRANCHES  = ['prt_idx_gen', 'mc_idx_mom', 'mc_pid']   # read with --truth-match
-
-# Muon requirements of the dark-photon ananote (LHCb-ANA-2017-027, Tables 1 and 3), with p at the
-# 2018 Hlt1DiMuonNoIP threshold. Every muon daughter must pass each; a non-muon daughter passes.
-MU_PT_MIN       = 1000.0           # pT [MeV]
-MU_P_MIN        = 10000.0          # p [MeV]
-MU_ETA_RANGE    = (2.0, 4.5)       # pseudorapidity
-PNN_MU_MIN      = 0.9              # ProbNNmu
-MU_GHOST_MAX    = 0.2              # ghost probability
-MU_IP_CHI2_MAX  = 6.0              # IP chi2
-
-# TOS lines per trigger level.
-# TODO: use the commented-out lines again.
-TOS_LINES = {
-    'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
-    'HLT1': ['tag_hlt1_tos0'],                    # Hlt1DiMuonNoIP
-    # 'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass
-    'HLT2': ['tag_hlt2_tos0'],                    # Hlt2ExoticaPrmptDiMuonTurbo
-    # 'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1'],   # Hlt2ExoticaPrmptDiMuonTurbo, Hlt2ExoticaDiMuonNoIPTurbo
-}
-# eta -> 4mu: HLT1 also takes Hlt1MultiDiMuonNoIP (two dimuon pairs)
-TOS_LINES_4MU = {**TOS_LINES, 'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos2']}   # + Hlt1MultiDiMuonNoIP
 
 TAIL_PRIOR_FACTOR = 5.0   # --tail-prior: MC tail-fit stdevs times this
 SIGMA_PRIOR_FACTOR = 5.0  # --sigma-prior: Gaussian sigma stdev times this
@@ -125,11 +100,12 @@ if args.truth_match and args.tail_prior:
 if args.sigma_prior and not args.truth_match:
     parser.error('--sigma-prior needs --truth-match')
 os.makedirs(args.outdir, exist_ok=True)
-tos_lines = TOS_LINES_4MU if 'eta2mumumumu' in args.infile.split('/') else TOS_LINES
+tos_lines = (selection.TOS_LINES_4MU if 'eta2mumumumu' in args.infile.split('/')
+             else selection.TOS_LINES)
 
-branches = ([MASS_BRANCH, 'prt_idx_mom'] + DAUGHTER_FIELDS
+branches = ([MASS_BRANCH, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
             + [line for lines in tos_lines.values() for line in lines]
-            + (TRUTH_BRANCHES if args.truth_match else []))
+            + (selection.TRUTH_BRANCHES if args.truth_match else []))
 
 # --- Read --------------------------------------------------------------------
 
@@ -144,70 +120,38 @@ for reason in ('dropped_no_candidates', 'dropped_idx_out_of_range',
         print(f'[INFO]   {reason}: {drop_report[reason]}', file=sys.stderr)
 
 # --- Select ------------------------------------------------------------------
-# Every cut is a per-candidate boolean mask shaped like MASS_BRANCH, so they combine with a plain
-# `&` and adding one is a single line.
+# [truth match], TOS per trigger level, then each muon cut (selection.cut_steps). Every cut is a
+# per-candidate boolean mask shaped like MASS_BRANCH.
 
-keep = ak.ones_like(tree[MASS_BRANCH], dtype=bool)
-cutflow = [('all candidates', int(ak.sum(ak.num(keep))))]
-
-# Truth match first: every daughter matches eta -> args.truth_match.
-if args.truth_match:
-    keep = keep & bkg_utils.signal_candidate_mask(tree, MOTHER_PID, args.truth_match,
-                                                  target_ref=MASS_BRANCH)
-    cutflow.append(('truth-matched', int(ak.sum(keep))))
-
-# TOS on at least one line at every trigger level.
-tos, tos_report = cut_utils.tos_mask(tree, tos_lines, tag_ref=MASS_BRANCH, base=keep)
-keep = keep & tos
-triggers = {level: report['lines'] for level, report in tos_report.items()}
-for level, report in tos_report.items():
-    cutflow.append((f'TOS up to {level}', report['tos_up_to_level']))
-    for line, n in report['lines'].items():
+steps, triggers = selection.cut_steps(tree, MASS_BRANCH, tos_lines, truth_pids=args.truth_match)
+keep = steps[-1][1]
+cutflow = [(label, int(ak.sum(mask))) for label, mask in steps]
+for level, lines in triggers.items():
+    for line, n in lines.items():
         if n == 0:
             print(f'[WARN] {level} TOS line {line} passes no candidate', file=sys.stderr)
 
-# Muon cuts, each on every muon daughter; a non-muon daughter passes.
-px, py, pz = tree['prt_px'], tree['prt_py'], tree['prt_pz']
-eta = ak.unflatten(kinematics.eta(ak.to_numpy(ak.flatten(px)), ak.to_numpy(ak.flatten(py)),
-                                  ak.to_numpy(ak.flatten(pz))), ak.num(px))
-muon_cuts = {
-    f'pT > {MU_PT_MIN:g}':   kinematics.pt(px, py) > MU_PT_MIN,
-    f'p > {MU_P_MIN:g}':     kinematics.p(px, py, pz) > MU_P_MIN,
-    f'{MU_ETA_RANGE[0]:g} < eta < {MU_ETA_RANGE[1]:g}':
-        (eta > MU_ETA_RANGE[0]) & (eta < MU_ETA_RANGE[1]),
-    f'pnn_mu > {PNN_MU_MIN}': tree['prt_pnn_mu'] > PNN_MU_MIN,
-    f'ghost_prob < {MU_GHOST_MAX}': tree['prt_prb_ghost'] < MU_GHOST_MAX,
-    f'ip_chi2 < {MU_IP_CHI2_MAX:g}':   # -1 is stored when there is no PV
-        (tree['prt_ip_chi2'] >= 0) & (tree['prt_ip_chi2'] < MU_IP_CHI2_MAX),
-    'IsMuonTight':           tree['prt_tight_mu'] > 0.5,
-}
-for label, passes in muon_cuts.items():
-    muon_ok = passes | (abs(tree['prt_pid']) != MUON_PID)
-    keep = keep & cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all',
-                                   target_ref=MASS_BRANCH)
-    cutflow.append((label, int(ak.sum(keep))))
-
 # One candidate per event: picked at random among those kept.
-picked = cut_utils.random_candidate_mask(keep, SEED)
+picked = cut_utils.random_candidate_mask(keep, selection.SEED)
 masses = cut_utils.values(tree, MASS_BRANCH, picked)  # <- awkward → numpy
 cutflow.append(('random candidates', len(masses)))
 for label, n in cutflow:
     print(f'[INFO]   {label:24s} {n:9d}', file=sys.stderr)
 
-selection = {
+selection_json = {
     'meta': {
         'input_file': args.infile,
         'mass_branch': MASS_BRANCH,
         'selection': {
             'tos': tos_lines,
-            'mu_pt_min': MU_PT_MIN,
-            'mu_p_min': MU_P_MIN,
-            'mu_eta_range': MU_ETA_RANGE,
-            'pnn_mu_min': PNN_MU_MIN,
-            'mu_ghost_max': MU_GHOST_MAX,
-            'mu_ip_chi2_max': MU_IP_CHI2_MAX,
+            'mu_pt_min': selection.MU_PT_MIN,
+            'mu_p_min': selection.MU_P_MIN,
+            'mu_eta_range': selection.MU_ETA_RANGE,
+            'pnn_mu_min': selection.PNN_MU_MIN,
+            'mu_ghost_max': selection.MU_GHOST_MAX,
+            'mu_ip_chi2_max': selection.MU_IP_CHI2_MAX,
             'truth_match': args.truth_match,
-            'random_candidate': {'seed': SEED},
+            'random_candidate': {'seed': selection.SEED},
             'max_events': args.max_events,
         },
     },
@@ -219,7 +163,7 @@ selection = {
 }
 selection_path = os.path.join(args.outdir, 'selection.json')
 with open(selection_path, 'w') as f:
-    json.dump(selection, f, indent=2)
+    json.dump(selection_json, f, indent=2)
 print(f'[DONE] JSON saved to: {selection_path}', file=sys.stderr)
 
 # --- Fit ---------------------------------------------------------------------

@@ -10,9 +10,8 @@ Mass before and after each offline selection with no fit, to check the effect of
 
 The cuts are cumulative, in the order of driver_mass_fit.py: [truth match], TOS per trigger level,
 each muon cut, random candidate, then the fit window [--fit-xmin, --fit-xmax) (driver_mass_fit.py's
---xmin/--xmax defaults), so the last step is exactly what the mass fit sees. The selection constants
-are copied from driver_mass_fit.py; keep them in step.
-
+--xmin/--xmax defaults), so the last step is exactly what the mass fit sees. The cuts are
+selection.cut_steps with selection.TOS_LINES, as in driver_mass_fit.py.
 
 Usage:
     python src/plot/plot_cut_steps.py INFILE --outdir OUTDIR
@@ -32,34 +31,11 @@ import numpy as np
 
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
-import bkg_utils
 import cut_utils
 import kinematics
 import plot_style
 import plot_utils
-
-# --- Selection (as driver_mass_fit.py) ---------------------------------------
-
-SEED            = 0
-DAUGHTER_FIELDS = ['prt_pid', 'prt_px', 'prt_py', 'prt_pz', 'prt_pnn_mu',
-                   'prt_prb_ghost', 'prt_ip_chi2', 'prt_tight_mu']
-MUON_PID        = 13
-MOTHER_PID      = 221
-TRUTH_BRANCHES  = ['prt_idx_gen', 'mc_idx_mom', 'mc_pid']
-
-MU_PT_MIN       = 1000.0           # pT [MeV]
-MU_P_MIN        = 10000.0          # p [MeV]
-MU_ETA_RANGE    = (2.0, 4.5)       # pseudorapidity
-PNN_MU_MIN      = 0.9              # ProbNNmu
-MU_GHOST_MAX    = 0.2              # ghost probability
-MU_IP_CHI2_MAX  = 6.0              # IP chi2
-
-TOS_LINES = {
-    'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
-    'HLT1': ['tag_hlt1_tos0'],                    # Hlt1DiMuonNoIP
-    'HLT2': ['tag_hlt2_tos0'],                    # Hlt2ExoticaPrmptDiMuonTurbo
-}
-
+import selection
 
 def read_tree(infile, mass_branch, truth_match=None, max_events=None):
     """
@@ -67,9 +43,9 @@ def read_tree(infile, mass_branch, truth_match=None, max_events=None):
 
     Returns (tree, drop_report) as cut_utils.drop_malformed.
     """
-    branches = ([mass_branch, 'prt_idx_mom'] + DAUGHTER_FIELDS
-                + [line for lines in TOS_LINES.values() for line in lines]
-                + (TRUTH_BRANCHES if truth_match else []))
+    branches = ([mass_branch, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
+                + [line for lines in selection.TOS_LINES.values() for line in lines]
+                + (selection.TRUTH_BRANCHES if truth_match else []))
     tree = cut_utils.read_branches(infile, branches, entry_stop=max_events)
     tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
     return cut_utils.drop_malformed(tree, tag_ref=mass_branch)
@@ -77,49 +53,14 @@ def read_tree(infile, mass_branch, truth_match=None, max_events=None):
 
 def cut_steps(tree, mass_branch, fit_window, truth_match=None):
     """
-    Cumulative selection of driver_mass_fit.py, one step per cut, ending with the fit window (lo,
-    hi) [MeV] on mass_branch.
+    selection.cut_steps, then the random candidate and the fit window (lo, hi) [MeV] on mass_branch.
 
-    Returns [(label, mask), ...]: the per-candidate mask after each step, starting with ('ntuple',
-    all candidates).
+    Returns [(label, mask), ...]: the per-candidate mask after each step, starting with ('all
+    candidates', every candidate).
     """
-    keep = ak.ones_like(tree[mass_branch], dtype=bool)
-    steps = [('ntuple', keep)]
+    steps, _ = selection.cut_steps(tree, mass_branch, selection.TOS_LINES, truth_pids=truth_match)
 
-    if truth_match:
-        keep = keep & bkg_utils.signal_candidate_mask(tree, MOTHER_PID, truth_match,
-                                                      target_ref=mass_branch)
-        steps.append(('truth-matched', keep))
-
-    # TOS one level at a time, so each level is its own step.
-    for level, lines in TOS_LINES.items():
-        tos, _ = cut_utils.tos_mask(tree, {level: lines}, tag_ref=mass_branch, base=keep)
-        keep = keep & tos
-        steps.append((' | '.join(lines), keep))
-
-    # Labels are the ntuple branches each cut reads; pT, p and eta have no branch of their own
-    # (computed from prt_px/py/pz).
-    px, py, pz = tree['prt_px'], tree['prt_py'], tree['prt_pz']
-    eta = ak.unflatten(kinematics.eta(ak.to_numpy(ak.flatten(px)), ak.to_numpy(ak.flatten(py)),
-                                      ak.to_numpy(ak.flatten(pz))), ak.num(px))
-    muon_cuts = {
-        f'pT(muon) > {MU_PT_MIN / 1000:g} GeV':   kinematics.pt(px, py) > MU_PT_MIN,
-        f'p(muon) > {MU_P_MIN / 1000:g} GeV':     kinematics.p(px, py, pz) > MU_P_MIN,
-        rf'${MU_ETA_RANGE[0]:g} < \eta < {MU_ETA_RANGE[1]:g}$':
-            (eta > MU_ETA_RANGE[0]) & (eta < MU_ETA_RANGE[1]),
-        f'prt_pnn_mu > {PNN_MU_MIN}':             tree['prt_pnn_mu'] > PNN_MU_MIN,
-        f'prt_prb_ghost < {MU_GHOST_MAX}':        tree['prt_prb_ghost'] < MU_GHOST_MAX,
-        f'0 <= prt_ip_chi2 < {MU_IP_CHI2_MAX:g}':   # -1 is stored when there is no PV
-            (tree['prt_ip_chi2'] >= 0) & (tree['prt_ip_chi2'] < MU_IP_CHI2_MAX),
-        'prt_tight_mu > 0.5':                     tree['prt_tight_mu'] > 0.5,
-    }
-    for label, passes in muon_cuts.items():
-        muon_ok = passes | (abs(tree['prt_pid']) != MUON_PID)
-        keep = keep & cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all',
-                                       target_ref=mass_branch)
-        steps.append((label, keep))
-
-    keep = cut_utils.random_candidate_mask(keep, SEED)
+    keep = cut_utils.random_candidate_mask(steps[-1][1], selection.SEED)
     steps.append(('random candidate', keep))
 
     # The fit's histogram range: what the mass fit actually sees.
