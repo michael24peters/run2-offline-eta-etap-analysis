@@ -18,9 +18,8 @@ Per-Dalitz-bin mass fits of eta -> mu+ mu- gamma from a ROOT file:
 
 --mass picks the mass and the daughter momenta together (MASS_SOURCES):
 
-    rebuilt    mass rebuilt from prt_px/py/pz/e (default)
+    tag_dtf_m  tag_dtf_m; m12, m23 from the DTF daughters prt_dtf_px/py/pz/e (default)
     tag_m      tag_m; m12, m23 from prt_px/py/pz/e
-    tag_dtf_m  tag_dtf_m; m12, m23 from the DTF daughters prt_dtf_px/py/pz/e
 
 --factor picks the per-bin factor on the signal and background shapes
 (FACTORS):
@@ -46,9 +45,8 @@ tails float free.
 
 --n-max is the upper limit of the global fit's tail exponents n_L and n_R.
 
-The median and RMS of (mass - mass rebuilt from the same daughters) and the
-number of candidates outside their own kinematic limits
-(kinematics.m123_limits) are printed. No mass-window or Dalitz-grid cut is
+The number of candidates outside their own kinematic limits
+(kinematics.m123_limits) is printed. No mass-window or Dalitz-grid cut is
 applied to the selection.
 
 select_candidates() is the selection on its own, for fit_dalitz.ipynb and
@@ -57,7 +55,7 @@ plot_phase_space.py.
 Usage:
     python src/fit/driver_dalitz.py INFILE --outdir OUTDIR
         [--truth-match | --tail-prior RESULTS_JSON]
-        [--mass rebuilt|tag_m|tag_dtf_m] [--factor none|flat|weighted]
+        [--mass tag_dtf_m|tag_m] [--factor none|flat|weighted]
         [--n-max N] [--max-events N] [--horizontal]
 """
 
@@ -83,7 +81,6 @@ from plot_dalitz_bins import plot_dalitz_fit
 
 # --- Selection ---------------------------------------------------------------
 
-TAG_REF_BRANCH = 'tag_m'          # tag-level reference branch for cut_utils
 SEED = 0                          # random candidate pick
 
 # Muon requirements of the dark-photon ananote (LHCb-ANA-2017-027, Tables 1 and 3).
@@ -95,14 +92,12 @@ PNN_MU_MIN = 0.9                  # ProbNNmu
 MU_GHOST_MAX = 0.2                # ghost probability
 MU_IP_CHI2_MAX = 6.0              # IP chi2
 
-# Mass and daughter four-momentum branches of each --mass choice; 'mass' None
-# means the mass rebuilt from 'momenta'.
+# Daughter four-momentum branches of each --mass choice
 PRT_MOMENTA = ['prt_px', 'prt_py', 'prt_pz', 'prt_e']
 DTF_MOMENTA = ['prt_dtf_px', 'prt_dtf_py', 'prt_dtf_pz', 'prt_dtf_e']
 MASS_SOURCES = {
-    'rebuilt':   {'mass': None,        'momenta': PRT_MOMENTA},
-    'tag_m':     {'mass': 'tag_m',     'momenta': PRT_MOMENTA},
-    'tag_dtf_m': {'mass': 'tag_dtf_m', 'momenta': DTF_MOMENTA},
+    'tag_dtf_m': DTF_MOMENTA,
+    'tag_m':     PRT_MOMENTA,
 }
 
 # Daughter name -> PID. Every candidate is built from exactly one of each.
@@ -143,7 +138,7 @@ FACTORS = {
 }
 
 
-def select_candidates(infile, mass='rebuilt', truth_match=False, max_events=None):
+def select_candidates(infile, mass='tag_dtf_m', truth_match=False, max_events=None):
     """
     Read infile, select, and pick one candidate per event at random.
 
@@ -151,11 +146,9 @@ def select_candidates(infile, mass='rebuilt', truth_match=False, max_events=None
     gamma mu+ mu- mass [MeV] of each event's picked candidate, and the
     selection settings and report (the contents of selection.json).
     """
-    mass_branch = MASS_SOURCES[mass]['mass']
-    momenta = MASS_SOURCES[mass]['momenta']
-    branches = ([TAG_REF_BRANCH, 'prt_idx_mom', 'prt_pid', 'prt_pnn_mu',
+    momenta = MASS_SOURCES[mass]
+    branches = ([mass, 'prt_idx_mom', 'prt_pid', 'prt_pnn_mu',
                  'prt_prb_ghost', 'prt_ip_chi2', 'prt_tight_mu']
-                + ([mass_branch] if mass_branch not in (None, TAG_REF_BRANCH) else [])
                 + PRT_MOMENTA + [b for b in momenta if b not in PRT_MOMENTA]   # muon cuts read PRT_MOMENTA
                 + [line for lines in TOS_LINES.values() for line in lines]
                 + (TRUTH_BRANCHES if truth_match else []))
@@ -164,21 +157,21 @@ def select_candidates(infile, mass='rebuilt', truth_match=False, max_events=None
 
     tree = cut_utils.read_branches(infile, branches, entry_stop=max_events)
     tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
-    tree, drop_report = cut_utils.drop_malformed(tree, tag_ref=TAG_REF_BRANCH)
+    tree, drop_report = cut_utils.drop_malformed(tree, tag_ref=mass)
     print(f"[INFO] events: read {drop_report['read']}, kept {drop_report['kept']}, "
           f"dropped {drop_report['read'] - drop_report['kept']}")
     for reason in ('dropped_no_candidates', 'dropped_idx_out_of_range',
                    'dropped_daughter_length_mismatch', 'dropped_partial_candidate_branch'):
         if drop_report[reason]:
             print(f'[INFO]   {reason}: {drop_report[reason]}')
-    n_multi = int(ak.sum(ak.num(tree[TAG_REF_BRANCH]) > 1))
+    n_multi = int(ak.sum(ak.num(tree[mass]) > 1))
     print(f'[INFO] {n_multi} / {len(tree)} events have >1 candidate')
 
     # Every candidate must have exactly one daughter of each PID.
-    n_cand_total = int(ak.sum(ak.num(tree[TAG_REF_BRANCH])))
+    n_cand_total = int(ak.sum(ak.num(tree[mass])))
     for name, pid in DAUGHTERS.items():
         n_of_pid = cut_utils.reduce(tree, tree['prt_pid'] == pid, 'prt_idx_mom',
-                                    how='sum', target_ref=TAG_REF_BRANCH)
+                                    how='sum', target_ref=mass)
         print(f'[INFO] {name:5s} (pid {pid:>3}): {float(ak.mean(ak.flatten(n_of_pid))):.4f} '
               f'daughters per candidate')
         assert ak.all(n_of_pid == 1), f'some candidates do not have exactly one {name}'
@@ -186,17 +179,17 @@ def select_candidates(infile, mass='rebuilt', truth_match=False, max_events=None
 
     # --- Cuts ---
 
-    keep = ak.ones_like(tree[TAG_REF_BRANCH], dtype=bool)
+    keep = ak.ones_like(tree[mass], dtype=bool)
     cutflow = [('all candidates', n_cand_total)]
 
     # Truth match first: every daughter matches eta -> gamma mu+ mu-.
     if truth_match:
         keep = keep & bkg_utils.signal_candidate_mask(tree, MOTHER_PID, list(DAUGHTERS.values()),
-                                                      target_ref=TAG_REF_BRANCH)
+                                                      target_ref=mass)
         cutflow.append(('truth-matched', int(ak.sum(keep))))
 
     # TOS on at least one line at every trigger level.
-    tos, tos_report = cut_utils.tos_mask(tree, TOS_LINES, tag_ref=TAG_REF_BRANCH, base=keep)
+    tos, tos_report = cut_utils.tos_mask(tree, TOS_LINES, tag_ref=mass, base=keep)
     keep = keep & tos
     triggers = {level: report['lines'] for level, report in tos_report.items()}
     for level, report in tos_report.items():
@@ -223,7 +216,7 @@ def select_candidates(infile, mass='rebuilt', truth_match=False, max_events=None
     for label, passes in muon_cuts.items():
         muon_ok = passes | (abs(tree['prt_pid']) != 13)
         keep = keep & cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all',
-                                       target_ref=TAG_REF_BRANCH)
+                                       target_ref=mass)
         cutflow.append((label, int(ak.sum(keep))))
 
     # --- Random candidate and its daughters ---
@@ -244,34 +237,24 @@ def select_candidates(infile, mass='rebuilt', truth_match=False, max_events=None
         p4[name] = [ak.to_numpy(ak.flatten(tree[field][match])) / GEV for field in momenta]
         assert len(p4[name][0]) == n_picked, f'{name}: not one per picked candidate'
 
-    # Dalitz variables, and the gamma mu+ mu- mass, from the same four-vectors.
+    # Dalitz variables from the four-vectors, and the picked candidate's mass.
     m12s = kinematics.invariant_mass2(*p4['gamma'], *p4['mu+'])
     m23s = kinematics.invariant_mass2(*p4['mu+'], *p4['mu-'])
-    gamma_mup = [a + b for a, b in zip(p4['gamma'], p4['mu+'], strict=True)]
-    rebuilt = np.sqrt(np.clip(kinematics.invariant_mass2(*gamma_mup, *p4['mu-']), 0.0, None)) * GEV
-
-    # The fitted mass: rebuilt, or the picked candidate's tag-level mass.
-    if mass_branch is None:
-        masses = rebuilt
-    else:
-        masses = ak.to_numpy(cut_utils.values(tree, mass_branch, picked)).astype(float)
-        assert len(masses) == n_picked, f'{mass_branch}: not one per picked candidate'
+    masses = ak.to_numpy(cut_utils.values(tree, mass, picked)).astype(float)
+    assert len(masses) == n_picked, f'{mass}: not one per picked candidate'
 
     # A Dalitz point needs m^2 > 0 on both axes.
     physical = (m12s > 0) & (m23s > 0)
-    m12s, m23s, masses, rebuilt = m12s[physical], m23s[physical], masses[physical], rebuilt[physical]
+    m12s, m23s, masses = m12s[physical], m23s[physical], masses[physical]
     cutflow.append(('m12 > 0 and m23 > 0', len(masses)))
     for label, n in cutflow:
         print(f'[INFO]   {label:28s} {n:9d}')
 
     # Consistency of the mass with the daughters m12, m23 come from.
-    mass_minus_rebuilt = masses - rebuilt
     mass_lo, mass_hi = kinematics.m123_limits(m12s, m23s)
     n_outside = int(np.sum(~((mass_lo <= masses) & (masses <= mass_hi))))
-    print(f"[INFO] {mass} - rebuilt from {momenta[0].rsplit('_', 1)[0]}_*: median "
-          f"{np.median(mass_minus_rebuilt):.3f} MeV, RMS "
-          f"{np.sqrt(np.mean(mass_minus_rebuilt**2)):.3f} MeV; {n_outside} of {len(masses)} "
-          f"outside their kinematic limits")
+    print(f'[INFO] {n_outside} of {len(masses)} candidates outside the kinematic limits of '
+          f'their m12, m23')
 
     # Ranges, against the eta's Dalitz region [GeV^2] and the mass window.
     m_mu, m_eta = kinematics.M_MU / GEV, kinematics.M_ETA / GEV
@@ -317,8 +300,8 @@ def main():
     parser.add_argument('infile', help='Input ROOT file')
     parser.add_argument('--outdir', required=True,
                         help='Directory for selection.json, dalitz_fit_<factor>.json and plots')
-    parser.add_argument('--mass', default='rebuilt', choices=list(MASS_SOURCES),
-                        help='Mass and daughter momenta (default: rebuilt)')
+    parser.add_argument('--mass', default='tag_dtf_m', choices=list(MASS_SOURCES),
+                        help='Mass and daughter momenta (default: tag_dtf_m)')
     parser.add_argument('--factor', default='none', choices=list(FACTORS),
                         help='Per-bin factor on the signal and background shapes (default: none)')
     parser.add_argument('--truth-match', action='store_true',

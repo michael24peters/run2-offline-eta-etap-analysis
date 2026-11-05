@@ -6,8 +6,8 @@ factor f(M).
 
 Usage:
     python src/plot/plot_phase_space.py \
-        [--results out/eta2mumugamma/turbo/<date>/dalitz/rebuilt/dalitz_fit_flat.json] \
-        [--infile  ntuple/lhcb/eta2mumugamma/20261006/combined_files.root [--mass rebuilt]] \
+        [--results out/eta2mumugamma/turbo/<date>/dalitz/tag_dtf_m/dalitz_fit_flat.json] \
+        [--infile  ntuple/lhcb/eta2mumugamma/20261006/combined_files.root [--mass tag_dtf_m]] \
         [--outdir  out/phase-space-factor]
 
 Pure kinematics (always made): f(m_eta) map and the step-by-step
@@ -325,8 +325,8 @@ def main():
     parser.add_argument('--infile', default=None,
                         help='ROOT file whose selected candidates make the worked-example '
                              'and uniformity figures')
-    parser.add_argument('--mass', default='rebuilt',
-                        help='driver_dalitz.py --mass of the --infile candidates (default: rebuilt)')
+    parser.add_argument('--mass', default='tag_dtf_m',
+                        help='driver_dalitz.py --mass of the --infile candidates (default: tag_dtf_m)')
     parser.add_argument('--outdir', default=os.path.join(_here, '..', '..', 'out',
                                                          'phase-space-factor'))
     args = parser.parse_args()

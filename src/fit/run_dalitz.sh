@@ -15,7 +15,7 @@
 # holds a full ROOT read (~4 GB for data) at a time.
 #
 # Usage:
-#   src/fit/run_dalitz.sh [--mass "rebuilt tag_m tag_dtf_m"] [--factor "none flat weighted"]
+#   src/fit/run_dalitz.sh [--mass "tag_dtf_m tag_m"] [--factor "none flat weighted"]
 
 set -o pipefail
 cd "$(dirname "$0")/../.."
@@ -25,7 +25,7 @@ TAIL_PRIOR=out/eta2mumugamma/turbo/20261027/mc_prior/results_dcb.json
 N_MAX=50
 DATE=$(date +%Y%m%d)
 READ_PAUSE=20
-MASSES="rebuilt tag_m tag_dtf_m"
+MASSES="tag_dtf_m tag_m"
 FACTORS="none flat weighted"
 while [ $# -gt 0 ]; do
     case $1 in

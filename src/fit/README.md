@@ -262,15 +262,12 @@ The limits are an identity on the four-vectors, so the fitted mass must come
 from the same daughter momenta as m12/m23. `driver_dalitz.py --mass` picks the
 mass and the daughters together:
 
-| `--mass` | mass | daughters | mass - rebuilt (median, RMS) | outside own limits |
-|---|---|---|---|---|
-| `rebuilt` (default) | rebuilt from the daughters | `prt_px/py/pz/e` | 0, 0 | 0 |
-| `tag_m` | `tag_m` | `prt_px/py/pz/e` | 0.07 MeV, 4.1 MeV | 0.7% |
-| `tag_dtf_m` | `tag_dtf_m` | `prt_dtf_px/py/pz/e` | 0.00 MeV, 0.04 MeV | 8 of 3.0M |
+| `--mass` | daughters | outside own limits |
+|---|---|---|
+| `tag_dtf_m` (default) | `prt_dtf_px/py/pz/e` | 8 of 3.0M |
+| `tag_m` | `prt_px/py/pz/e` | 0.7% |
 
-(20261006 Turbo data; the driver prints these numbers.) `tag_dtf_m` with the DTF daughters satisfies the identity
-like the rebuilt mass, at the DTF resolution (sigma ~14 MeV vs ~16.5 MeV
-rebuilt).
+(20261006 Turbo data; the driver prints these numbers.)
 
 Per bin, the Chebyshev's [-1, 1] variable spans the bin's reachable mass
 range (where f > 0), not [xmin, xmax]: fit on only a slice of its range, its
@@ -280,9 +277,8 @@ still go negative inside the reachable region; the fit floors it at
 `fit_utils.BKG_FLOOR`, and `bkg_goes_negative` flags any bin where that
 happened.
 
-The global fit carries a widened tail prior (`--tail-prior`): on the
-rebuilt mass the unconstrained tails run off to n ~ 50-150 and the fit is
-invalid. The prior is the `fit` block of any results JSON: the data DCB fit of
+The global fit carries a widened tail prior (`--tail-prior`). The prior is
+the `fit` block of any results JSON: the data DCB fit of
 `driver_mass_fit.py` (`results_dcb.json`), or the global fit of a
 `driver_dalitz.py --truth-match` run (`dalitz_fit_<factor>.json`). `--n-max`
 caps n_L and n_R of the global fit.
@@ -296,7 +292,7 @@ slowly than f predicts, which is where the worst per-bin chi2 values are.
 ```
 python src/fit/driver_dalitz.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
     --outdir OUT [--truth-match | --tail-prior RESULTS_JSON] \
-    [--mass rebuilt|tag_m|tag_dtf_m] [--factor none|flat|weighted] \
+    [--mass tag_dtf_m|tag_m] [--factor none|flat|weighted] \
     [--n-max N] [--max-events N] [--horizontal]
 python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_<factor>.json [--horizontal]   # re-plot only
 ```
@@ -331,7 +327,7 @@ the background fixed to 0 and no prior. Without `--truth-match` or
 `fit_dalitz.ipynb` runs the same selection (`driver_dalitz.select_candidates`)
 and fit interactively on one ROOT file.
 
-`src/fit/run_dalitz.sh [--mass "rebuilt tag_m tag_dtf_m"] [--factor "none flat weighted"]`
+`src/fit/run_dalitz.sh [--mass "tag_dtf_m tag_m"] [--factor "none flat weighted"]`
 runs the data fits for each mass and factor on the 20261006 ntuples, both with
 `--n-max 50`: with the tails of the 20261027 data DCB mass fit
 (`turbo/20261027/mc_prior/results_dcb.json`, `TAIL_PRIOR`) as prior
