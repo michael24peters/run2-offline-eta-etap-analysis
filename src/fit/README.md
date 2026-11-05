@@ -10,7 +10,7 @@ fit_*.py      fit the numbers. Blind to files, cuts, candidates.
 plot_*.py     render
 ```
 
-Awkward arrays handle everything jagged (ROOT I/O, event/candidate structure) and live only in `src/utils/cut_utils.py`. Numpy handles everything flat (histogram, PDFs, curves) and lives in `src/utils/fit_utils.py` and the `fit_*` modules. The conversion occurs in the `ak.to_numpy(ak.flatten(...))` call in the driver.
+Awkward arrays handle everything jagged (ROOT I/O, event/candidate structure) and live only in `src/utils/cut_utils.py`. Numpy handles everything flat (histogram, PDFs, curves) and lives in `src/utils/fit_utils.py` and the `fit_*` modules. The conversion is `cut_utils.values(tree, branch, mask)`, called in the driver.
 
 For MC, truth-matching is always the first cut: it is applied before TOS, pnn_mu and the candidate pick.
 
