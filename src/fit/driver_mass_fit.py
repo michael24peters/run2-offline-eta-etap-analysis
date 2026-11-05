@@ -38,7 +38,7 @@ Usage:
     python src/fit/driver_mass_fit.py INFILE --outdir OUTDIR
         [--truth-match PID [PID ...] [--sigma-prior RESULTS_JSON] | --tail-prior RESULTS_JSON]
         [--max-events N]
-        [--xmin 500] [--xmax 600] [--nbins 80] [--mean-init 548] [--sigma-init 5]
+        [--xmin 500] [--xmax 600] [--nbins 100] [--mean-init 548] [--sigma-init 5]
         [--alphaL-init 1.5] [--nL-init 2] [--alphaR-init 1.5] [--nR-init 2] [--n-max N]
 """
 
@@ -110,7 +110,7 @@ parser.add_argument('--max-events', type=int, default=None,
                     help='Only read the first N events (default: all)')
 parser.add_argument('--xmin', type=float, default=500.0, help='Lower mass bound [MeV]')
 parser.add_argument('--xmax', type=float, default=600.0, help='Upper mass bound [MeV]')
-parser.add_argument('--nbins', type=int, default=80, help='Number of histogram bins')
+parser.add_argument('--nbins', type=int, default=100, help='Number of histogram bins')
 parser.add_argument('--mean-init', type=float, default=kinematics.M_ETA, help='Initial mean [MeV]')
 parser.add_argument('--sigma-init', type=float, default=5.0,
                     help='Initial sigma [MeV] of the Gaussian')

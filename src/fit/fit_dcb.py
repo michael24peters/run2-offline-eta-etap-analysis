@@ -23,7 +23,7 @@ import kinematics
 TAIL_PARAMS = ('alphaL', 'nL', 'alphaR', 'nR')
 
 
-def fit_dcb(values, xmin=480.0, xmax=620.0, nbins=80,
+def fit_dcb(values, xmin=500.0, xmax=600.0, nbins=100,
             mean_init=kinematics.M_ETA, sigma_init=5.0,
             alphaL_init=1.5, nL_init=2.0,
             alphaR_init=1.5, nR_init=2.0,

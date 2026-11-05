@@ -21,7 +21,7 @@ import fit_utils
 import kinematics
 
 
-def fit_gauss(values, xmin=480.0, xmax=620.0, nbins=80,
+def fit_gauss(values, xmin=500.0, xmax=600.0, nbins=100,
               mean_init=kinematics.M_ETA, sigma_init=5.0, fixed_params=None):
     """
     Run the Gaussian + background fit and return (result, m).

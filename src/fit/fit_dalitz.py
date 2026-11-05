@@ -154,7 +154,7 @@ def bkg_goes_negative(fit, xmin, xmax, bkg_factor_grid=None):
 
 
 def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
-               xmin=500.0, xmax=600.0, nbins=80,
+               xmin=500.0, xmax=600.0, nbins=100,
                mean_init=kinematics.M_ETA, sigma_init=10.0,
                tail_prior=None, signal_prior_factor=5.0, min_candidates=10,
                signal_factor=None, bkg_factor=None, signal_only=False, limits=None):

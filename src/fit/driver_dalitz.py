@@ -119,7 +119,7 @@ GEV = 1000.0   # MeV per GeV
 
 # --- Fit ---------------------------------------------------------------------
 
-XMIN, XMAX, MASS_NBINS = 500.0, 600.0, 80      # mass window [MeV] and its histogram bins
+XMIN, XMAX, MASS_NBINS = 500.0, 600.0, 100     # mass window [MeV] and its histogram bins
 MEAN_INIT, SIGMA_INIT = kinematics.M_ETA, 10.0  # global-fit seeds [MeV]
 
 M12_RANGE = (0.0, 0.21)   # m^2(gamma mu+) range of the grid [GeV^2]
