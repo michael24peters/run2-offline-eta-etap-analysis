@@ -186,7 +186,7 @@ python src/fit/driver_dalitz.py ntuple/lhcb/eta2mumugamma/20261006/combined_file
 python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_<factor>.json   # re-plot only
 ```
 
-`driver_dalitz.py` reads ROOT -> truth match (`--truth-match`) -> TOS (L0, HLT1 and HLT2) -> muon cuts -> random candidate -> m12, m23 and the `MASS_BRANCH` mass of every event, then fits them on the 14 x 14 grid (`fit_dalitz.fit_dalitz`). It writes into `--outdir`:
+`driver_dalitz.py` reads ROOT -> truth match (`--truth-match`) -> TOS (L0, HLT1 and HLT2) -> muon cuts -> random candidate -> m12, m23 and the `MASS_BRANCH` mass of every event, then fits them in 450-650 MeV (200 bins), the window of the eta2mumugamma mass fit, on the 14 x 14 grid (`fit_dalitz.fit_dalitz`). It writes into `--outdir`:
 
 - `selection.json`: the selection settings, the events dropped as malformed, the candidates TOS on each trigger line, and the cutflow
 - `dalitz_raw.png`, `dalitz_raw_zoom.png`: raw Dalitz histograms
