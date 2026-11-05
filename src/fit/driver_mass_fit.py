@@ -17,22 +17,20 @@ One candidate per event is picked at random among those that pass the cuts
 --truth-match PID... (signal MC only) keeps the candidates whose every daughter matches eta -> PIDs
 (bkg_utils.signal_candidate_mask). It is the first cut, before TOS, pnn_mu and the candidate pick.
 The DCB fit runs with n_bkg fixed to 0 and the background shape at its init values; the Gaussian fit
-keeps its background floating. Its results_dcb.json is the --tail-prior of the data fit. The PIDs
-are -13 13 (eta -> mu+ mu-), -13 13 22 (eta -> mu+ mu- gamma) or -13 -13 13 13 (eta -> 4mu).
+keeps its background floating. The DCB sigma is under NormalConstraint(sigma, Gaussian sigma,
+Gaussian variance * SIGMA_PRIOR_FACTOR**2). Its results_dcb.json is the --tail-prior of the data
+fit. The PIDs are -13 13 (eta -> mu+ mu-), -13 13 22 (eta -> mu+ mu- gamma) or -13 -13 13 13
+(eta -> 4mu).
 
 An input path with an eta2mumumumu segment (eta -> 4mu) takes selection.TOS_LINES_4MU in place of
 selection.TOS_LINES.
-
---sigma-prior RESULTS_JSON (with --truth-match) takes the results_gauss.json of an earlier
---truth-match run and adds NormalConstraint(sigma, Gaussian sigma, Gaussian variance *
-SIGMA_PRIOR_FACTOR**2) to the DCB fit.
 
 --tail-prior RESULTS_JSON floats the DCB tails under NormalConstraint(TAIL_PARAMS, MC values, MC
 covariance * TAIL_PRIOR_FACTOR**2), starting from the MC values.
 
 Usage:
     python src/fit/driver_mass_fit.py INFILE --outdir OUTDIR
-        [--truth-match PID [PID ...] [--sigma-prior RESULTS_JSON] | --tail-prior RESULTS_JSON]
+        [--truth-match PID [PID ...] | --tail-prior RESULTS_JSON]
         [--max-events N]
         [--xmin 500] [--xmax 600] [--nbins 100] [--mean-init 548] [--sigma-init 5]
         [--alphaL-init 1.5] [--nL-init 2] [--alphaR-init 1.5] [--nR-init 2] [--n-max N]
@@ -61,7 +59,7 @@ from plot_mass_fit import dcb_text, gauss_text, plot_fit
 MASS_BRANCH     = 'tag_dtf_m'      # the quantity being fit
 
 TAIL_PRIOR_FACTOR = 5.0   # --tail-prior: MC tail-fit stdevs times this
-SIGMA_PRIOR_FACTOR = 5.0  # --sigma-prior: Gaussian sigma stdev times this
+SIGMA_PRIOR_FACTOR = 5.0  # --truth-match: Gaussian sigma stdev times this
 
 parser = argparse.ArgumentParser(
     description='Gaussian and DCB + Chebyshev mass fits',
@@ -74,9 +72,6 @@ parser.add_argument('--truth-match', nargs='+', type=int, default=None, metavar=
                          'PIDs (-13 13, -13 13 22, or -13 -13 13 13) and fit with no background')
 parser.add_argument('--tail-prior', default=None,
                     help='results_dcb.json of a --truth-match fit whose tails are the DCB prior')
-parser.add_argument('--sigma-prior', default=None,
-                    help='results_gauss.json of a --truth-match fit whose sigma is the DCB sigma '
-                         'prior (with --truth-match)')
 parser.add_argument('--max-events', type=int, default=None,
                     help='Only read the first N events (default: all)')
 parser.add_argument('--xmin', type=float, default=500.0, help='Lower mass bound [MeV]')
@@ -94,8 +89,6 @@ parser.add_argument('--n-max', type=float, default=None,
 args = parser.parse_args()
 if args.truth_match and args.tail_prior:
     parser.error('--truth-match and --tail-prior are exclusive')
-if args.sigma_prior and not args.truth_match:
-    parser.error('--sigma-prior needs --truth-match')
 os.makedirs(args.outdir, exist_ok=True)
 tos_lines = (selection.TOS_LINES_4MU if 'eta2mumumumu' in args.infile.split('/')
              else selection.TOS_LINES)
@@ -168,15 +161,15 @@ print(f'[DONE] JSON saved to: {selection_path}', file=sys.stderr)
 #
 #   no flag                        DCB + Chebyshev, tails free (up to --n-max)
 #   --tail-prior RESULTS_JSON      DCB + Chebyshev, tails under the prior of an MC DCB fit
-#   --truth-match PID...           DCB with no background
-#     [--sigma-prior RESULTS_JSON]   and sigma under the prior of an MC Gaussian fit
+#   --truth-match PID...           DCB with no background, sigma under the prior of the Gaussian fit
 #
 # run_mass_fits.sh chains these into the data DCB fit.
 
 fits = []   # (name, result, stats-box builder) of each fit, written below
 
 # The Gaussian fit's sigma seeds the DCB. Truth-matched MC: the DCB has no background, n_bkg fixed
-# to 0 and the background shape parameters at their init values (fit_utils.BKG_INIT).
+# to 0 and the background shape parameters at their init values (fit_utils.BKG_INIT), and its sigma
+# is held near the Gaussian sigma, with the Gaussian stdev widened by SIGMA_PRIOR_FACTOR.
 gauss_result, m_gauss = fit_gauss(
     masses, xmin=args.xmin, xmax=args.xmax, nbins=args.nbins,
     mean_init=args.mean_init, sigma_init=args.sigma_init)
@@ -184,21 +177,12 @@ gauss_result['meta']['input_file'] = args.infile
 fits.append(('gauss', gauss_result, gauss_text))
 sigma_init = m_gauss.values['sigma']
 fixed_params = None
+sigma_prior = None
 if args.truth_match:
     fixed_params = {'n_bkg': 0.0, **fit_utils.BKG_INIT}
-
-# DCB sigma: held near the Gaussian sigma of a --truth-match fit, with that fit's stdev widened by
-# SIGMA_PRIOR_FACTOR.
-sigma_prior = None
-if args.sigma_prior:
-    with open(args.sigma_prior) as f:
-        gauss_fit = json.load(f)['fit']
-    sigma_prior = fit_utils.build_prior_from_result(gauss_fit, ['sigma'],
-                                                    factor=SIGMA_PRIOR_FACTOR)
-    sigma_init = sigma_prior[0][0]
+    sigma_prior = fit_utils.build_prior(m_gauss, ['sigma'], factor=SIGMA_PRIOR_FACTOR)
     print(f"[INFO] Gaussian sigma (prior, x{SIGMA_PRIOR_FACTOR:.0f} widened stdev): "
-          f"{gauss_fit['parameters']['sigma']['value']:.4f}"
-          f"±{gauss_fit['parameters']['sigma']['error']:.4f}", file=sys.stderr)
+          f"{m_gauss.values['sigma']:.4f}±{m_gauss.errors['sigma']:.4f}", file=sys.stderr)
 
 # DCB tails: under the MC tail prior widened by TAIL_PRIOR_FACTOR, or free.
 tail_init = (args.alphaL_init, args.nL_init, args.alphaR_init, args.nR_init)
@@ -222,8 +206,7 @@ dcb_result, m_dcb = fit_dcb(
     limits={'nL': (0.0, args.n_max), 'nR': (0.0, args.n_max)})
 dcb_result['meta']['input_file'] = args.infile
 dcb_result['meta']['n_max'] = args.n_max
-if args.sigma_prior:
-    dcb_result['meta']['sigma_prior_from'] = args.sigma_prior
+if args.truth_match:
     dcb_result['meta']['sigma_prior_factor'] = SIGMA_PRIOR_FACTOR
 if args.tail_prior:
     dcb_result['meta']['tail_prior_from'] = args.tail_prior

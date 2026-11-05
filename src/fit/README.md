@@ -44,17 +44,14 @@ It writes into `--outdir`:
 MC gauss  -(sigma prior)->  MC dcb  -(tail prior)->  data dcb
 ```
 
-On data the DCB tails are poorly constrained. They come from truth-matched signal MC instead: a `NormalConstraint` prior on (alphaL, nL, alphaR, nR) centred on the MC values, with the MC covariance widened by `TAIL_PRIOR_FACTOR` standard deviations (`--tail-prior`). The truth-matched MC DCB takes its sigma from the truth-matched MC Gaussian: a `NormalConstraint` prior on sigma centred on the Gaussian sigma, with its variance widened by `SIGMA_PRIOR_FACTOR` standard deviations (`--sigma-prior`, with `--truth-match`):
+On data the DCB tails are poorly constrained. They come from truth-matched signal MC instead: a `NormalConstraint` prior on (alphaL, nL, alphaR, nR) centred on the MC values, with the MC covariance widened by `TAIL_PRIOR_FACTOR` standard deviations (`--tail-prior`). With `--truth-match`, the MC DCB takes its sigma from the Gaussian of the same run: a `NormalConstraint` prior on sigma centred on the Gaussian sigma, with its variance widened by `SIGMA_PRIOR_FACTOR` standard deviations:
 
 ```
-# 1. truth-matched signal MC: Gaussian, then DCB with no background (n_bkg = 0, c0 = c1 = 0), no prior
+# 1. truth-matched signal MC: Gaussian, then DCB with no background (n_bkg = 0, c0 = c1 = 0) and
+#    sigma under the prior of the Gaussian
 python src/fit/driver_mass_fit.py ntuple/mc/eta2mumugamma/signal_20261006/combined_files.root \
-    --outdir out/eta2mumugamma/signal/$(date +%Y%m%d)/truth_no_prior --truth-match -13 13 22
-# 2. the same selection, DCB sigma under the Gaussian prior of 1
-python src/fit/driver_mass_fit.py ntuple/mc/eta2mumugamma/signal_20261006/combined_files.root \
-    --outdir out/eta2mumugamma/signal/$(date +%Y%m%d)/truth --truth-match -13 13 22 \
-    --sigma-prior out/eta2mumugamma/signal/$(date +%Y%m%d)/truth_no_prior/results_gauss.json
-# 3. data, tails under the MC prior of 2
+    --outdir out/eta2mumugamma/signal/$(date +%Y%m%d)/truth --truth-match -13 13 22
+# 2. data, tails under the MC prior of 1
 python src/fit/driver_mass_fit.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
     --outdir out/eta2mumugamma/turbo/$(date +%Y%m%d)/mc_prior \
     --tail-prior out/eta2mumugamma/signal/$(date +%Y%m%d)/truth/results_dcb.json
@@ -62,7 +59,7 @@ python src/fit/driver_mass_fit.py ntuple/lhcb/eta2mumugamma/20261006/combined_fi
 
 `--truth-match` takes the signal daughter PIDs: `-13 13` for eta -> mu+ mu-, `-13 13 22` for eta -> mu+ mu- gamma, `-13 -13 13 13` for eta -> 4mu. For an `eta2mumumumu` input path, HLT1 TOS also accepts Hlt1MultiDiMuonNoIP (`TOS_LINES_4MU`); every muon cut applies to all four muons. The Gaussian fit keeps its Chebyshev background floating: with no background, a Gaussian has no stable minimum on the radiative tail of the MC. The DCB fit runs with no background.
 
-`src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma"]` runs the chain for each channel on the 20261006 ntuples, into `out/<channel>/<turbo|signal>/<today>/`: the truth-matched MC without a prior (`signal/<today>/truth_no_prior/`), with the sigma prior (`signal/<today>/truth/`), and data with its tail prior (`turbo/<today>/mc_prior/`). Data with no prior (`turbo/<today>/no_prior/`) and the truth-matched MC without a prior are the comparison runs. The data jobs pass `--n-max 50` (`N_MAX` in the script). The header of `run_mass_fits.sh` lists every run and fit in order.
+`src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma"]` runs the chain for each channel on the 20261006 ntuples, into `out/<channel>/<turbo|signal>/<today>/`: the truth-matched MC (`signal/<today>/truth/`) and data with its tail prior (`turbo/<today>/mc_prior/`). Data with no prior (`turbo/<today>/no_prior/`) is the comparison run. The data jobs pass `--n-max 50` (`N_MAX` in the script). The header of `run_mass_fits.sh` lists every run and fit in order.
 
 ### Fit stages
 
@@ -73,7 +70,7 @@ python src/fit/driver_mass_fit.py ntuple/lhcb/eta2mumugamma/20261006/combined_fi
 | Gaussian | c0, c1 fixed at 0 (flat background); mean, sigma, n_sig, n_bkg float | every parameter floats |
 | DCB | alphaL, nL, alphaR, nR fixed at their start values (the MC values with `--tail-prior`); mean, sigma, yields, c0, c1 float | every parameter floats |
 
-With `--truth-match`, n_bkg, c0 and c1 of the DCB stay fixed at 0 through both stages. The priors (`--sigma-prior`, `--tail-prior`) are terms of the cost in both stages. The DCB starts sigma at the Gaussian sigma of the same run (at the prior's with `--sigma-prior`).
+With `--truth-match`, n_bkg, c0 and c1 of the DCB stay fixed at 0 through both stages. The priors (sigma with `--truth-match`, tails with `--tail-prior`) are terms of the cost in both stages. The DCB starts sigma at the Gaussian sigma of the same run.
 
 ## Changing the selection
 

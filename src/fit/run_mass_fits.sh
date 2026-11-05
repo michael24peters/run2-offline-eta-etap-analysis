@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
 # Mass fits of the NTUPLE ntuples into out/<channel>/<turbo|signal>/<today>/, for each channel (both
-# by default). The data DCB fit is the end of a chain of three runs of driver_mass_fit.py, each
-# passing a prior to the next through its results JSON:
+# by default). The data DCB fit is the end of a chain of two runs of driver_mass_fit.py, the first
+# passing a prior to the second through its results JSON:
 #
-#   1. truth-matched signal MC                                  signal/<date>/truth_no_prior/
+#   1. truth-matched signal MC                                  signal/<date>/truth/
 #      a. Gaussian + Chebyshev
-#      b. DCB with no background (n_bkg, c0, c1 fixed at 0), sigma started at the sigma of 1a
-#   2. truth-matched signal MC, --sigma-prior 1a                signal/<date>/truth/
-#      a. Gaussian + Chebyshev (the same fit as 1a)
-#      b. DCB with no background, sigma under NormalConstraint(sigma of 1a, its stdev times
-#         SIGMA_PRIOR_FACTOR) and started there
-#   3. data, --tail-prior 2b                                    turbo/<date>/mc_prior/
+#      b. DCB with no background (n_bkg, c0, c1 fixed at 0), sigma under NormalConstraint(sigma of
+#         1a, its stdev times SIGMA_PRIOR_FACTOR) and started there
+#   2. data, --tail-prior 1b                                    turbo/<date>/mc_prior/
 #      a. Gaussian + Chebyshev
-#      b. DCB + Chebyshev, sigma started at the sigma of 3a, the tails alphaL, nL, alphaR, nR
-#         under NormalConstraint(tails of 2b, their covariance with stdevs times TAIL_PRIOR_FACTOR)
+#      b. DCB + Chebyshev, sigma started at the sigma of 2a, the tails alphaL, nL, alphaR, nR
+#         under NormalConstraint(tails of 1b, their covariance with stdevs times TAIL_PRIOR_FACTOR)
 #         and started there
 #
 # Every fit runs MIGRAD in two stages, each followed by HESSE; stage 2 starts from the stage-1
@@ -24,8 +21,8 @@
 #
 # with n_bkg, c0, c1 of the MC DCB fixed at 0 in both, and the priors in the cost of both.
 #
-# Comparisons, with no prior: the DCB of 1 (1b), and 4. data, Gaussian then DCB with the tails free
-# (turbo/<date>/no_prior/). The data jobs (3, 4) pass --n-max N_MAX, the upper limit of the DCB tail
+# Comparison, with no prior: 3. data, Gaussian then DCB with the tails free
+# (turbo/<date>/no_prior/). The data jobs (2, 3) pass --n-max N_MAX, the upper limit of the DCB tail
 # exponents n_L, n_R.
 #
 # Every job prints to the terminal with its lines prefixed [job]; failed jobs are listed at the end.
@@ -66,7 +63,7 @@ daughter_pids() {
     esac
 }
 
-# mass_fits CHANNEL: steps 1-4 for one channel
+# mass_fits CHANNEL: steps 1-3 for one channel
 mass_fits() {
     local channel=$1
     local data=ntuple/lhcb/$channel/$NTUPLE/combined_files.root
@@ -74,10 +71,8 @@ mass_fits() {
     local turbo=out/$channel/turbo/$DATE
     local signal=out/$channel/signal/$DATE
     run "$channel no_prior" $PY src/fit/driver_mass_fit.py $data --outdir $turbo/no_prior --n-max $N_MAX &
-    run "$channel truth_no_prior" $PY src/fit/driver_mass_fit.py $mc --outdir $signal/truth_no_prior \
-        --truth-match $(daughter_pids $channel)
     run "$channel truth" $PY src/fit/driver_mass_fit.py $mc --outdir $signal/truth \
-        --truth-match $(daughter_pids $channel) --sigma-prior $signal/truth_no_prior/results_gauss.json
+        --truth-match $(daughter_pids $channel)
     run "$channel mc_prior" $PY src/fit/driver_mass_fit.py $data --outdir $turbo/mc_prior \
         --tail-prior $signal/truth/results_dcb.json --n-max $N_MAX
     wait
