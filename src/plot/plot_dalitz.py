@@ -28,8 +28,8 @@ N_BINS = 100   # per axis
 
 
 def plot_dalitz_hist(m12s, m23s, hist_range, output, bins=N_BINS):
-    """2D histogram of (m12s, m23s) [GeV^2] over hist_range, with the eta's
-    Dalitz region, saved to output."""
+    """2D histogram of (m12s, m23s) [GeV^2] over hist_range, with the eta's Dalitz region, saved to
+    output."""
     plot_utils.apply_font()
     plt.rcParams['font.size'] = 11
     fig, ax = plt.subplots(figsize=(8, 6))

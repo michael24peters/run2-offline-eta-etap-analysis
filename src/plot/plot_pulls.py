@@ -1,9 +1,9 @@
 """
 plot_pulls.py
 
-Plot the pull distribution from a fit results JSON file, as well as a normalized
-Gaussian distribution for comparison, scaled to have the same area as the
-pull distribution. The pull is defined as:
+Plot the pull distribution from a fit results JSON file, as well as a normalized Gaussian
+distribution for comparison, scaled to have the same area as the pull distribution. The pull is
+defined as:
     pull = (y_data - y_fit) / sigma_data
 
 Usage:
@@ -61,10 +61,9 @@ nbins = 20  # Placeholder value
 # Returns the counts in each bin and the edges of the bins
 counts, edges = np.histogram(pulls, bins=nbins, range=(xmin, xmax))
 bin_width = edges[1] - edges[0]
-# Find the area under the histogram to scale the Gaussian PDF
-# Each bar's area is count * bin_width, so total histogram area is 
-# sum(counts) * bin_width. A normal gaussian PDF has area 1, so multiplying by
-# the histogram's total area exactly scales it to match.
+# Find the area under the histogram to scale the Gaussian PDF Each bar's area is count * bin_width,
+# so total histogram area is sum(counts) * bin_width. A normal gaussian PDF has area 1, so
+# multiplying by the histogram's total area exactly scales it to match.
 area = counts.sum() * bin_width
 
 fig, ax = plt.subplots(figsize=(7, 5))
@@ -91,8 +90,7 @@ ax.plot(x_gauss, y_gauss,
         linestyle='--',
         zorder=3)
 
-# Plot configuration
-# Axis labels, legend
+# Plot configuration Axis labels, legend
 ax.set_xlabel(r'Pull  $(y_{\mathrm{data}} - y_{\mathrm{fit}})\,/\,\sigma_{\mathrm{data}}$',
               fontsize=12)
 ax.set_ylabel('Pull counts')

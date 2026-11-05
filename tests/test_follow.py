@@ -1,9 +1,9 @@
 """
 Unit tests for cut_utils.follow().
 
-follow() is coarse -> fine: it re-indexes an array down to the level of an index
-branch. One source entry can be handed to many targets, so nothing is
-aggregated and the result always has the shape of the index branch.
+follow() is coarse -> fine: it re-indexes an array down to the level of an index branch. One source
+entry can be handed to many targets, so nothing is aggregated and the result always has the shape of
+the index branch.
 """
 
 import awkward as ak
@@ -46,8 +46,8 @@ def test_float_index_branch_is_cast_to_int():
 def test_indices_never_cross_an_event_boundary(reco):
     """Event 1's index 0 must pick event 1's candidate, not event 0's.
 
-    This is the whole reason follow() can be a plain `array[idx]`: awkward
-    applies a jagged index to a jagged array event by event.
+    This is the whole reason follow() can be a plain `array[idx]`: awkward applies a jagged index to
+    a jagged array event by event.
     """
     out = cut_utils.follow(reco, reco['tag_dtf_m'], 'prt_idx_mom')
     assert out[1].tolist() == [30.0, 30.0]      # not [10.0, 10.0]
@@ -90,9 +90,9 @@ def test_empty_tree():
 # --- crossing collections, not just candidate -> daughter --------------------
 
 def test_follow_works_on_any_index_branch():
-    """follow() knows nothing about "mothers" or "daughters" -- it moves a value
-    along whatever index branch it is given. Here prt_idx_gen carries a
-    generator-level mask down to the reco level.
+    """follow() knows nothing about "mothers" or "daughters" -- it moves a value along whatever
+    index branch it is given. Here prt_idx_gen carries a generator-level mask down to the reco
+    level.
     """
     tree = make_tree(
         mc_pid=[[221, -13, 13, 22]],
@@ -107,16 +107,15 @@ def test_follow_works_on_any_index_branch():
 # --- valid tests --------------------------------------------------------------
 
 def test_negative_index_fails_silently(gen):
-    """-1 means "no mother", but follow() does numpy-style indexing, so it
-    reads the LAST entry instead of raising.
+    """-1 means "no mother", but follow() does numpy-style indexing, so it reads the LAST entry
+    instead of raising.
 
-    This is asserted deliberately: the docstring promises this behaviour and
-    tells callers to use valid(). If follow() ever starts raising or masking
-    instead, this test should fail so the docs get updated with it.
+    This is asserted deliberately: the docstring promises this behaviour and tells callers to use
+    valid(). If follow() ever starts raising or masking instead, this test should fail so the docs
+    get updated with it.
 
-    So in a way, we're actually checking for the presence of an issue: follow()
-    is not a safe operation on its own, and the caller must use valid() to
-    ignore the wrapped values.
+    So in a way, we're actually checking for the presence of an issue: follow() is not a safe
+    operation on its own, and the caller must use valid() to ignore the wrapped values.
     """
     out = cut_utils.follow(gen, gen['mc_pid'], 'mc_idx_mom')
     # Entry 0 is the eta, whose mc_idx_mom is -1 -> wraps to mc_pid[-1] == 13.
@@ -132,9 +131,9 @@ def test_valid_flags_the_invalid_entries(gen):
 
 
 def test_valid_preserves_shape(gen):
-    """valid() itself never changes any shape -- it returns a mask shaped like
-    the index branch, exactly as follow() does. Only USING it as a boolean index
-    collapses anything, which is what the next three tests separate.
+    """valid() itself never changes any shape -- it returns a mask shaped like the index branch,
+    exactly as follow() does. Only USING it as a boolean index collapses anything, which is what the
+    next three tests separate.
     """
     ok = cut_utils.valid(gen, 'mc_idx_mom')
     assert ak.num(ok).tolist() == ak.num(gen['mc_idx_mom']).tolist()
@@ -143,10 +142,10 @@ def test_valid_preserves_shape(gen):
 
 
 def test_valid_as_a_boolean_index_shrinks_the_array(gen):
-    """DIAGNOSTIC USE ONLY. Indexing with valid() drops the bad entries, but the
-    result is no longer aligned with the generator particles -- 3 entries become
-    2 -- so it can no longer be ANDed against any other generator-level mask.
-    Fine for "what mother PIDs appear?", useless for building a selection.
+    """DIAGNOSTIC USE ONLY. Indexing with valid() drops the bad entries, but the result is no longer
+    aligned with the generator particles -- 3 entries become 2 -- so it can no longer be ANDed
+    against any other generator-level mask. Fine for "what mother PIDs appear?", useless for
+    building a selection.
     """
     raw = cut_utils.follow(gen, gen['mc_pid'], 'mc_idx_mom')
     ok = cut_utils.valid(gen, 'mc_idx_mom')
@@ -155,8 +154,8 @@ def test_valid_as_a_boolean_index_shrinks_the_array(gen):
 
 
 def test_valid_anded_into_a_boolean_result_keeps_shape(gen):
-    """THE PATTERN TO USE for masks. The wrapped entry is forced False and the
-    array stays generator-shaped, so it still composes with `&`.
+    """THE PATTERN TO USE for masks. The wrapped entry is forced False and the array stays
+    generator-shaped, so it still composes with `&`.
     """
     is_eta = gen['mc_pid'] == 221
     mother_is_eta = cut_utils.follow(gen, is_eta, 'mc_idx_mom')
@@ -167,9 +166,8 @@ def test_valid_anded_into_a_boolean_result_keeps_shape(gen):
 
 
 def test_valid_with_ak_where_keeps_shape_for_values(gen):
-    """THE PATTERN TO USE for value arrays, where `&` is not available. ak.where
-    substitutes a sentinel instead of dropping the entry, so position k still
-    means generator particle k.
+    """THE PATTERN TO USE for value arrays, where `&` is not available. ak.where substitutes a
+    sentinel instead of dropping the entry, so position k still means generator particle k.
     """
     raw = cut_utils.follow(gen, gen['mc_pid'], 'mc_idx_mom')
     ok = cut_utils.valid(gen, 'mc_idx_mom')
@@ -180,8 +178,8 @@ def test_valid_with_ak_where_keeps_shape_for_values(gen):
 
 
 def test_wrapped_value_is_wrong_not_merely_missing(gen):
-    """Why the guard is not optional: the unguarded entry is not a null, it is a
-    plausible-looking PID belonging to a different particle in the same event."""
+    """Why the guard is not optional: the unguarded entry is not a null, it is a plausible-looking
+    PID belonging to a different particle in the same event."""
     raw = cut_utils.follow(gen, gen['mc_pid'], 'mc_idx_mom')
     assert raw[0][0] == 13.0                        # reads mc_pid[-1], the mu-
     assert raw[0][0] in gen['mc_pid'][0].tolist()   # indistinguishable by value
@@ -195,8 +193,8 @@ def test_valid_is_all_true_when_nothing_points_nowhere(reco):
 # --- round trip with reduce() ------------------------------------------------
 
 def test_follow_then_reduce_any_recovers_the_mask(reco):
-    """follow() down and reduce(how='any') back up is the identity, provided
-    every candidate has at least one daughter."""
+    """follow() down and reduce(how='any') back up is the identity, provided every candidate has at
+    least one daughter."""
     original = ak.Array([[True, False], [True]])
     down = cut_utils.follow(reco, original, 'prt_idx_mom')
     back = cut_utils.reduce(reco, down, 'prt_idx_mom', how='any',
@@ -205,8 +203,8 @@ def test_follow_then_reduce_any_recovers_the_mask(reco):
 
 
 def test_follow_then_reduce_all_also_recovers_the_mask(reco):
-    """'all' works too here, because follow() gives every daughter of a
-    candidate the same value -- so all and any agree."""
+    """'all' works too here, because follow() gives every daughter of a candidate the same value --
+    so all and any agree."""
     original = ak.Array([[True, False], [True]])
     down = cut_utils.follow(reco, original, 'prt_idx_mom')
     back = cut_utils.reduce(reco, down, 'prt_idx_mom', how='all',
@@ -216,10 +214,9 @@ def test_follow_then_reduce_all_also_recovers_the_mask(reco):
 
 # --- every use of follow() this framework has ---------------------------------
 #
-# follow() knows nothing about "mothers" or "daughters". It moves a value down
-# an index branch: one source entry can be handed to many targets, and the
-# result always has the shape of the index branch. These are the four index
-# branches it gets pointed at in practice.
+# follow() knows nothing about "mothers" or "daughters". It moves a value down an index branch: one
+# source entry can be handed to many targets, and the result always has the shape of the index
+# branch. These are the four index branches it gets pointed at in practice.
 
 '''
 The five follow() use cases:
@@ -232,8 +229,7 @@ The five follow() use cases:
 in   [[10.0, 20.0], [30.0]]
 out  [[10.0, 10.0, 20.0, 20.0], [30.0, 30.0]]
 
-Candidate 0's value goes to daughters 0 and 1; candidate 1's to daughters 2 and
-3.
+Candidate 0's value goes to daughters 0 and 1; candidate 1's to daughters 2 and 3.
 
 --------------------------------------------------------------------------------
 
@@ -273,9 +269,9 @@ per-daughter  [[True, True, False, True], [True, True]]
 reduce all    [[True, False], [True]]          candidate 1 had a False
 follow back   [[True, True, False, False], [True, True]]
 
-Daughter 3 was True on the way up and comes back False — it's been overwritten
-by its candidate's verdict. That's the lossy step, but this is okay because the
-candidate-level verdict is what matters in this context.
+Daughter 3 was True on the way up and comes back False — it's been overwritten by its candidate's
+verdict. That's the lossy step, but this is okay because the candidate-level verdict is what matters
+in this context.
 '''
 
 def test_use_candidate_kinematics_at_the_daughter_level(reco):
@@ -304,8 +300,8 @@ def test_use_truth_pid_of_each_reco_daughter():
 
 
 def test_use_stray_flag_pushed_onto_reco_daughters(gen_with_strays):
-    """3b. mc_* -> prt_* with a MASK: "is my generator match a stray?", the
-    entry point for asking why background candidates get reconstructed."""
+    """3b. mc_* -> prt_* with a MASK: "is my generator match a stray?", the entry point for asking
+    why background candidates get reconstructed."""
     tree = ak.with_field(gen_with_strays, ak.Array([[1, 2, 4, 5]]), 'prt_idx_gen')
     signal = cut_utils.decay_mask(tree, 221, [-13, 13, 22])
     stray = ~cut_utils.valid(tree, 'mc_idx_mom') & ~signal

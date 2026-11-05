@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 # Dalitz fits of eta -> mu+ mu- gamma data from the NTUPLE ntuples into
-# out/eta2mumugamma/turbo/<today>/, for each --mass and --factor (all by
-# default), one mass after the other:
+# out/eta2mumugamma/turbo/<today>/, for each --mass and --factor (all by default), one mass after
+# the other:
 #
 #   1. with the DCB tails of TAIL_PRIOR as prior    turbo/<date>/dalitz/<mass>
 #   2. no prior                                     turbo/<date>/dalitz_no_prior/<mass>
 #
-# TAIL_PRIOR is the tag_dtf_m data DCB fit of run_mass_fits.sh; it is the prior
-# for every --mass. Both jobs pass --n-max N_MAX, the upper limit of the DCB
-# tail exponents n_L, n_R.
+# TAIL_PRIOR is the tag_dtf_m data DCB fit of run_mass_fits.sh; it is the prior for every --mass.
+# Both jobs pass --n-max N_MAX, the upper limit of the DCB tail exponents n_L, n_R.
 #
-# Every job prints to the terminal with its lines prefixed [job]; failed jobs
-# are listed at the end. Jobs start READ_PAUSE seconds apart, so that only one
-# holds a full ROOT read (~4 GB for data) at a time.
+# Every job prints to the terminal with its lines prefixed [job]; failed jobs are listed at the end.
+# Jobs start READ_PAUSE seconds apart, so that only one holds a full ROOT read (~4 GB for data) at a
+# time.
 #
 # Usage:
 #   src/fit/run_dalitz.sh [--mass "tag_dtf_m tag_m"] [--factor "none flat weighted"]

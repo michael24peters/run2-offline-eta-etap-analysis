@@ -1,13 +1,11 @@
 """
 Unit tests for cut_utils.reduce().
 
-reduce() is fine -> coarse: it aggregates values from the level of an index
-branch onto the level that index branch points into. Many sources map to one
-target, so an aggregation is required.
+reduce() is fine -> coarse: it aggregates values from the level of an index branch onto the level
+that index branch points into. Many sources map to one target, so an aggregation is required.
 
-The tests are grouped as: the five `how` modes, the identity elements, the
--1 "points nowhere" sentinel, event isolation, shape/edge cases, and round
-trips against follow().
+The tests are grouped as: the five `how` modes, the identity elements, the -1 "points nowhere"
+sentinel, event isolation, shape/edge cases, and round trips against follow().
 """
 
 import awkward as ak
@@ -21,8 +19,7 @@ from conftest import make_tree
 def test_all(reco):
     """True only where every daughter of the candidate is True.
 
-    cand 0 has daughters [T, T] -> True
-    cand 1 has daughters [F, T] -> False
+    cand 0 has daughters [T, T] -> True cand 1 has daughters [F, T] -> False
     event 1's cand has  [T, F]  -> False
     """
     vals = ak.Array([[True, True, False, True], [True, False]])
@@ -33,9 +30,8 @@ def test_all(reco):
 
 def test_any(reco):
     """True where any daughter of the candidate is True.
-    
-    cand 0 has daughters [T, T] -> True
-    cand 1 has daughters [F, T] -> True
+
+    cand 0 has daughters [T, T] -> True cand 1 has daughters [F, T] -> True
     event 1's cand has  [F, F]  -> False
 
     """
@@ -77,9 +73,9 @@ def test_max(reco):
 
 
 def test_min_equals_max_iff_daughters_agree(reco):
-    """The min==max idiom used to check "do all daughters share one value?" --
-    this is what a truth-matching cut uses to check every daughter's matched
-    generator particle points at the same mother."""
+    """The min==max idiom used to check "do all daughters share one value?" -- this is what a
+    truth-matching cut uses to check every daughter's matched generator particle points at the same
+    mother."""
     agreeing = ak.Array([[4.0, 4.0, 6.0, 6.0], [8.0, 8.0]])
     disagreeing = ak.Array([[4.0, 4.0, 6.0, 7.0], [8.0, 9.0]])
     for vals, want in [(agreeing, [[True, True], [True]]),
@@ -99,10 +95,9 @@ def test_invalid_how_raises(reco):
 
 # --- identity elements -------------------------------------------------------
 #
-# A target that nothing points at reduces to the identity of its aggregation.
-# This is load-bearing: it is what lets a candidate with no muon daughters pass
-# a muon cut, and it is why how='all' is the wrong choice when
-# propagating a selection upward.
+# A target that nothing points at reduces to the identity of its aggregation. This is load-bearing:
+# it is what lets a candidate with no muon daughters pass a muon cut, and it is why how='all' is the
+# wrong choice when propagating a selection upward.
 
 @pytest.mark.parametrize('how, identity', [
     ('all', True),
@@ -114,10 +109,9 @@ def test_invalid_how_raises(reco):
 def test_unreferenced_target_gets_the_identity(how, identity):
     """A generator particle with no children lands on the identity.
 
-    eta -> mu+ mu-: the eta (index 0) collects both muons, but the muons
-    themselves are final state and collect nothing. That is the norm on the
-    generator side -- most mc_* entries have no children at all -- which is why
-    the identity is worth pinning for every aggregation.
+    eta -> mu+ mu-: the eta (index 0) collects both muons, but the muons themselves are final state
+    and collect nothing. That is the norm on the generator side -- most mc_* entries have no
+    children at all -- which is why the identity is worth pinning for every aggregation.
     """
     tree = make_tree(mc_pid=[[221, -13, 13]], mc_idx_mom=[[-1, 0, 0]])
     vals = (ak.Array([[True, True, True]]) if how in ('all', 'any')
@@ -130,11 +124,10 @@ def test_unreferenced_target_gets_the_identity(how, identity):
 def test_all_identity_is_why_any_is_right_for_propagating_up():
     """Why how='any' is the right choice for propagating selections up.
 
-    When pushing a reco selection up onto generator particles: one reco daughter
-    matched generator particle 1. With how='all' the three generator particles
-    nothing points at come back True as well, because an empty all() is True --
-    so the selection appears to cover the whole record. how='any' reports only
-    the particle that was really matched.
+    When pushing a reco selection up onto generator particles: one reco daughter matched generator
+    particle 1. With how='all' the three generator particles nothing points at come back True as
+    well, because an empty all() is True -- so the selection appears to cover the whole record.
+    how='any' reports only the particle that was really matched.
     """
     tree = make_tree(mc_pid=[[221, -13, 13, 22]], prt_idx_gen=[[1]])
     selected = ak.Array([[True]])
@@ -166,8 +159,8 @@ def test_sentinel_does_not_raise(gen, how):
     ('sum', [[True, False, False], [True, False, False]], 'and'),
 ])
 def test_guarding_with_valid_is_now_a_no_op(gen, how, vals, guarded):
-    """reduce() drops non-pointing entries itself, so ANDing or ORing valid()
-    in beforehand changes nothing. Both spellings must agree."""
+    """reduce() drops non-pointing entries itself, so ANDing or ORing valid() in beforehand changes
+    nothing. Both spellings must agree."""
     vals = ak.Array(vals)
     ok = cut_utils.valid(gen, 'mc_idx_mom')
     guard = (vals | ~ok) if guarded == 'or' else (vals & ok)
@@ -178,11 +171,10 @@ def test_guarding_with_valid_is_now_a_no_op(gen, how, vals, guarded):
 
 
 def test_sentinel_does_not_leak_into_the_previous_event(gen):
-    """The offset that makes ids globally unique is added per event. Event 1's -1
-    plus its offset of 3 becomes 2 -- a perfectly valid id pointing at event 0's
-    third particle. So the sentinel MUST be filtered on the local index, before
-    the offset is added. Filtering afterwards on `ids >= 0` catches event 0's -1
-    but not event 1's, and event 1's failure gets written into event 0.
+    """The offset that makes ids globally unique is added per event. Event 1's -1 plus its offset of
+    3 becomes 2 -- a perfectly valid id pointing at event 0's third particle. So the sentinel MUST
+    be filtered on the local index, before the offset is added. Filtering afterwards on `ids >= 0`
+    catches event 0's -1 but not event 1's, and event 1's failure gets written into event 0.
 
     Here only event 1's eta fails. Event 0 must be untouched.
     """
@@ -203,8 +195,8 @@ def test_sentinel_entries_do_not_contribute_to_sums(gen):
 
 
 def test_all_sentinels_reduces_to_all_identity():
-    """An index branch that points nowhere at all leaves every target at the
-    identity rather than raising."""
+    """An index branch that points nowhere at all leaves every target at the identity rather than
+    raising."""
     tree = make_tree(mc_pid=[[221, 22]], mc_idx_mom=[[-1, -1]])
     vals = ak.Array([[False, False]])
     out = cut_utils.reduce(tree, vals, 'mc_idx_mom', how='all',
@@ -242,8 +234,8 @@ def test_result_is_shaped_like_target_ref(reco):
 
 
 def test_target_ref_can_be_a_different_collection():
-    """prt_idx_gen maps reco daughters onto generator particles, so the result
-    is gen-shaped even though the input was reco-shaped."""
+    """prt_idx_gen maps reco daughters onto generator particles, so the result is gen-shaped even
+    though the input was reco-shaped."""
     tree = make_tree(
         mc_pid=[[221, -13, 13, 22]],       # 4 generator particles
         prt_idx_gen=[[1, 2, 3]],           # 3 reco daughters
@@ -288,8 +280,8 @@ def test_float_index_branch_is_cast_not_rounded():
 # --- round trips -------------------------------------------------------------
 
 def test_reduce_then_follow_broadcasts_the_verdict_back(reco):
-    """Not an identity -- reduce() loses per-daughter detail by construction --
-    but every daughter must come back with its own candidate's verdict."""
+    """Not an identity -- reduce() loses per-daughter detail by construction -- but every daughter
+    must come back with its own candidate's verdict."""
     vals = ak.Array([[True, True, False, True], [True, False]])
     up = cut_utils.reduce(reco, vals, 'prt_idx_mom', how='all',
                           target_ref='tag_dtf_m')
@@ -306,10 +298,9 @@ def test_sum_of_ones_equals_daughter_multiplicity(reco):
 
 # --- every use of reduce() this framework has ---------------------------------
 #
-# reduce() moves a value UP an index branch, collapsing many sources onto one
-# target. The aggregation is the whole vocabulary: 'all' for requirements,
-# 'any' for propagating a selection, 'sum' for counting, 'min'/'max' for
-# extrema. These are the calls the analysis actually makes.
+# reduce() moves a value UP an index branch, collapsing many sources onto one target. The
+# aggregation is the whole vocabulary: 'all' for requirements, 'any' for propagating a selection,
+# 'sum' for counting, 'min'/'max' for extrema. These are the calls the analysis actually makes.
 
 def test_use_pid_cut_every_muon_must_pass(reco):
     """1. 'all' : the pnn_mu cut. "passes OR isn't a muon" folded in, so a
@@ -351,9 +342,9 @@ def test_use_daughter_multiplicity_per_candidate(reco):
 
 def test_use_truth_match_daughters_share_one_mc_mother():
     """5./6. 'min'/'max' : do all of a candidate's daughters share one MC
-    mother? follow() re-indexes mc_idx_mom (gen-particle level) down to
-    daughter level via prt_idx_gen, then min == max across each candidate's
-    daughters checks agreement -- the core of an MC truth-match cut."""
+    mother? follow() re-indexes mc_idx_mom (gen-particle level) down to daughter level via
+    prt_idx_gen, then min == max across each candidate's daughters checks agreement -- the core of
+    an MC truth-match cut."""
     tree = make_tree(
         tag_dtf_m=[[550.0, 549.0]],
         prt_idx_mom=[[0, 0, 1, 1]],
@@ -440,10 +431,10 @@ def test_use_count_daughters_of_a_generator_mother():
 
 # --- identifying a decay by counting its daughters ----------------------------
 #
-# The pattern decay_mask() is built from, spelled out one reduce at a time. A
-# mother is the decay you want when every required PID appears the right number
-# of times AND the total daughter count matches -- the second check is what
-# rejects a mother carrying an extra daughter on top of the ones you asked for.
+# The pattern decay_mask() is built from, spelled out one reduce at a time. A mother is the decay
+# you want when every required PID appears the right number of times AND the total daughter count
+# matches -- the second check is what rejects a mother carrying an extra daughter on top of the ones
+# you asked for.
 
 @pytest.fixture
 def three_decays():
@@ -489,8 +480,8 @@ def test_count_photon_daughters(three_decays):
 
 
 def test_count_total_daughters(three_decays):
-    """Reducing a constant True counts children regardless of PID. The
-    motherless mothers contribute nothing to anyone, so they count 0."""
+    """Reducing a constant True counts children regardless of PID. The motherless mothers contribute
+    nothing to anyone, so they count 0."""
     ones = ak.ones_like(three_decays['mc_pid'], dtype=bool)
     n = cut_utils.reduce(three_decays, ones, 'mc_idx_mom', how='sum',
                          target_ref='mc_pid')
@@ -501,8 +492,8 @@ def test_count_total_daughters(three_decays):
 
 
 def test_species_counts_alone_do_not_identify_the_decay(three_decays):
-    """Why the total is needed: mother 7 has exactly one mu+ and one mu- and at
-    least one gamma, so PID counts alone would wrongly accept it."""
+    """Why the total is needed: mother 7 has exactly one mu+ and one mu- and at least one gamma, so
+    PID counts alone would wrongly accept it."""
     right_species = ((n_daughters_of_pid(three_decays, -13) == 1)
                      & (n_daughters_of_pid(three_decays, 13) == 1)
                      & (n_daughters_of_pid(three_decays, 22) >= 1))
@@ -511,8 +502,8 @@ def test_species_counts_alone_do_not_identify_the_decay(three_decays):
 
 
 def test_species_counts_plus_total_identify_the_decay(three_decays):
-    """Adding the total count rejects the impostor, and the whole thing is
-    exactly what decay_mask() does internally."""
+    """Adding the total count rejects the impostor, and the whole thing is exactly what decay_mask()
+    does internally."""
     ones = ak.ones_like(three_decays['mc_pid'], dtype=bool)
     total = cut_utils.reduce(three_decays, ones, 'mc_idx_mom', how='sum',
                              target_ref='mc_pid')

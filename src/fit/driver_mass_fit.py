@@ -7,37 +7,30 @@ Gaussian and DCB + Chebyshev mass fits of one ROOT file:
               → selection.json, results_gauss.json, gauss_mass_fit.png,
                 results_dcb.json, dcb_mass_fit.png
 
-This script owns everything about the input: which file, which branches, which
-selection. fit_gauss() and fit_dcb() downstream see only a numpy array of
-masses.
+This script owns everything about the input: which file, which branches, which selection.
+fit_gauss() and fit_dcb() downstream see only a numpy array of masses.
 
 One candidate per event is picked at random among those that pass the cuts
 (cut_utils.random_candidate_mask, seed SEED).
 
---truth-match PID... (signal MC only) keeps the candidates whose every daughter
-matches eta -> PIDs (bkg_utils.signal_candidate_mask). It is the first cut,
-before TOS, pnn_mu and the candidate pick. The DCB fit runs with n_bkg fixed to
-0 and the background shape at its init values; the Gaussian fit keeps its
-background floating. Its results_dcb.json is the --tail-prior of the data fit.
-The PIDs are -13 13 (eta -> mu+ mu-), -13 13 22 (eta -> mu+ mu- gamma) or
--13 -13 13 13 (eta -> 4mu).
+--truth-match PID... (signal MC only) keeps the candidates whose every daughter matches eta -> PIDs
+(bkg_utils.signal_candidate_mask). It is the first cut, before TOS, pnn_mu and the candidate pick.
+The DCB fit runs with n_bkg fixed to 0 and the background shape at its init values; the Gaussian fit
+keeps its background floating. Its results_dcb.json is the --tail-prior of the data fit. The PIDs
+are -13 13 (eta -> mu+ mu-), -13 13 22 (eta -> mu+ mu- gamma) or -13 -13 13 13 (eta -> 4mu).
 
-An input path with an eta2mumumumu segment (eta -> 4mu) takes TOS_LINES_4MU in place
-of TOS_LINES.
+An input path with an eta2mumumumu segment (eta -> 4mu) takes TOS_LINES_4MU in place of TOS_LINES.
 
---sigma-prior RESULTS_JSON (with --truth-match) takes the results_gauss.json of
-an earlier --truth-match run and adds
-NormalConstraint(sigma, Gaussian sigma, Gaussian variance * SIGMA_PRIOR_FACTOR**2)
-to the DCB fit.
+--sigma-prior RESULTS_JSON (with --truth-match) takes the results_gauss.json of an earlier
+--truth-match run and adds NormalConstraint(sigma, Gaussian sigma, Gaussian variance *
+SIGMA_PRIOR_FACTOR**2) to the DCB fit.
 
---tail-prior RESULTS_JSON fixes the DCB tails at the MC values with
-TAIL_PRIOR_FACTOR = 0; otherwise it floats them under
-NormalConstraint(TAIL_PARAMS, MC values, MC covariance * TAIL_PRIOR_FACTOR**2),
+--tail-prior RESULTS_JSON fixes the DCB tails at the MC values with TAIL_PRIOR_FACTOR = 0; otherwise
+it floats them under NormalConstraint(TAIL_PARAMS, MC values, MC covariance * TAIL_PRIOR_FACTOR**2),
 starting from the MC values.
 
 A single power-law tail cannot describe both the near and deep tails of MC:
-nL/nR are a compromise that over-predicts the deepest tail (~17% at 17-23
-sigma). See README.md.
+nL/nR are a compromise that over-predicts the deepest tail (~17% at 17-23 sigma). See README.md.
 
 Usage:
     python src/fit/driver_mass_fit.py INFILE --outdir OUTDIR
@@ -75,8 +68,8 @@ MUON_PID        = 13               # |pid| the muon cuts apply to
 MOTHER_PID      = 221              # eta, for --truth-match
 TRUTH_BRANCHES  = ['prt_idx_gen', 'mc_idx_mom', 'mc_pid']   # read with --truth-match
 
-# Muon requirements of the dark-photon ananote (LHCb-ANA-2017-027, Tables 1 and 3), with p at
-# the 2018 Hlt1DiMuonNoIP threshold. Every muon daughter must pass each; a non-muon daughter passes.
+# Muon requirements of the dark-photon ananote (LHCb-ANA-2017-027, Tables 1 and 3), with p at the
+# 2018 Hlt1DiMuonNoIP threshold. Every muon daughter must pass each; a non-muon daughter passes.
 MU_PT_MIN       = 1000.0           # pT [MeV]
 MU_P_MIN        = 10000.0          # p [MeV]
 MU_ETA_RANGE    = (2.0, 4.5)       # pseudorapidity
@@ -152,8 +145,8 @@ for reason in ('dropped_no_candidates', 'dropped_idx_out_of_range',
         print(f'[INFO]   {reason}: {drop_report[reason]}', file=sys.stderr)
 
 # --- Select ------------------------------------------------------------------
-# Every cut is a per-candidate boolean mask shaped like MASS_BRANCH, so they
-# combine with a plain `&` and adding one is a single line.
+# Every cut is a per-candidate boolean mask shaped like MASS_BRANCH, so they combine with a plain
+# `&` and adding one is a single line.
 
 keep = ak.ones_like(tree[MASS_BRANCH], dtype=bool)
 cutflow = [('all candidates', int(ak.sum(ak.num(keep))))]
@@ -240,16 +233,15 @@ print(f'[DONE] JSON saved to: {selection_path}', file=sys.stderr)
 #   3. turbo, --tail-prior            Gaussian, then DCB + Chebyshev, tails under a prior
 #      <2>/results_dcb.json                   from the DCB tails of 2
 #
-# Every run fits the Gaussian first and starts the DCB sigma from its sigma (or from the
-# prior's). fit_gauss() and fit_dcb() each run two MIGRAD stages: stage 1 with the background
-# (Gaussian) or the tails (DCB) fixed at their init values, stage 2 with every parameter
-# floating except fixed_params.
+# Every run fits the Gaussian first and starts the DCB sigma from its sigma (or from the prior's).
+# fit_gauss() and fit_dcb() each run two MIGRAD stages: stage 1 with the background (Gaussian) or
+# the tails (DCB) fixed at their init values, stage 2 with every parameter floating except
+# fixed_params.
 
 fits = []   # (name, result, stats-box builder) of each fit, written below
 
-# The Gaussian fit's sigma seeds the DCB. Truth-matched MC: the DCB has no
-# background, n_bkg fixed to 0 and the background shape parameters at their
-# init values (fit_utils.BKG_INIT).
+# The Gaussian fit's sigma seeds the DCB. Truth-matched MC: the DCB has no background, n_bkg fixed
+# to 0 and the background shape parameters at their init values (fit_utils.BKG_INIT).
 gauss_result, m_gauss = fit_gauss(
     masses, xmin=args.xmin, xmax=args.xmax, nbins=args.nbins,
     mean_init=args.mean_init, sigma_init=args.sigma_init)
@@ -260,8 +252,8 @@ fixed_params = None
 if args.truth_match:
     fixed_params = {'n_bkg': 0.0, **fit_utils.BKG_INIT}
 
-# DCB sigma: held near the Gaussian sigma of a --truth-match fit, with that fit's
-# stdev widened by SIGMA_PRIOR_FACTOR.
+# DCB sigma: held near the Gaussian sigma of a --truth-match fit, with that fit's stdev widened by
+# SIGMA_PRIOR_FACTOR.
 sigma_prior = None
 if args.sigma_prior:
     with open(args.sigma_prior) as f:
@@ -273,8 +265,8 @@ if args.sigma_prior:
           f"{gauss_fit['parameters']['sigma']['value']:.4f}"
           f"±{gauss_fit['parameters']['sigma']['error']:.4f}", file=sys.stderr)
 
-# DCB tails: fixed at the MC values (TAIL_PRIOR_FACTOR 0), from the MC tail
-# prior widened by TAIL_PRIOR_FACTOR, or free.
+# DCB tails: fixed at the MC values (TAIL_PRIOR_FACTOR 0), from the MC tail prior widened by
+# TAIL_PRIOR_FACTOR, or free.
 tail_init = (args.alphaL_init, args.nL_init, args.alphaR_init, args.nR_init)
 tail_prior = None
 if args.tail_prior:

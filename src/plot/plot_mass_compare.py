@@ -1,7 +1,6 @@
 """
-Script to compare "all candidates" vs "random candidate per event" mass plots on
-one overlaid plot. The random candidate is picked by
-cut_utils.random_candidate_mask().
+Script to compare "all candidates" vs "random candidate per event" mass plots on one overlaid plot.
+The random candidate is picked by cut_utils.random_candidate_mask().
 
 Usage:
     python plot_mass_compare.py input.root [output.png] [--full-range]
@@ -14,8 +13,7 @@ import sys
 import awkward as ak
 import matplotlib.pyplot as plt
 
-# Add the "plot" and "fit" directories to the Python path so we can import the
-# project modules.
+# Add the "plot" and "fit" directories to the Python path so we can import the project modules.
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 sys.path.insert(0, os.path.join(_here, '..', 'plot'))
@@ -41,9 +39,9 @@ tree = cut_utils.read_branches(args.input, ['tag_dtf_m'])
 # All candidates, flattened
 tag_m_all = ak.to_numpy(ak.flatten(tree['tag_dtf_m']))
 
-# Random candidate per event. This script applies no cuts -- it exists to compare
-# "all candidates" against "random candidate" -- so every candidate is eligible
-# to be picked. Events with no candidates contribute nothing.
+# Random candidate per event. This script applies no cuts -- it exists to compare "all candidates"
+# against "random candidate" -- so every candidate is eligible to be picked. Events with no
+# candidates contribute nothing.
 eligible = ak.ones_like(tree['tag_dtf_m'], dtype=bool)
 picked = cut_utils.random_candidate_mask(eligible, seed=0)
 tag_m_random = cut_utils.values(tree, 'tag_dtf_m', picked)
@@ -65,8 +63,8 @@ bins = 200
 if args.full_range: hist_range = (400, 1200)
 else: hist_range = (400, 700)
 
-# Each sample: low-opacity fill plus full-opacity outline, so the overlap of
-# the two fills stays readable.
+# Each sample: low-opacity fill plus full-opacity outline, so the overlap of the two fills stays
+# readable.
 for values, color, label in [(tag_m_all, C['pull'], 'All candidates'),
                              (tag_m_random, C['fit'], 'Random candidate')]:
     ax.hist(values, bins=bins, range=hist_range, histtype='stepfilled',

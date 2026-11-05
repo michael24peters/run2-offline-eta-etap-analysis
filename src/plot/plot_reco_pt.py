@@ -1,8 +1,8 @@
 """
 plot_reco_pt.py
 
-Reconstructed transverse momentum (pT) for the mu+, mu-, and gamma daughters,
-from a signal eta -> mu mu gamma ROOT ntuple.
+Reconstructed transverse momentum (pT) for the mu+, mu-, and gamma daughters, from a signal eta ->
+mu mu gamma ROOT ntuple.
 
 Usage:
     python plot_reco_pt.py input.root [output_dir]

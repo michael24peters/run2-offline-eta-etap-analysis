@@ -2,8 +2,8 @@
 Unit tests for cut_utils.tos_mask().
 
 TOS means the candidate is TOS on at least one line at every trigger level:
-AND across levels, OR within a level. A line that was never evaluated in an
-event is stored as an empty list and reads as "did not fire".
+AND across levels, OR within a level. A line that was never evaluated in an event is stored as an
+empty list and reads as "did not fire".
 """
 
 import awkward as ak
@@ -20,8 +20,8 @@ LEVELS = {
 
 
 def tree_with(**overrides):
-    """One event, one candidate, TOS on the first line of every level. Each
-    test changes only the branches it is about."""
+    """One event, one candidate, TOS on the first line of every level. Each test changes only the
+    branches it is about."""
     fields = dict(tag_dtf_m=[[550.0]],
                   tag_l0_tos0=[[1.0]], tag_l0_tos1=[[0.0]],
                   tag_hlt1_tos0=[[1.0]], tag_hlt1_tos1=[[0.0]],
@@ -77,8 +77,8 @@ def test_per_candidate_within_an_event():
 # --- absent lines --------------------------------------------------------------
 
 def test_absent_line_reads_as_not_fired():
-    """An empty list means the line was not evaluated; the other line of the
-    level still decides it, and the mask keeps candidate shape."""
+    """An empty list means the line was not evaluated; the other line of the level still decides it,
+    and the mask keeps candidate shape."""
     tree = make_tree(tag_dtf_m=[[550.0, 551.0], [552.0]],
                      tag_l0_tos0=[[1.0, 1.0], [1.0]], tag_l0_tos1=[[0.0, 0.0], [0.0]],
                      tag_hlt1_tos0=[[1.0, 1.0], [1.0]], tag_hlt1_tos1=[[0.0, 0.0], [0.0]],
@@ -110,8 +110,8 @@ def test_report_counts_per_line_and_cumulative():
 
 
 def test_base_restricts_the_mask_and_the_report():
-    """Only the candidates in `base` count: the mask is False elsewhere and the
-    per-line and cumulative counts start from `base`."""
+    """Only the candidates in `base` count: the mask is False elsewhere and the per-line and
+    cumulative counts start from `base`."""
     tree = make_tree(tag_dtf_m=[[550.0, 551.0, 552.0]],
                      tag_l0_tos0=[[1.0, 1.0, 1.0]], tag_l0_tos1=[[0.0, 0.0, 0.0]],
                      tag_hlt1_tos0=[[1.0, 1.0, 0.0]], tag_hlt1_tos1=[[0.0, 0.0, 0.0]],

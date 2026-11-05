@@ -1,18 +1,16 @@
 """
 bkg.py
 
-Script to analyze background for eta -> mu+ mu- (gamma). Requires MC generator
-level information to classify candidates as signal or background. Uses uproot
-for ROOT I/O (no PyROOT dependency).
+Script to analyze background for eta -> mu+ mu- (gamma). Requires MC generator level information to
+classify candidates as signal or background. Uses uproot for ROOT I/O (no PyROOT dependency).
 
 Usage:
     python bkg.py input.root [--outfile out/output.txt] [--verbose]
                   [--dtrs 2] [--log] [--debug] [--pnnmu_cut 0.5]
 """
 
-# TODO: Remove log file option and just log to console, which is what the rest
-# of this project does. May be a future feature to log to file, but not needed
-# for now.
+# TODO: Remove log file option and just log to console, which is what the rest of this project does.
+# May be a future feature to log to file, but not needed for now.
 
 from __future__ import annotations
 
@@ -40,8 +38,8 @@ def parse_args():
                         help='Enable verbose output')
     parser.add_argument('--pnnmu_cut', type=float, default=None,
                         help='PROBNNmu cut value applied to input file')
-    # Store number of daughters per candidate, 2 for eta -> mu+ mu-, 3 for 
-    # eta -> mu+ mu- gamma, etc.
+    # Store number of daughters per candidate, 2 for eta -> mu+ mu-, 3 for eta -> mu+ mu- gamma,
+    # etc.
     parser.add_argument('--dtrs', action='store', default=2, type=int,
                         help='Number of daughters per candidate (default: 2)')
     parser.add_argument('--log', default=False, action='store_true',
@@ -110,13 +108,12 @@ class Analytics:
 def classify_candidate(entryIdx, i, prt_pid, prt_idx_gen, prt_idx_mom, mc_pid, mc_idx_mom,
                        probnn_mu, args):
     """
-    For a single candidate, classify as signal or background and determine error
-    type if background. Returns a Candidate object with all relevant info for
-    analytics.
+    For a single candidate, classify as signal or background and determine error type if background.
+    Returns a Candidate object with all relevant info for analytics.
     """
-    # NOTE: can only handle one gen-level eta candidate per event, improve
-    # later if needed, or just select the first one and ignore the others.
-    # If so, then this check is needed to prevent out-of-bounds errors.
+    # NOTE: can only handle one gen-level eta candidate per event, improve later if needed, or just
+    # select the first one and ignore the others. If so, then this check is needed to prevent
+    # out-of-bounds errors.
     #
     # Define j0 and j1 depending on number of daughters per candidate (ndtrs)
     ndtrs = args.dtrs
@@ -209,8 +206,7 @@ def classify_candidate(entryIdx, i, prt_pid, prt_idx_gen, prt_idx_mom, mc_pid, m
                 err_type=err_type))
             logging.warning(f'Event {entryIdx}, Candidate {i} has incomplete daughter info.')
 
-    # Return Candidate object with all reco-to-gen matching and background
-    # classification
+    # Return Candidate object with all reco-to-gen matching and background classification
     return Candidate(is_sig=is_signal,
                      evt=entryIdx,
                      can_idx=i,
@@ -223,14 +219,12 @@ def classify_candidate(entryIdx, i, prt_pid, prt_idx_gen, prt_idx_mom, mc_pid, m
 
 def run_event_loop(args):
     """
-    Loop over events in the input ROOT file, classify candidates as signal or
-    background, determine error types for background candidates, and return as
-    a list of Candidate objects for analytics.
+    Loop over events in the input ROOT file, classify candidates as signal or background, determine
+    error types for background candidates, and return as a list of Candidate objects for analytics.
 
-    All branches are read once via a single bulk uproot call, then converted
-    to plain Python lists -- classify_candidate's per-candidate branching
-    logic stays a Python loop either way, so this only replaces PyROOT's
-    per-entry tree.GetEntry() calls with pre-loaded in-memory data.
+    All branches are read once via a single bulk uproot call, then converted to plain Python
+    lists -- classify_candidate's per-candidate branching logic stays a Python loop either way, so
+    this only replaces PyROOT's per-entry tree.GetEntry() calls with pre-loaded in-memory data.
     """
     with uproot.open(args.infile) as f:
         branches = f['tree'].arrays(
@@ -288,10 +282,9 @@ def run_event_loop(args):
 
 def get_analytics(candidates: list[Candidate]) -> Analytics:
     """
-    Get analytics from list of Candidate objects, including counts, error rates,
-    and list of PID mismatches ranked by frequency for each particle type.
-    Returns an Analytics dataclass object containing all relevant info for text
-    and JSON output.
+    Get analytics from list of Candidate objects, including counts, error rates, and list of PID
+    mismatches ranked by frequency for each particle type.
+    Returns an Analytics dataclass object containing all relevant info for text and JSON output.
     """
     # List of all error types
     ERROR_TYPES = list(ErrorType)
@@ -315,11 +308,10 @@ def get_analytics(candidates: list[Candidate]) -> Analytics:
         for dtr in can.dtrs:
             # Skip signal, add background
             if dtr.err_type is None: continue
-            # TODO: Doesn't this handle everything except dimuon errors? Might
-            # be able to simplify this.
+            # TODO: Doesn't this handle everything except dimuon errors? Might be able to simplify
+            # this.
             err_counters[dtr.err_type] += 1
-            # Append to mismatch lists for pid frequency tables
-            # PID mismatch errors
+            # Append to mismatch lists for pid frequency tables PID mismatch errors
             if dtr.err_type == ErrorType.MUP_PID_MISMATCH:
                 mup_mismatches.append(dtr.mc_pid)
                 if not can.has_dimu_mismatch:
@@ -404,10 +396,10 @@ def format_pid_freq_table(label, rows: list[tuple[int, int]]) -> str:
 
 def format_text(result: Analytics, verbose: bool, candidates: list[Candidate]) -> str:
     """
-    Return a formatted string of background analysis results, including counts,
-    error rates, and list of PID mismatches ranked by frequency for each
-    particle type. If verbose=True, also include candidate-level information and
-    error log. Designed for printing to console or writing to text file.
+    Return a formatted string of background analysis results, including counts, error rates, and
+    list of PID mismatches ranked by frequency for each particle type. If verbose=True, also include
+    candidate-level information and error log. Designed for printing to console or writing to text
+    file.
     """
     # Header
     W = 48
@@ -465,10 +457,9 @@ def format_text(result: Analytics, verbose: bool, candidates: list[Candidate]) -
 
 def format_json(result: Analytics, verbose: bool, candidates: list[Candidate]) -> dict:
     """
-    Return a formatted JSON dictionary of background analysis results, including
-    counts, error rates, and list of PID mismatches ranked by frequency for each
-    particle type. If verbose=True, also include candidate-level information and
-    error log.
+    Return a formatted JSON dictionary of background analysis results, including counts, error
+    rates, and list of PID mismatches ranked by frequency for each particle type. If verbose=True,
+    also include candidate-level information and error log.
     """
     out = {
         'total_candidates': result.ncan,
@@ -512,8 +503,7 @@ def main():
     args = parse_args()
     # Set up logging
     level = logging.DEBUG if args.debug else logging.INFO
-    # Set basic logging configuration to log to console with specified level and
-    # format
+    # Set basic logging configuration to log to console with specified level and format
     logging.basicConfig(
         level=level,
         format='%(asctime)s [%(levelname)s] %(message)s',
@@ -524,22 +514,20 @@ def main():
             level=level,
             format='%(asctime)s [%(levelname)s] %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S',
-            # Strip any file type extensions before adding .log to avoid double
-            # extensions. If no extension, just add .log to the end.
+            # Strip any file type extensions before adding .log to avoid double extensions. If no
+            # extension, just add .log to the end.
             filename=os.path.splitext(args.outfile)[0] + '.log',
             filemode='w'
         )
     # Also print to stderr
     logging.getLogger().addHandler(logging.StreamHandler())
 
-    # Set up IO
-    # Leading directories for output file prefix created, if any
-    # Strip any file extensions if present
+    # Set up IO Leading directories for output file prefix created, if any Strip any file extensions
+    # if present
     if args.outfile.endswith('.txt') or args.outfile.endswith('.json'):
         args.outfile = os.path.splitext(args.outfile)[0]
-    # Create leading directories, not including the file name itself (which 
-    # currently does not have an extension, but will be added later for text and
-    # JSON output)
+    # Create leading directories, not including the file name itself (which currently does not have
+    # an extension, but will be added later for text and JSON output)
     os.makedirs(os.path.dirname(args.outfile), exist_ok=True)
     if args.pnnmu_cut is not None:
         logging.info(f'Applying PROBNNmu cut: {args.pnnmu_cut}')

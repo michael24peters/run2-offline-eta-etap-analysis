@@ -1,10 +1,8 @@
 """
-Unit tests for the Dalitz phase-space factor: kinematics.m123_limits /
-kinematics.m12_limits / kinematics.phase_space_factor, the Dalitz-decay factor
-kinematics.dalitz_factor, and the
-phase-space-weighted shapes in fit_utils (weighted_dcb_cdf,
-weighted_cheb_cdf/pdf, make_dcb_cost(signal_factor_grid=, bkg_factor_grid=)). Toy data
-only, fixed RNG seeds.
+Unit tests for the Dalitz phase-space factor: kinematics.m123_limits / kinematics.m12_limits /
+kinematics.phase_space_factor, the Dalitz-decay factor kinematics.dalitz_factor, and the
+phase-space-weighted shapes in fit_utils (weighted_dcb_cdf, weighted_cheb_cdf/pdf,
+make_dcb_cost(signal_factor_grid=, bkg_factor_grid=)). Toy data only, fixed RNG seeds.
 """
 
 import os
@@ -26,9 +24,9 @@ META = kinematics.M_ETA / 1000.0
 
 
 def toy_decays(rng, n, M):
-    """gamma mu+ mu- four-vectors (GeV) for systems of mass M (GeV, array),
-    built in the mu mu rest frame from a random dimuon mass and a random
-    muon direction -- independent of the closed-form limits under test."""
+    """gamma mu+ mu- four-vectors (GeV) for systems of mass M (GeV, array), built in the mu mu rest
+    frame from a random dimuon mass and a random muon direction -- independent of the closed-form
+    limits under test."""
     m23 = rng.uniform(2 * MMU + 1e-4, M - 1e-4)
     q = np.sqrt(m23**2 / 4 - MMU**2)                    # muon momentum
     k = (M**2 - m23**2) / (2 * m23)                     # photon energy
@@ -73,8 +71,8 @@ def test_m12_limits_contain_the_true_m12():
 
 
 def test_phase_space_factor_matches_uniform_sampling():
-    """The semi-analytic factor equals the Monte Carlo recipe: sample the bin
-    uniformly, count how often M is inside m123_limits."""
+    """The semi-analytic factor equals the Monte Carlo recipe: sample the bin uniformly, count how
+    often M is inside m123_limits."""
     rng = np.random.default_rng(2)
     M = np.linspace(XMIN, XMAX, 27)
     for m12_range, m23_range in [((0.015, 0.030), (0.2879, 0.3100)),
@@ -95,17 +93,16 @@ def test_phase_space_factor_bounds():
     # Bin sits entirely outside the eta's Dalitz region...
     assert kinematics.phase_space_factor([kinematics.M_ETA], (0.015, 0.030),
                                          (0.0886, 0.1107))[0] == 0.0
-    # ...and a bin deep inside is fully reachable near the eta mass. (Not
-    # across the whole 420-680 window: at high M the low-m12 corner of most
-    # bins becomes unreachable too.)
+    # ...and a bin deep inside is fully reachable near the eta mass. (Not across the whole 420-680
+    # window: at high M the low-m12 corner of most bins becomes unreachable too.)
     f_in = kinematics.phase_space_factor(np.linspace(530, 565, 20),
                                          (0.090, 0.105), (0.1107, 0.1329))
     assert np.allclose(f_in, 1.0)
 
 
 def dalitz_weight(m12, m23):
-    """eta -> gamma mu+ mu- matrix element at the eta mass for m12 =
-    m^2(gamma mu+), m23 = q^2 = m^2(mu+ mu-) (GeV^2), with m13 = m^2(gamma mu-):
+    """eta -> gamma mu+ mu- matrix element at the eta mass for m12 = m^2(gamma mu+), m23 = q^2 =
+    m^2(mu+ mu-) (GeV^2), with m13 = m^2(gamma mu-):
 
         |F(q^2)|^2 / q^4 [q^2 ((m12 - m^2)^2 + (m13 - m^2)^2) + 2 m^2 (m_eta^2 - q^2)^2]
 
@@ -119,9 +116,8 @@ def dalitz_weight(m12, m23):
 
 
 def test_dalitz_factor_matches_weighted_sampling():
-    """The semi-analytic signal factor equals the Monte Carlo recipe: sample
-    the bin uniformly, weight by the matrix element, and take the weighted
-    fraction with M inside m123_limits."""
+    """The semi-analytic signal factor equals the Monte Carlo recipe: sample the bin uniformly,
+    weight by the matrix element, and take the weighted fraction with M inside m123_limits."""
     rng = np.random.default_rng(5)
     M = np.linspace(XMIN, XMAX, 27)
     for m12_range, m23_range in [((0.015, 0.030), (0.2879, 0.3100)),
@@ -154,8 +150,8 @@ def test_dalitz_factor_bounds():
 
 
 def test_dalitz_factor_approaches_phase_space_factor_for_small_bins():
-    """Bins centred on the boundary of D(m_eta): the largest difference over
-    M between dalitz_factor and phase_space_factor shrinks with the bin size."""
+    """Bins centred on the boundary of D(m_eta): the largest difference over M between dalitz_factor
+    and phase_space_factor shrinks with the bin size."""
     M = np.linspace(XMIN, XMAX, 261)
     for q2_0 in [0.06, 0.12, 0.20, 0.27]:
         # The two m12 edges of D(m_eta) at this q2.
@@ -190,8 +186,8 @@ def test_weighted_background_is_zero_where_forbidden():
         lambda M: kinematics.phase_space_factor(M, m12_range, m23_range), XMIN, XMAX)
     weighted_cdf = fit_utils.weighted_cheb_cdf(factor_grid)
     weighted_pdf = fit_utils.weighted_cheb_pdf(factor_grid)
-    # f = 0 below ~541 MeV in this bin, so no background probability there,
-    # even for a Chebyshev that is negative somewhere (floored, not flipped).
+    # f = 0 below ~541 MeV in this bin, so no background probability there, even for a Chebyshev
+    # that is negative somewhere (floored, not flipped).
     for c0, c1 in [(0.0, 0.0), (1.5, 0.0)]:
         assert weighted_cdf(np.array([535.0]), XMIN, XMAX, c0, c1)[0] == 0.0
         y = weighted_pdf(np.linspace(XMIN, XMAX, 500), XMIN, XMAX, c0, c1)
@@ -200,9 +196,9 @@ def test_weighted_background_is_zero_where_forbidden():
 
 
 def test_weighted_fit_recovers_background_toy():
-    """Background drawn from f * Chebyshev in an edge bin: the weighted cost
-    fits it back with the signal yield fixed at 0 (as for a bin with
-    f(m_eta) = 0), including the zero-factor_grid signal component."""
+    """Background drawn from f * Chebyshev in an edge bin: the weighted cost fits it back with the
+    signal yield fixed at 0 (as for a bin with f(m_eta) = 0), including the zero-factor_grid signal
+    component."""
     rng = np.random.default_rng(3)
     m12_range, m23_range = (0.015, 0.030), (0.0886, 0.1107)
     factor_grid = fit_utils.sample_factor(
@@ -221,8 +217,8 @@ def test_weighted_fit_recovers_background_toy():
                           fixed=['mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR', 'n_sig'])
     assert m.valid
     assert m.values['n_bkg'] == pytest.approx(3000, rel=0.05)
-    # Only ~40% of the window is reachable here, so c0/c1 are individually
-    # degenerate; compare the fitted shape to the true one instead.
+    # Only ~40% of the window is reachable here, so c0/c1 are individually degenerate; compare the
+    # fitted shape to the true one instead.
     fit_cdf = fit_utils.weighted_cheb_cdf(factor_grid)(edges, XMIN, XMAX,
                                                   m.values['c0'], m.values['c1'])
     assert np.max(np.abs(fit_cdf - np.interp(edges, masses, cdf / cdf[-1]))) < 0.03
@@ -235,8 +231,8 @@ def edge_bin_factor(M):
 
 @pytest.mark.parametrize('weighted', ['signal', 'bkg'])
 def test_each_factor_changes_only_its_own_component(weighted):
-    """With the other component's yield at 0, a cost with a factor on one side
-    equals the unweighted cost; with this component's yield at 0 it differs."""
+    """With the other component's yield at 0, a cost with a factor on one side equals the unweighted
+    cost; with this component's yield at 0 it differs."""
     factor_grid = fit_utils.sample_factor(edge_bin_factor, XMIN, XMAX)
     rng = np.random.default_rng(4)
     counts, edges = np.histogram(rng.normal(547.9, 15.0, 2000), bins=80, range=(XMIN, XMAX))

@@ -1,8 +1,8 @@
 """
 bkg_utils.py
 
-MC truth-matching against a signal decay (signal_daughter_mask,
-signal_candidate_mask). For MC, truth-matching is always the first cut.
+MC truth-matching against a signal decay (signal_daughter_mask, signal_candidate_mask). For MC,
+truth-matching is always the first cut.
 """
 
 import cut_utils
@@ -10,13 +10,11 @@ import cut_utils
 
 def signal_daughter_mask(tree, mother_pid, daughter_pids):
     """
-    Per-daughter MC truth-matching against a signal decay
-    mother_pid -> daughter_pids.
+    Per-daughter MC truth-matching against a signal decay mother_pid -> daughter_pids.
 
-    A daughter is correctly matched iff it has a generator match, that
-    match's PID agrees with the daughter's own reco PID, AND that match's
-    mother is the real signal mother (found via cut_utils.decay_mask) -- not
-    merely "some generator particle at position i".
+    A daughter is correctly matched iff it has a generator match, that match's PID agrees with the
+    daughter's own reco PID, AND that match's mother is the real signal mother (found via
+    cut_utils.decay_mask) -- not merely "some generator particle at position i".
 
     Returns a dict:
         has_gen_match             : daughter has a valid prt_idx_gen
@@ -38,8 +36,8 @@ def signal_daughter_mask(tree, mother_pid, daughter_pids):
     # For each reco daughter, check if its gen match's PID agrees with the reco PID
     pid_match = has_gen_match & (pid_at_gen == tree['prt_pid'])
 
-    # Two-hop: daughter -> its gen particle (prt_idx_gen) -> that particle's
-    # mother (mc_idx_mom) -> is that mother the real signal mother?
+    # Two-hop: daughter -> its gen particle (prt_idx_gen) -> that particle's mother (mc_idx_mom) ->
+    # is that mother the real signal mother?
     gen_is_child_of_signal = (cut_utils.valid(tree, 'mc_idx_mom')
                               & cut_utils.follow(tree, signal_mother, 'mc_idx_mom'))
     is_child_of_signal_mother = has_gen_match & cut_utils.follow(
@@ -57,11 +55,11 @@ def signal_daughter_mask(tree, mother_pid, daughter_pids):
 
 def signal_candidate_mask(tree, mother_pid, daughter_pids, target_ref):
     """
-    Per-candidate mask: True where every daughter of the candidate matches
-    the signal decay mother_pid -> daughter_pids (see signal_daughter_mask).
+    Per-candidate mask: True where every daughter of the candidate matches the signal decay
+    mother_pid -> daughter_pids (see signal_daughter_mask).
 
-    target_ref : any branch whose per-event length defines the candidate
-                 collection, passed through to cut_utils.reduce.
+    target_ref : any branch whose per-event length defines the candidate collection, passed through
+                 to cut_utils.reduce.
     """
     m = signal_daughter_mask(tree, mother_pid, daughter_pids)
     return cut_utils.reduce(tree, m['is_signal_dtr'], 'prt_idx_mom',

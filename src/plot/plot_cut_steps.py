@@ -1,22 +1,20 @@
 """
 plot_cut_steps.py
 
-Mass before and after each offline selection with no fit, to check the effect
-of each cut:
+Mass before and after each offline selection with no fit, to check the effect of each cut:
 
     mass_<NN>_<cut>.png       one figure per cut: the mass after every earlier
                               cut, and after this cut too. Figure 01 is the
                               ntuple vs the first cut, figure 02 the first cut
                               vs the first two, and so on.
 
-The cuts are cumulative, in the order of driver_mass_fit.py: [truth match],
-TOS per trigger level, each muon cut, random candidate, then the fit window
-[--fit-xmin, --fit-xmax) (driver_mass_fit.py's --xmin/--xmax defaults), so the
-last step is exactly what the mass fit sees. The selection constants are
-copied from driver_mass_fit.py; keep them in step.
+The cuts are cumulative, in the order of driver_mass_fit.py: [truth match], TOS per trigger level,
+each muon cut, random candidate, then the fit window [--fit-xmin, --fit-xmax) (driver_mass_fit.py's
+--xmin/--xmax defaults), so the last step is exactly what the mass fit sees. The selection constants
+are copied from driver_mass_fit.py; keep them in step.
 
-plot_ip_chi2.py (muon IP chi2) and plot_p_scan.py (muon p thresholds) import
-read_tree, cut_steps and plot_pair from here.
+plot_ip_chi2.py (muon IP chi2) and plot_p_scan.py (muon p thresholds) import read_tree, cut_steps
+and plot_pair from here.
 
 Usage:
     python src/plot/plot_cut_steps.py INFILE --outdir OUTDIR
@@ -81,11 +79,11 @@ def read_tree(infile, mass_branch, truth_match=None, max_events=None):
 
 def cut_steps(tree, mass_branch, fit_window, truth_match=None):
     """
-    Cumulative selection of driver_mass_fit.py, one step per cut, ending with
-    the fit window (lo, hi) [MeV] on mass_branch.
+    Cumulative selection of driver_mass_fit.py, one step per cut, ending with the fit window (lo,
+    hi) [MeV] on mass_branch.
 
-    Returns [(label, mask), ...]: the per-candidate mask after each step,
-    starting with ('ntuple', all candidates).
+    Returns [(label, mask), ...]: the per-candidate mask after each step, starting with ('ntuple',
+    all candidates).
     """
     keep = ak.ones_like(tree[mass_branch], dtype=bool)
     steps = [('ntuple', keep)]
@@ -101,8 +99,8 @@ def cut_steps(tree, mass_branch, fit_window, truth_match=None):
         keep = keep & tos
         steps.append((' | '.join(lines), keep))
 
-    # Labels are the ntuple branches each cut reads; pT, p and eta have no
-    # branch of their own (computed from prt_px/py/pz).
+    # Labels are the ntuple branches each cut reads; pT, p and eta have no branch of their own
+    # (computed from prt_px/py/pz).
     px, py, pz = tree['prt_px'], tree['prt_py'], tree['prt_pz']
     eta = ak.unflatten(kinematics.eta(ak.to_numpy(ak.flatten(px)), ak.to_numpy(ak.flatten(py)),
                                       ak.to_numpy(ak.flatten(pz))), ak.num(px))
@@ -139,8 +137,8 @@ def slug(label):
 
 
 def plot_pair(ax, edges, before, after, labels, logy=False):
-    """Step histograms of `before` (black) and `after` (blue) on `ax`, with
-    room above the tallest bin for the legend."""
+    """Step histograms of `before` (black) and `after` (blue) on `ax`, with room above the tallest
+    bin for the legend."""
     C = plot_style.COLORS
     top = 0
     for values, label, color in ((before, labels[0], C['data']), (after, labels[1], C['fit'])):

@@ -1,11 +1,10 @@
 """
 ana_bkg.py
 
-Vectorized rewrite of bkg.py: classify eta candidates as signal or background
-by matching reco daughters to MC truth, and tabulate error categories. Uses
-cut_utils (awkward masks) instead of a per-event Python loop, and groups
-daughters by prt_idx_mom instead of assuming a fixed daughter count per
-candidate.
+Vectorized rewrite of bkg.py: classify eta candidates as signal or background by matching reco
+daughters to MC truth, and tabulate error categories. Uses cut_utils (awkward masks) instead of a
+per-event Python loop, and groups daughters by prt_idx_mom instead of assuming a fixed daughter
+count per candidate.
 
 Usage:
     python ana_bkg.py input.root [outfile out/output.txt] [--verbose]
@@ -70,15 +69,14 @@ class ErrorType(str, Enum):
 
 def build_masks(tree, args):
     """
-    Vectorized reco-to-gen matching. Every entry is a mask on some collection,
-    following cut_utils' style throughout.
+    Vectorized reco-to-gen matching. Every entry is a mask on some collection, following cut_utils'
+    style throughout.
 
-    A daughter is correctly matched iff it has a generator match, that match's
-    PID agrees with the daughter's own reco PID, AND that match's mother is
-    the real signal mother (found via decay_mask) -- not merely "some
-    generator particle at position i", which is what bkg.py's classify_candidate
-    got wrong for the second and later candidates in multi-candidate events.
-    See bkg_utils.signal_daughter_mask.
+    A daughter is correctly matched iff it has a generator match, that match's PID agrees with the
+    daughter's own reco PID, AND that match's mother is the real signal mother (found via
+    decay_mask) -- not merely "some generator particle at position i", which is what bkg.py's
+    classify_candidate got wrong for the second and later candidates in multi-candidate events. See
+    bkg_utils.signal_daughter_mask.
     """
     dtr_match = bkg_utils.signal_daughter_mask(tree, args.mother_pid, args.daughter_pids)
     has_gen_match = dtr_match['has_gen_match']
@@ -148,8 +146,8 @@ def build_masks(tree, args):
 
 def get_analytics(tree, m):
     """
-    Counts, error rates, and PID-mismatch frequency tables, computed directly
-    from the boolean masks in `m` -- no per-candidate Python object needed.
+    Counts, error rates, and PID-mismatch frequency tables, computed directly from the boolean masks
+    in `m` -- no per-candidate Python object needed.
     """
     def count(mask):
         return int(ak.sum(ak.flatten(mask & m['eligible_dtr'])))
@@ -158,10 +156,10 @@ def get_analytics(tree, m):
         return int(ak.sum(ak.flatten(mask)))
 
     def mismatched_pids(mask):
-        # The generator PID a mismatched daughter actually turned out to be.
-        # Restricted to has_gen_match (folded into `mask` already), so this
-        # never falls into the -1 -> wraps-to-last-entry trap cut_utils warns
-        # about -- unlike bkg.py's plain-Python mc_pid[prt_idx_gen[j]] lookup.
+        # The generator PID a mismatched daughter actually turned out to be. Restricted to
+        # has_gen_match (folded into `mask` already), so this never falls into the -1 ->
+        # wraps-to-last-entry trap cut_utils warns about -- unlike bkg.py's plain-Python
+        # mc_pid[prt_idx_gen[j]] lookup.
         vals = ak.to_numpy(ak.flatten(m['pid_at_gen'][mask & m['eligible_dtr']]))
         return vals.astype(int).tolist()
 
@@ -223,10 +221,9 @@ def _err_label(has_match, pid_ok, from_signal, pid):
 
 def collect_verbose_candidates(tree, m):
     """
-    Per-candidate, per-daughter dump for --verbose, restricted to background
-    candidates. Subselects just the background EVENTS with awkward fancy
-    indexing first, so the plain-Python loop below is bounded by background
-    candidates, not the full dataset.
+    Per-candidate, per-daughter dump for --verbose, restricted to background candidates. Subselects
+    just the background EVENTS with awkward fancy indexing first, so the plain-Python loop below is
+    bounded by background candidates, not the full dataset.
     """
     bg = m['eligible'] & ~m['is_signal']
     n_events = len(tree)

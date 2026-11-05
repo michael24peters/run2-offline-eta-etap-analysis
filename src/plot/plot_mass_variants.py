@@ -1,12 +1,11 @@
 """
-Overlay the mass distribution under each selection variant on one plot, one
-colour per variant, to show what each cut removes.
+Overlay the mass distribution under each selection variant on one plot, one colour per variant, to
+show what each cut removes.
 
-The variants are nested subsets of one another (no TOS + loose PID contains
-TOS + loose PID contains TOS + tight PID), so they are overlaid rather than
-stacked: stacking nested samples would count the same candidate several times
-and the total would mean nothing. Each variant is drawn as a low-opacity fill
-plus a full-opacity outline, matching plot_mass_compare.py.
+The variants are nested subsets of one another (no TOS + loose PID contains TOS + loose PID contains
+TOS + tight PID), so they are overlaid rather than stacked: stacking nested samples would count the
+same candidate several times and the total would mean nothing. Each variant is drawn as a
+low-opacity fill plus a full-opacity outline, matching plot_mass_compare.py.
 
 Usage:
     python plot_mass_variants.py input.root [output.png] [--full-range] [--log]
@@ -26,8 +25,8 @@ import kinematics
 import plot_style
 import plot_utils
 
-# (label, use_tos, pnn_mu_min, colour). Ordered widest selection first so the
-# tighter ones draw on top and stay visible.
+# (label, use_tos, pnn_mu_min, colour). Ordered widest selection first so the tighter ones draw on
+# top and stay visible.
 C = plot_style.COLORS
 VARIANTS = [
     ('All, pnn_mu > 0.4',   False, 0.4,  C['pull']),
@@ -38,8 +37,8 @@ VARIANTS = [
 
 DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']
 MUON_PID = 13
-# Trigger-on-signal lines per trigger level; TOS requires at least one line at
-# every level (cut_utils.tos_mask). A property of this ntuple, not of cut_utils.
+# Trigger-on-signal lines per trigger level; TOS requires at least one line at every level
+# (cut_utils.tos_mask). A property of this ntuple, not of cut_utils.
 TOS_LINES = {
     'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
     'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass
@@ -71,14 +70,14 @@ tos, _ = cut_utils.tos_mask(tree, TOS_LINES)
 
 samples = []
 for label, use_tos, pnn_mu_min, colour in VARIANTS:
-    # "passes OR isn't a muon", reduced onto the candidate, so a candidate is cut
-    # only when one of its own muon daughters fails.
+    # "passes OR isn't a muon", reduced onto the candidate, so a candidate is cut only when one of
+    # its own muon daughters fails.
     muon_ok = ((tree['prt_pnn_mu'] > pnn_mu_min)
                | (abs(tree['prt_pid']) != MUON_PID))
     keep = cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all')
     if use_tos: keep = keep & tos
-    # `keep` is the eligibility mask, so each event keeps a random candidate that
-    # survived THIS variant's selection; events with none left contribute nothing.
+    # `keep` is the eligibility mask, so each event keeps a random candidate that survived THIS
+    # variant's selection; events with none left contribute nothing.
     picked = cut_utils.random_candidate_mask(keep, seed=0)
     samples.append((label, colour, cut_utils.values(tree, 'tag_dtf_m', picked)))
 

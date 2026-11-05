@@ -1,10 +1,10 @@
 """
 fit_utils.py
 
-Histogramming, PDFs/CDFs, iminuit cost functions, and the fit driver. Pure
-numpy -- this module knows nothing about ROOT files, awkward arrays, events, or
-candidates. Selection and candidate reduction happen upstream in cut_utils; by
-the time anything here is called, the data is a flat array of values.
+Histogramming, PDFs/CDFs, iminuit cost functions, and the fit driver. Pure numpy -- this module
+knows nothing about ROOT files, awkward arrays, events, or candidates. Selection and candidate
+reduction happen upstream in cut_utils; by the time anything here is called, the data is a flat
+array of values.
 """
 
 import math
@@ -21,8 +21,8 @@ def make_histogram(values, xmin, xmax, nbins):
 
     Arguments:
     ----------
-    values : 1-D numpy array (e.g. one mass per event, already selected and
-             reduced to one candidate per event by cut_utils)
+    values : 1-D numpy array (e.g. one mass per event, already selected and reduced to one candidate
+             per event by cut_utils)
     xmin : float
         The minimum value of the fit window.
     xmax : float
@@ -46,30 +46,27 @@ def make_histogram(values, xmin, xmax, nbins):
 # --- Goodness of fit ---
 
 def neyman_chi2(counts, bin_fit):
-    """Data-based chi2, sum (data - fit)^2 / data over the mass bins with
-    data > 0."""
+    """Data-based chi2, sum (data - fit)^2 / data over the mass bins with data > 0."""
     filled = counts > 0
     return float(np.sum((counts[filled] - bin_fit[filled])**2 / counts[filled]))
 
 
 def data_pulls(counts, bin_fit):
-    """Data-based pull (data - fit) / sqrt(data) of each mass bin; 0 for an
-    empty bin."""
+    """Data-based pull (data - fit) / sqrt(data) of each mass bin; 0 for an empty bin."""
     filled = counts > 0
     return np.where(filled, (counts - bin_fit) / np.sqrt(np.where(filled, counts, 1.0)), 0.0)
 
 
 # --- Chebyshev ---
 
-# Background parameters, in the order the cost functions take them, and their
-# default initial values (a flat background).
+# Background parameters, in the order the cost functions take them, and their default initial values
+# (a flat background).
 BKG_PARAMS = ('c0', 'c1')
 BKG_INIT = {'c0': 0.0, 'c1': 0.0}
 
 def _xtilde(x, xmin, xmax):
     """
-    Define parameterized, normalized [-1, 1] variable for the Chebyshev
-    polynomials.
+    Define parameterized, normalized [-1, 1] variable for the Chebyshev polynomials.
 
     x̃ = (2x - (xmin + xmax)) / (xmax - xmin)
     """
@@ -99,8 +96,8 @@ def _cheb_antideriv(u, c0, c1):
 
 
 def cheb_cdf(x, xmin, xmax, c0, c1):
-    """Analytic Chebyshev CDF normalized to [0, 1] over [xmin, xmax]. Computed
-    via antiderivative of the PDF."""
+    """Analytic Chebyshev CDF normalized to [0, 1] over [xmin, xmax]. Computed via antiderivative of
+    the PDF."""
     norm = _cheb_norm(xmin, xmax, c1)
     scale = (xmax - xmin) / 2.0    # Jacobian: dx = (xmax-xmin)/2 · du
     u_lo = -1.0                    # xtilde(xmin) = -1
@@ -145,12 +142,12 @@ A Gaussian core with independent power-law tails on each side of the peak:
 
 def _dcb_tail(u, alpha, n):
     """
-    One DCB tail at distance u = |t| > |alpha| from the mean, in units of
-    sigma: A · (B + u)^(-n) with the continuity constants
+    One DCB tail at distance u = |t| > |alpha| from the mean, in units of sigma: A · (B + u)^(-n)
+    with the continuity constants
       A = (n/|α|)^n · exp(-α²/2)
       B = n/|α| - |α|,
-    evaluated as exp(-α²/2 + n·log(n/|α|) - n·log(B + u)), which stays finite
-    for large n (A alone overflows).
+    evaluated as exp(-α²/2 + n·log(n/|α|) - n·log(B + u)), which stays finite for large n (A alone
+    overflows).
     """
     abs_a = abs(alpha)
     n_over_a = n / abs_a
@@ -172,15 +169,14 @@ def dcb_unnorm(x, mean, sigma, alphaL, nL, alphaR, nR):
 
 
 def _dcb_grid(xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR, n_grid=1000):
-    """(masses, shape): n_grid evenly spaced masses spanning [xmin, xmax] and
-    the unnormalized DCB at them."""
+    """(masses, shape): n_grid evenly spaced masses spanning [xmin, xmax] and the unnormalized DCB
+    at them."""
     masses = np.linspace(xmin, xmax, n_grid)
     return masses, dcb_unnorm(masses, mean, sigma, alphaL, nL, alphaR, nR)
 
 
 def dcb_pdf(x, xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR):
-    """DCB PDF over [xmin, xmax]: dcb_unnorm at x divided by its trapezoid
-    integral on _dcb_grid."""
+    """DCB PDF over [xmin, xmax]: dcb_unnorm at x divided by its trapezoid integral on _dcb_grid."""
     # Unnormalized DCB at the grid masses
     masses, shape = _dcb_grid(xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR)
     # Its integral over [xmin, xmax]
@@ -191,9 +187,8 @@ def dcb_pdf(x, xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR):
 
 
 def dcb_cdf(x, xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR):
-    """DCB CDF over [xmin, xmax], from 0 at xmin to 1 at xmax: the cumulative
-    trapezoid integral on _dcb_grid, normalized and interpolated to x
-    (_grid_cdf)."""
+    """DCB CDF over [xmin, xmax], from 0 at xmin to 1 at xmax: the cumulative trapezoid integral on
+    _dcb_grid, normalized and interpolated to x (_grid_cdf)."""
     # Unnormalized DCB at the grid masses
     masses, shape = _dcb_grid(xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR)
     # Integrate cumulatively, normalize to [0, 1], interpolate to x
@@ -202,8 +197,7 @@ def dcb_cdf(x, xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR):
 
 # --- Weighting by a Dalitz-bin factor f(M) ---
 #
-# In one Dalitz bin (one m12 x m23 box), the signal and background models of
-# the mass M are
+# In one Dalitz bin (one m12 x m23 box), the signal and background models of the mass M are
 #
 #     signal(M)     = f(M) * dcb_unnorm(M)      / its integral over [xmin, xmax]
 #     background(M) = f(M) * cheb_bkg_unnorm(M) / its integral over [xmin, xmax]
@@ -216,11 +210,11 @@ def dcb_cdf(x, xmin, xmax, mean, sigma, alphaL, nL, alphaR, nR):
 #                       dcb_unnorm (signal), cheb_bkg_unnorm (background).
 #   weighted shape      f(M) * unnormalized shape.
 #
-# Division by the integral makes each model integrate to 1 over [xmin, xmax],
-# making it so n_sig and n_bkg are the expected counts in the window.
+# Division by the integral makes each model integrate to 1 over [xmin, xmax], making it so n_sig and
+# n_bkg are the expected counts in the window.
 #
-# The weighted shapes have no closed-form integral; they are integrated with
-# the trapezoid rule on a fixed grid of sampled masses (2,000 by default):
+# The weighted shapes have no closed-form integral; they are integrated with the trapezoid rule on a
+# fixed grid of sampled masses (2,000 by default):
 #
 #   factor_grid         (masses, factor) from sample_factor(), one per Dalitz
 #                       bin. `masses`: n_grid evenly spaced masses spanning
@@ -231,9 +225,8 @@ BKG_FLOOR = 1e-6
 def sample_factor(factor_fn, xmin, xmax, n_grid=2000):
     """Evaluate a Dalitz bin's factor f(M) on a grid of masses.
 
-    factor_fn : f(M), taking an array of masses [MeV] and returning f at each,
-                e.g. kinematics.phase_space_factor with the bin's m12 and m23
-                ranges filled in.
+    factor_fn : f(M), taking an array of masses [MeV] and returning f at each, e.g.
+                kinematics.phase_space_factor with the bin's m12 and m23 ranges filled in.
 
     Returns factor_grid = (masses, factor):
         masses : (n_grid,) evenly spaced masses spanning [xmin, xmax] [MeV]
@@ -257,8 +250,7 @@ def _grid_cdf(x, masses, weighted_shape):
 
 
 def _grid_pdf(x, masses, weighted_shape):
-    """PDF at x of a weighted shape given at `masses`, normalized to integrate
-    to 1."""
+    """PDF at x of a weighted shape given at `masses`, normalized to integrate to 1."""
     # Integral of the weighted shape over the grid
     integral = trapezoid(weighted_shape, masses)
     # Weighted shape 0 everywhere: PDF 0 everywhere
@@ -285,7 +277,7 @@ def weighted_dcb_cdf(factor_grid):
 
 def weighted_dcb_pdf(factor_grid):
     """PDF of f(M) * DCB(M), as a function with dcb_pdf's arguments.
-    
+
     factor_grid : (masses, factor) from sample_factor()
     """
     masses, factor = factor_grid
@@ -298,13 +290,12 @@ def weighted_dcb_pdf(factor_grid):
 
 
 def reachable_range(factor_grid):
-    """Finds the lowest and highest masses where factor > 0 (or the whole range
-    if factor is 0 everywhere).
+    """Finds the lowest and highest masses where factor > 0 (or the whole range if factor is 0
+    everywhere).
 
-    This is needed for the weighted Chebyshev, which is defined over [-1, 1] in
-    a normalized variable x̃ spanning the reachable range of masses, instead of
-    [xmin, xmax].
-    
+    This is needed for the weighted Chebyshev, which is defined over [-1, 1] in a normalized
+    variable x̃ spanning the reachable range of masses, instead of [xmin, xmax].
+
     factor_grid : (masses, factor) from sample_factor()
     """
     masses, factor = factor_grid
@@ -317,9 +308,9 @@ def reachable_range(factor_grid):
 
 
 def weighted_cheb_cdf(factor_grid):
-    """CDF of f(M) * max(Chebyshev(M), BKG_FLOOR), as a function with
-    cheb_cdf's arguments (xmin, xmax unused, as in weighted_dcb_cdf).
-    
+    """CDF of f(M) * max(Chebyshev(M), BKG_FLOOR), as a function with cheb_cdf's arguments (xmin,
+    xmax unused, as in weighted_dcb_cdf).
+
     factor_grid : (masses, factor) from sample_factor()
     """
     masses, factor = factor_grid
@@ -327,9 +318,8 @@ def weighted_cheb_cdf(factor_grid):
     mass_lo, mass_hi = reachable_range(factor_grid)
     # Background CDF function of this Dalitz bin
     def cdf(x, xmin, xmax, c0, c1):
-        # cheb_bkg_unnorm(M, *reachable_range(factor_grid), c0, c1) is the 
-        # unweighted, unnormalized Chebyshev at the grid masses, which we floor
-        # at BKG_FLOOR before multiplying by f.
+        # cheb_bkg_unnorm(M, *reachable_range(factor_grid), c0, c1) is the unweighted, unnormalized
+        # Chebyshev at the grid masses, which we floor at BKG_FLOOR before multiplying by f.
         cheb = np.clip(cheb_bkg_unnorm(masses, mass_lo, mass_hi, c0, c1),
                        BKG_FLOOR, None)
         # Times f; integrate cumulatively, normalize to [0, 1], interpolate to x
@@ -338,9 +328,9 @@ def weighted_cheb_cdf(factor_grid):
 
 
 def weighted_cheb_pdf(factor_grid):
-    """PDF of f(M) * max(Chebyshev(M), BKG_FLOOR), as a function with
-    cheb_bkg_pdf's arguments (xmin, xmax unused, as in weighted_dcb_cdf).
-    
+    """PDF of f(M) * max(Chebyshev(M), BKG_FLOOR), as a function with cheb_bkg_pdf's arguments
+    (xmin, xmax unused, as in weighted_dcb_cdf).
+
     factor_grid : (masses, factor) from sample_factor()
     """
     masses, factor = factor_grid
@@ -357,8 +347,8 @@ def weighted_cheb_pdf(factor_grid):
 
 # --- iminuit cost functions ---
 #
-# Each make_*_cost returns an iminuit.cost.ExtendedBinnedNLL: the extended
-# Poisson likelihood of a mass histogram.
+# Each make_*_cost returns an iminuit.cost.ExtendedBinnedNLL: the extended Poisson likelihood of a
+# mass histogram.
 #
 #   counts      (nbins,) candidates in each mass bin.
 #   bin_edges   (nbins + 1,) edges of the mass bins [MeV], spanning
@@ -370,12 +360,12 @@ def weighted_cheb_pdf(factor_grid):
 #               scaled_cdf(bin_edges[k + 1]) - scaled_cdf(bin_edges[k]), the
 #               model's integral over that bin.
 #
-# scaled_cdf takes `*args`, since its parameters depend on the signal model;
-# _make_scaled_cdf returns their names for ExtendedBinnedNLL's `name=`.
+# scaled_cdf takes `*args`, since its parameters depend on the signal model; _make_scaled_cdf
+# returns their names for ExtendedBinnedNLL's `name=`.
 
 def _make_scaled_cdf(signal_param_names, signal_cdf, bkg_cdf, xmin, xmax):
-    """Returns (scaled_cdf, param_names). scaled_cdf(xe, *params) -> expected
-    cumulative count; param_names is signal_param_names + ('n_sig', 'n_bkg')
+    """Returns (scaled_cdf, param_names). scaled_cdf(xe, *params) -> expected cumulative count;
+    param_names is signal_param_names + ('n_sig', 'n_bkg')
     + BKG_PARAMS, in the order scaled_cdf expects them."""
     n_sig_params = len(signal_param_names)
     param_names = tuple(signal_param_names) + ('n_sig', 'n_bkg') + BKG_PARAMS
@@ -394,8 +384,8 @@ def _make_scaled_cdf(signal_param_names, signal_cdf, bkg_cdf, xmin, xmax):
 
 
 def make_gauss_cost(counts, bin_edges, xmin, xmax):
-    """ExtendedBinnedNLL cost for Gaussian signal + Chebyshev background.
-    Free parameters: mean, sigma, n_sig, n_bkg, c0, c1.
+    """ExtendedBinnedNLL cost for Gaussian signal + Chebyshev background. Free parameters: mean,
+    sigma, n_sig, n_bkg, c0, c1.
     """
     scaled_cdf, param_names = _make_scaled_cdf(('mean', 'sigma'), gauss_cdf,
                                                cheb_cdf, xmin, xmax)
@@ -405,12 +395,11 @@ def make_gauss_cost(counts, bin_edges, xmin, xmax):
 def make_dcb_cost(counts, bin_edges, xmin, xmax, signal_factor_grid=None,
                   bkg_factor_grid=None):
     """
-    ExtendedBinnedNLL cost for DCB signal + Chebyshev background.
-    Free parameters: mean, sigma, alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1.
+    ExtendedBinnedNLL cost for DCB signal + Chebyshev background. Free parameters: mean, sigma,
+    alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1.
 
-    signal_factor_grid : optional (masses, factor) from sample_factor(). The
-                         signal CDF is then weighted_dcb_cdf(signal_factor_grid)
-                         instead of dcb_cdf.
+    signal_factor_grid : optional (masses, factor) from sample_factor(). The signal CDF is then
+                         weighted_dcb_cdf(signal_factor_grid) instead of dcb_cdf.
     bkg_factor_grid    : the same for the background: weighted_cheb_cdf
                          instead of cheb_cdf.
     """
@@ -463,10 +452,9 @@ def run_fit(cost, initial_values, limits=None, fixed=None):
     m.migrad(ncall=100000)
     m.hesse()
     if not m.valid:
-        # A single MIGRAD pass can land close enough for HESSE to succeed
-        # but still miss MIGRAD's own EDM convergence goal -- standard
-        # MINUIT practice is to re-run it once more from there, refining
-        # off the now-improved Hessian estimate, before giving up.
+        # A single MIGRAD pass can land close enough for HESSE to succeed but still miss MIGRAD's
+        # own EDM convergence goal -- standard MINUIT practice is to re-run it once more from there,
+        # refining off the now-improved Hessian estimate, before giving up.
         m.migrad(ncall=100000)
         m.hesse()
     return m
@@ -476,23 +464,20 @@ def run_fit(cost, initial_values, limits=None, fixed=None):
 
 def build_prior(fit, params, factor=1.0):
     """
-    Build a (values, cov) pair for `NormalConstraint(params, values, error=cov)` 
-    from a previous fit's parameters, with each parameter's uncertainty scaled
-    by `factor`.
+    Build a (values, cov) pair for `NormalConstraint(params, values, error=cov)` from a previous
+    fit's parameters, with each parameter's uncertainty scaled by `factor`.
 
     fit    : an iminuit.Minuit.
-    params : names to constrain. A parameter NOT in this list gets no prior
-             at all -- this is how a prior is dropped entirely for a given
-             stage of a fit chain (e.g. floating a background parameter
-             completely on the per-bin fits after constraining it on the
-             data fit).
-    factor : stdev multiplier applied to every parameter in `params`, so
-             the covariance scales by factor**2. The correlations
-             cov_ij / (sigma_i * sigma_j) of the original fit are unchanged.
+    params : names to constrain. A parameter NOT in this list gets no prior at all -- this is how a
+             prior is dropped entirely for a given stage of a fit chain (e.g. floating a background
+             parameter completely on the per-bin fits after constraining it on the data fit).
+    factor : stdev multiplier applied to every parameter in `params`, so the covariance scales by
+             factor**2. The correlations cov_ij / (sigma_i * sigma_j) of the original fit are
+             unchanged.
 
-    Falls back to a diagonal matrix built from `fit.errors` when
-    `fit.covariance` is None (HESSE's matrix inversion failed) -- no
-    cross-parameter term, but still a usable prior instead of a crash.
+    Falls back to a diagonal matrix built from `fit.errors` when `fit.covariance` is None (HESSE's
+    matrix inversion failed) -- no cross-parameter term, but still a usable prior instead of a
+    crash.
     """
     params = list(params)
     values = np.array([fit.values[p] for p in params], dtype=float)
@@ -508,9 +493,9 @@ def build_prior(fit, params, factor=1.0):
 
 
 def build_prior_from_result(fit_block, params, factor=1.0):
-    """build_prior() for a fit saved in a results JSON. fit_block is its
-    'fit' dict: 'parameters' {name: {'value', 'error'}} and 'covariance'
-    {'names', 'matrix'}, or None if HESSE's matrix inversion failed."""
+    """build_prior() for a fit saved in a results JSON. fit_block is its 'fit' dict: 'parameters'
+    {name: {'value', 'error'}} and 'covariance' {'names', 'matrix'}, or None if HESSE's matrix
+    inversion failed."""
     params = list(params)
     values = np.array([fit_block['parameters'][p]['value'] for p in params], 
                       dtype=float)

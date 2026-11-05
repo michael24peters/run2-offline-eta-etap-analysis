@@ -1,9 +1,9 @@
 """
 Unit tests for cut_utils.decay_mask().
 
-decay_mask identifies mothers whose daughters are exactly a given multiset of
-PIDs, by asking counting questions that reduce onto the mother rather than
-materialising each mother's daughter list.
+decay_mask identifies mothers whose daughters are exactly a given multiset of PIDs, by asking
+counting questions that reduce onto the mother rather than materialising each mother's daughter
+list.
 """
 
 import awkward as ak
@@ -27,8 +27,8 @@ def test_finds_eta_to_mumugamma():
 
 
 def test_finds_eta_to_four_muons():
-    """A repeated PID must be matched with the right multiplicity, which is what
-    the Counter in decay_mask is for."""
+    """A repeated PID must be matched with the right multiplicity, which is what the Counter in
+    decay_mask is for."""
     tree = make_tree(mc_pid=[[221, -13, -13, 13, 13]],
                      mc_idx_mom=[[-1, 0, 0, 0, 0]])
     assert cut_utils.decay_mask(tree, 221, [-13, -13, 13, 13]).tolist() \
@@ -51,8 +51,8 @@ def test_rejects_wrong_multiplicity():
 
 
 def test_rejects_an_extra_daughter():
-    """The total-count check is what rejects a radiative extra: eta -> mu mu
-    gamma gamma must not pass a [-13, 13, 22] test."""
+    """The total-count check is what rejects a radiative extra: eta -> mu mu gamma gamma must not
+    pass a [-13, 13, 22] test."""
     tree = make_tree(mc_pid=[[221, -13, 13, 22, 22]],
                      mc_idx_mom=[[-1, 0, 0, 0, 0]])
     assert not ak.any(cut_utils.decay_mask(tree, 221, [-13, 13, 22]))
@@ -87,8 +87,8 @@ def test_charge_conjugate_is_not_matched():
 # --- the messy generator record ----------------------------------------------
 
 def test_strays_do_not_break_the_match(gen_with_strays):
-    """MC-matched junk appended to the record is motherless, so it is nobody's
-    daughter and cannot inflate a daughter count."""
+    """MC-matched junk appended to the record is motherless, so it is nobody's daughter and cannot
+    inflate a daughter count."""
     out = cut_utils.decay_mask(gen_with_strays, 221, [-13, 13, 22])
     assert out.tolist() == [[True, False, False, False, False, False, False]]
 
@@ -110,8 +110,8 @@ def test_only_the_well_formed_decay_matches():
 
 
 def test_childless_mother_pid_does_not_match():
-    """A stray particle that happens to have the mother PID has no daughters,
-    so its counts are all zero and it must not be mistaken for a decay."""
+    """A stray particle that happens to have the mother PID has no daughters, so its counts are all
+    zero and it must not be mistaken for a decay."""
     tree = make_tree(mc_pid=[[221, 221, -13, 13]], mc_idx_mom=[[-1, -1, 0, 0]])
     out = cut_utils.decay_mask(tree, 221, [-13, 13])
     assert out.tolist() == [[True, False, False, False]]

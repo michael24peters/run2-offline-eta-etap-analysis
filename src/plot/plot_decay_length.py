@@ -1,9 +1,8 @@
 """
 plot_decay_length.py
 
-Calculate and plot decay length and pseudo-lifetime for eta candidates from a
-ROOT file. Pseudo-lifetime: tau = L * m / (p * c), derived from 
-tau = L / (beta*gamma*c).
+Calculate and plot decay length and pseudo-lifetime for eta candidates from a ROOT file.
+Pseudo-lifetime: tau = L * m / (p * c), derived from tau = L / (beta*gamma*c).
 
 Usage:
     python plot_decay_length.py input.root
@@ -51,15 +50,14 @@ for i in range(len(branches['tag_x'])):
         # tag_idx_pvr tells us which PV in the pvr_* arrays belongs to this candidate.
         ipv = int(branches['tag_idx_pvr'][i][j])
 
-        # Decay length (L): distance between decay vertex (tag_x/y/z) and 
-        # PV (pvr_x/y/z), in mm.
+        # Decay length (L): distance between decay vertex (tag_x/y/z) and PV (pvr_x/y/z), in mm.
         dx = branches['tag_x'][i][j] - branches['pvr_x'][i][ipv]
         dy = branches['tag_y'][i][j] - branches['pvr_y'][i][ipv]
         dz = branches['tag_z'][i][j] - branches['pvr_z'][i][ipv]
         L = np.sqrt(dx**2 + dy**2 + dz**2)
 
-        # Pseudo-lifetime (tau) = L / (beta*gamma*c).
-        # In HEP units (p in MeV/c, m in MeV/c²), so tau = L * m / (p * c)
+        # Pseudo-lifetime (tau) = L / (beta*gamma*c). In HEP units (p in MeV/c, m in MeV/c²), so tau
+        # = L * m / (p * c)
         p = np.sqrt(branches['tag_px'][i][j]**2 +
                     branches['tag_py'][i][j]**2 +
                     branches['tag_pz'][i][j]**2)

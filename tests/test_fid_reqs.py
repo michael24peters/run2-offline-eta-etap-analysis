@@ -1,10 +1,10 @@
 """
 Unit tests for src/root/fid_reqs.py.
 
-fid_reqs decides which MC events could plausibly have been reconstructed, so
-downstream efficiency denominators mean something. The tests build generator
-records with momenta chosen to sit just inside or just outside the acceptance
-(see IN / FWD / LOW_PT in conftest) rather than relying on real files.
+fid_reqs decides which MC events could plausibly have been reconstructed, so downstream efficiency
+denominators mean something. The tests build generator records with momenta chosen to sit just
+inside or just outside the acceptance (see IN / FWD / LOW_PT in conftest) rather than relying on
+real files.
 """
 
 import awkward as ak
@@ -25,8 +25,8 @@ def test_particle_inside_acceptance_passes():
 
 
 def test_particle_outside_eta_range_fails():
-    """FWD sits at eta = 5.0, past the 4.5 edge, with pT and p both fine --
-    so this isolates the eta cut."""
+    """FWD sits at eta = 5.0, past the 4.5 edge, with pT and p both fine -- so this isolates the eta
+    cut."""
     tree = kinematic_tree([[(13, -1, *FWD)]])
     assert fid_reqs.fiducial_mask(tree).tolist() == [[False]]
 
@@ -37,11 +37,11 @@ def test_soft_particle_fails():
 
 
 def test_photon_and_muon_use_different_rules():
-    """A photon has no p > 3000 requirement, so a momentum that fails for a
-    muon can still pass for a photon. Pins the per-PID table.
+    """A photon has no p > 3000 requirement, so a momentum that fails for a muon can still pass for
+    a photon. Pins the per-PID table.
 
-    pT = 700 and eta = 2.10 clear those two cuts; p = 2901 sits just under the
-    muon-only momentum threshold.
+    pT = 700 and eta = 2.10 clear those two cuts; p = 2901 sits just under the muon-only momentum
+    threshold.
     """
     mid = (420.0, 560.0, 2815.0)
     tree = kinematic_tree([[(13, -1, *mid), (22, -1, *mid)]])
@@ -51,16 +51,15 @@ def test_photon_and_muon_use_different_rules():
 
 
 def test_unknown_pid_fails_by_default():
-    """A PID absent from FIDUCIAL_REQS (here a neutron) must fail closed, not
-    pass by omission."""
+    """A PID absent from FIDUCIAL_REQS (here a neutron) must fail closed, not pass by omission."""
     tree = kinematic_tree([[(2112, -1, *IN)]])
     assert fid_reqs.fiducial_mask(tree).tolist() == [[False]]
 
 
 def test_mother_pid_is_not_in_the_table():
-    """The eta itself is never detected, so it has no fiducial rule and comes
-    back False. Downstream logic must therefore not require the mother to pass
-    -- see test_mother_failing_does_not_block_acceptance."""
+    """The eta itself is never detected, so it has no fiducial rule and comes back False. Downstream
+    logic must therefore not require the mother to pass -- see
+    test_mother_failing_does_not_block_acceptance."""
     tree = kinematic_tree([[(221, -1, *IN)]])
     assert fid_reqs.fiducial_mask(tree).tolist() == [[False]]
 
@@ -103,8 +102,8 @@ def test_clean_decay_with_one_daughter_outside():
 
 
 def test_mother_failing_does_not_block_acceptance():
-    """The eta has no fiducial rule so fiducial_mask calls it False, but only
-    the DAUGHTERS are reduced over -- the mother's own flag must not matter."""
+    """The eta has no fiducial rule so fiducial_mask calls it False, but only the DAUGHTERS are
+    reduced over -- the mother's own flag must not matter."""
     tree = kinematic_tree([[(221, -1, *FWD), (-13, 0, *IN),
                             (13, 0, *IN), (22, 0, *IN)]])
     m = fid_reqs.fiducial_masks(tree, 221, MUMUGAMMA)
@@ -140,8 +139,8 @@ def test_two_good_decays_in_one_event():
 
 
 def test_one_good_one_bad_decay_in_one_event():
-    """ak.any keeps the event; ak.all would drop it. The two policies must
-    demonstrably differ here, which is the open decision in the script."""
+    """ak.any keeps the event; ak.all would drop it. The two policies must demonstrably differ here,
+    which is the open decision in the script."""
     tree = kinematic_tree([[(221, -1, *IN), (-13, 0, *IN), (13, 0, *IN), (22, 0, *IN),
                             (221, -1, *IN), (-13, 4, *FWD), (13, 4, *IN), (22, 4, *IN)]])
     m = fid_reqs.fiducial_masks(tree, 221, MUMUGAMMA)
@@ -166,9 +165,8 @@ def test_events_are_independent():
 # --- fiducial_masks: the messy record ----------------------------------------
 
 def test_strays_do_not_affect_the_keep_decision():
-    """MC-matched junk appended to the record is motherless, so it is nobody's
-    daughter and must not drag the decay out of acceptance -- even when the
-    strays themselves fail fiducial."""
+    """MC-matched junk appended to the record is motherless, so it is nobody's daughter and must not
+    drag the decay out of acceptance -- even when the strays themselves fail fiducial."""
     tree = kinematic_tree([[(221, -1, *IN), (-13, 0, *IN), (13, 0, *IN), (22, 0, *IN),
                             (22, -1, *FWD), (211, -1, *FWD)]])
     m = fid_reqs.fiducial_masks(tree, 221, MUMUGAMMA)
@@ -177,8 +175,8 @@ def test_strays_do_not_affect_the_keep_decision():
 
 
 def test_stray_excludes_the_signal_mother():
-    """The eta is motherless too, so 'stray' must subtract the signal or it
-    would report every decay as background."""
+    """The eta is motherless too, so 'stray' must subtract the signal or it would report every decay
+    as background."""
     tree = kinematic_tree([[(221, -1, *IN), (-13, 0, *IN), (13, 0, *IN), (22, 0, *IN),
                             (211, -1, *IN)]])
     m = fid_reqs.fiducial_masks(tree, 221, MUMUGAMMA)
@@ -195,8 +193,8 @@ def test_event_with_no_signal_decay():
 
 
 def test_extra_daughter_disqualifies_the_decay():
-    """eta -> mu mu gamma gamma is not eta -> mu mu gamma, so it is not signal
-    even though every particle is inside acceptance."""
+    """eta -> mu mu gamma gamma is not eta -> mu mu gamma, so it is not signal even though every
+    particle is inside acceptance."""
     tree = kinematic_tree([[(221, -1, *IN), (-13, 0, *IN), (13, 0, *IN),
                             (22, 0, *IN), (22, 0, *IN)]])
     m = fid_reqs.fiducial_masks(tree, 221, MUMUGAMMA)
@@ -206,8 +204,8 @@ def test_extra_daughter_disqualifies_the_decay():
 # --- the failure-reason breakdown --------------------------------------------
 
 def test_failed_muon_names_the_muon():
-    """When a muon is the reason the decay was lost, failed_muon must flag its
-    mother -- otherwise the diagnostic breakdown is silently empty."""
+    """When a muon is the reason the decay was lost, failed_muon must flag its mother -- otherwise
+    the diagnostic breakdown is silently empty."""
     tree = kinematic_tree([[(221, -1, *IN), (-13, 0, *FWD),
                             (13, 0, *IN), (22, 0, *IN)]])
     m = fid_reqs.fiducial_masks(tree, 221, MUMUGAMMA)
@@ -251,8 +249,8 @@ def test_in_acceptance_and_failed_are_mutually_exclusive():
 
 
 def test_every_lost_decay_has_at_least_one_reason():
-    """signal minus in_acceptance must be fully explained by the failed_* keys;
-    a decay lost for no stated reason means the breakdown is broken."""
+    """signal minus in_acceptance must be fully explained by the failed_* keys; a decay lost for no
+    stated reason means the breakdown is broken."""
     tree = kinematic_tree([[(221, -1, *IN), (-13, 0, *FWD),
                             (13, 0, *IN), (22, 0, *IN)],
                            [(221, -1, *IN), (-13, 0, *IN),
@@ -267,9 +265,8 @@ def test_every_lost_decay_has_at_least_one_reason():
 # --- fiducial_candidate_mask: reco candidates from in-acceptance decays ------
 
 def reco_on(gen, prt_idx_gen, prt_idx_mom, n_candidates):
-    """A one-event-per-row tree: the generator record `gen` (kinematic_tree
-    rows) plus reco daughters wired to generator particles by `prt_idx_gen`
-    and to candidates by `prt_idx_mom`."""
+    """A one-event-per-row tree: the generator record `gen` (kinematic_tree rows) plus reco
+    daughters wired to generator particles by `prt_idx_gen` and to candidates by `prt_idx_mom`."""
     kin = kinematic_tree(gen)
     rec = make_tree(prt_idx_gen=prt_idx_gen, prt_idx_mom=prt_idx_mom,
                     tag_m=[[0.0] * n for n in n_candidates])
@@ -287,8 +284,8 @@ def test_candidate_from_in_acceptance_decay_passes():
 
 
 def test_candidate_from_decay_with_a_daughter_outside_fails():
-    """The decay is out of acceptance as a whole, so every candidate built
-    from it fails, including through its in-acceptance daughters."""
+    """The decay is out of acceptance as a whole, so every candidate built from it fails, including
+    through its in-acceptance daughters."""
     gen = [(221, -1, *IN), (-13, 0, *FWD), (13, 0, *IN), (22, 0, *IN)]
     tree = reco_on([gen], [[1, 2, 3]], [[0, 0, 0]], [1])
     mask = fid_reqs.fiducial_candidate_mask(tree, 221, MUMUGAMMA, target_ref='tag_m')
@@ -302,8 +299,7 @@ def test_daughter_without_generator_match_fails():
 
 
 def test_candidate_with_a_stray_daughter_fails():
-    """Candidate 0 is the signal decay; candidate 1 swaps the photon for a
-    motherless stray."""
+    """Candidate 0 is the signal decay; candidate 1 swaps the photon for a motherless stray."""
     gen = ETA_MUMUGAMMA_IN + [(22, -1, *IN)]
     tree = reco_on([gen], [[1, 2, 3, 1, 2, 4]], [[0, 0, 0, 1, 1, 1]], [2])
     mask = fid_reqs.fiducial_candidate_mask(tree, 221, MUMUGAMMA, target_ref='tag_m')

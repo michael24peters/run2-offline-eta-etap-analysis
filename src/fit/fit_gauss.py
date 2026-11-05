@@ -1,12 +1,12 @@
 """
 fit_gauss.py
 
-Fit a Gaussian signal + 2nd-order Chebyshev background to a distribution of
-mass values, using iminuit ExtendedBinnedNLL.
+Fit a Gaussian signal + 2nd-order Chebyshev background to a distribution of mass values, using
+iminuit ExtendedBinnedNLL.
 
-This is a library module: it takes an array of numbers and fits it. Reading
-ROOT files, applying selection, and reducing to one candidate per event all
-happen upstream in driver_mass_fit.py via cut_utils.
+This is a library module: it takes an array of numbers and fits it. Reading ROOT files, applying
+selection, and reducing to one candidate per event all happen upstream in driver_mass_fit.py via
+cut_utils.
 """
 
 import os
@@ -29,8 +29,7 @@ def fit_gauss(values, xmin=500.0, xmax=600.0, nbins=100,
     Arguments:
     ----------
     values : 1-D numpy array of values to fit.
-    xmin, xmax, nbins : float, float, int : The range and number of bins for the
-             histogram.
+    xmin, xmax, nbins : float, float, int : The range and number of bins for the histogram.
     mean_init, sigma_init : float : Initial values for the Gaussian parameters.
 
     Returns:
@@ -64,10 +63,8 @@ def fit_gauss(values, xmin=500.0, xmax=600.0, nbins=100,
         n_bkg=(0.0, None),
     )
 
-    # Stage 1: fit with the background params fixed at their initial values
-    # (also anything in fixed_params).
-    # Stage 2: float everything except fixed_params, starting from stage 1's
-    # result.
+    # Stage 1: fit with the background params fixed at their initial values (also anything in
+    # fixed_params). Stage 2: float everything except fixed_params, starting from stage 1's result.
     stage1_fixed = set(fit_utils.BKG_PARAMS) | set(fixed_params or {})
     stage1 = fit_utils.run_fit(cost, init, limits, fixed=list(stage1_fixed))
     init2 = dict(init, mean=stage1.values['mean'], sigma=stage1.values['sigma'],

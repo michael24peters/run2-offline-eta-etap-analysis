@@ -1,10 +1,9 @@
 """
 Recipes: one test per question you would actually ask this framework.
 
-Each test is named for the question, and its body is the shortest correct way to
-answer it with valid() / follow() / reduce(). Read this file as a cookbook --
-if you know what you want to ask but not which primitive to reach for, the
-answer is probably here.
+Each test is named for the question, and its body is the shortest correct way to answer it with
+valid() / follow() / reduce(). Read this file as a cookbook -- if you know what you want to ask but
+not which primitive to reach for, the answer is probably here.
 
 One event, eta -> mu+ mu- gamma, small enough to read by eye.
 
@@ -70,15 +69,15 @@ def test_which_generator_particles_are_daughters(event):
 
 
 def test_which_generator_particles_are_top_of_a_chain(event):
-    """The complement. Includes both the signal eta AND the strays, which is
-    why it is never the background definition on its own."""
+    """The complement. Includes both the signal eta AND the strays, which is why it is never the
+    background definition on its own."""
     assert (~cut_utils.valid(event, 'mc_idx_mom')).tolist() \
         == [[True, False, False, False, True, True, True]]
 
 
 def test_which_generator_particles_are_mothers(event):
-    """"Does anything point at me?". Different from "is top of a chain": the eta
-    is both, a stray is neither."""
+    """"Does anything point at me?". Different from "is top of a chain": the eta is both, a stray is
+    neither."""
     ones = ak.ones_like(event['mc_pid'], dtype=bool)
     has_children = cut_utils.reduce(event, ones, 'mc_idx_mom', how='any',
                                     target_ref='mc_pid')
@@ -95,8 +94,8 @@ def test_how_many_children_does_each_particle_have(event):
 
 
 def test_what_is_my_mothers_pid(event):
-    """follow() along mc_idx_mom, guarded. Without the ak.where, index 0 reads
-    mc_pid[-1] = 2112 and claims the eta's mother is a neutron."""
+    """follow() along mc_idx_mom, guarded. Without the ak.where, index 0 reads mc_pid[-1] = 2112 and
+    claims the eta's mother is a neutron."""
     raw = cut_utils.follow(event, event['mc_pid'], 'mc_idx_mom')
     guarded = ak.where(cut_utils.valid(event, 'mc_idx_mom'), raw, np.nan)
     assert raw[0][0] == 2112.0                    # the wrap
@@ -121,8 +120,8 @@ def test_which_particles_are_the_signal_decay(event):
 
 
 def test_which_particles_are_stray_background(event):
-    """Motherless AND not the signal. The `& ~signal` is what stops every signal
-    eta being counted as background -- it is motherless too."""
+    """Motherless AND not the signal. The `& ~signal` is what stops every signal eta being counted
+    as background -- it is motherless too."""
     signal = cut_utils.decay_mask(event, 221, [-13, 13, 22])
     stray = ~cut_utils.valid(event, 'mc_idx_mom') & ~signal
     assert stray.tolist() == [[False, False, False, False, True, True, True]]
@@ -130,8 +129,8 @@ def test_which_particles_are_stray_background(event):
 
 
 def test_signal_daughters_and_strays_do_not_overlap(event):
-    """The two categories partition the interesting particles: a particle is a
-    decay product or it is junk, never both."""
+    """The two categories partition the interesting particles: a particle is a decay product or it
+    is junk, never both."""
     signal = cut_utils.decay_mask(event, 221, [-13, 13, 22])
     ok = cut_utils.valid(event, 'mc_idx_mom')
     daughters = cut_utils.follow(event, signal, 'mc_idx_mom') & ok
@@ -148,17 +147,17 @@ def test_what_did_each_reco_daughter_really_match(event):
 
 
 def test_which_reco_daughters_are_misidentified(event):
-    """Compare the reco hypothesis against the truth match, elementwise.
-    Daughter 4 was reconstructed as a mu- but really matched a pion."""
+    """Compare the reco hypothesis against the truth match, elementwise. Daughter 4 was
+    reconstructed as a mu- but really matched a pion."""
     truth = cut_utils.follow(event, event['mc_pid'], 'prt_idx_gen')
     assert (truth != event['prt_pid']).tolist() \
         == [[False, False, False, False, True, False]]
 
 
 def test_which_reco_daughters_matched_a_stray(event):
-    """Push a generator-level background flag DOWN onto the reco daughters --
-    the entry point for asking why background candidates get reconstructed.
-    Daughter 4 matched the stray pion, daughter 5 the stray photon."""
+    """Push a generator-level background flag DOWN onto the reco daughters -- the entry point for
+    asking why background candidates get reconstructed. Daughter 4 matched the stray pion, daughter
+    5 the stray photon."""
     signal = cut_utils.decay_mask(event, 221, [-13, 13, 22])
     stray = ~cut_utils.valid(event, 'mc_idx_mom') & ~signal
     assert cut_utils.follow(event, stray, 'prt_idx_gen').tolist() \
@@ -166,9 +165,8 @@ def test_which_reco_daughters_matched_a_stray(event):
 
 
 def test_which_generator_particles_were_reconstructed(event):
-    """The other direction: reduce the reco daughters UP onto the generator
-    collection. 'any' because one reco track is enough. The neutron (index 6)
-    was never reconstructed."""
+    """The other direction: reduce the reco daughters UP onto the generator collection. 'any'
+    because one reco track is enough. The neutron (index 6) was never reconstructed."""
     ones = ak.ones_like(event['prt_idx_gen'], dtype=bool)
     out = cut_utils.reduce(event, ones, 'prt_idx_gen', how='any',
                            target_ref='mc_pid')
@@ -176,8 +174,8 @@ def test_which_generator_particles_were_reconstructed(event):
 
 
 def test_how_many_reco_tracks_claimed_each_generator_particle(event):
-    """>1 means candidates are sharing a track. Generator particle 1 (the mu+)
-    was reconstructed twice, once in each candidate."""
+    """>1 means candidates are sharing a track. Generator particle 1 (the mu+) was reconstructed
+    twice, once in each candidate."""
     ones = ak.ones_like(event['prt_idx_gen'], dtype=bool)
     n = cut_utils.reduce(event, ones, 'prt_idx_gen', how='sum',
                          target_ref='mc_pid')
@@ -185,8 +183,8 @@ def test_how_many_reco_tracks_claimed_each_generator_particle(event):
 
 
 def test_which_candidates_are_built_from_stray_matches(event):
-    """The full background question: gen -> reco -> candidate. Candidate 1 is
-    contaminated; candidate 0 is clean."""
+    """The full background question: gen -> reco -> candidate. Candidate 1 is contaminated;
+    candidate 0 is clean."""
     signal = cut_utils.decay_mask(event, 221, [-13, 13, 22])
     stray = ~cut_utils.valid(event, 'mc_idx_mom') & ~signal
     matched_stray = cut_utils.follow(event, stray, 'prt_idx_gen')
@@ -198,8 +196,8 @@ def test_which_candidates_are_built_from_stray_matches(event):
 # --- candidate-level selection -----------------------------------------------
 
 def test_which_candidates_pass_a_pid_cut(event):
-    """"Every muon daughter passes" -- an all-reduction, with non-muons folded
-    in as automatic passes so the photons do not fail the candidate."""
+    """"Every muon daughter passes" -- an all-reduction, with non-muons folded in as automatic
+    passes so the photons do not fail the candidate."""
     muon_ok = ((event['prt_pnn_mu'] > 0.95)
                | (abs(event['prt_pid']) != 13))
     out = cut_utils.reduce(event, muon_ok, 'prt_idx_mom', how='all',
@@ -210,11 +208,10 @@ def test_which_candidates_pass_a_pid_cut(event):
 def test_which_candidates_have_exactly_one_photon(event):
     """A multiplicity requirement: sum the PID flag, compare to 1.
 
-    On this ntuple it is a no-op -- the decay descriptor guarantees exactly one
-    photon per candidate, and it does hold on real MC. The recipe exists as a
-    SAFETY CHECK on that guarantee (fit_dalitz_new.ipynb runs it before
-    computing Dalitz variables), and it is not a no-op for a channel whose
-    reconstruction does not fix the composition.
+    On this ntuple it is a no-op -- the decay descriptor guarantees exactly one photon per
+    candidate, and it does hold on real MC. The recipe exists as a SAFETY CHECK on that guarantee
+    (fit_dalitz_new.ipynb runs it before computing Dalitz variables), and it is not a no-op for a
+    channel whose reconstruction does not fix the composition.
     """
     n_gamma = cut_utils.reduce(event, event['prt_pid'] == 22, 'prt_idx_mom',
                                how='sum', target_ref='tag_dtf_m')
@@ -223,9 +220,8 @@ def test_which_candidates_have_exactly_one_photon(event):
 
 
 def test_multiplicity_check_catches_a_malformed_candidate():
-    """What the previous recipe would report if the guarantee were violated.
-    Candidate 1 carries two photons, which is malformed for this channel --
-    not background, just wrong."""
+    """What the previous recipe would report if the guarantee were violated. Candidate 1 carries two
+    photons, which is malformed for this channel -- not background, just wrong."""
     bad = make_tree(
         tag_dtf_m=[[550.0, 549.0]],
         prt_idx_mom=[[0, 0, 0, 1, 1, 1, 1]],
@@ -253,8 +249,8 @@ def test_propagate_a_daughter_flag_up_to_its_candidate(event):
 
 
 def test_full_chain_candidate_to_generator_mother(event):
-    """The composite crossing: candidate -> daughter -> gen particle -> gen
-    mother. There is no direct link, so it is three hops."""
+    """The composite crossing: candidate -> daughter -> gen particle -> gen mother. There is no
+    direct link, so it is three hops."""
     picked = cut_utils.random_candidate_mask(ak.Array([[True, False]]), 0)
     dmask = cut_utils.follow(event, picked, 'prt_idx_mom')
     gen = cut_utils.reduce(event, dmask, 'prt_idx_gen', how='any',

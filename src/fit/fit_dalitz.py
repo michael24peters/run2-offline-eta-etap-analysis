@@ -1,8 +1,8 @@
 """
 fit_dalitz.py
 
-Per-Dalitz-bin mass fits of eta -> mu+ mu- gamma. Takes one candidate per event
-as (m12s, m23s, masses) arrays and fits them.
+Per-Dalitz-bin mass fits of eta -> mu+ mu- gamma. Takes one candidate per event as (m12s, m23s,
+masses) arrays and fits them.
 
     global fit_dcb of every candidate in the mass window
       -> one fit per Dalitz bin, seeded and constrained by the global fit
@@ -15,10 +15,9 @@ In each Dalitz bin (one m12 x m23 box) the gamma mu+ mu- mass M is fit with
     signal      DCB, times signal_factor(M) of the bin if given
     background  Chebyshev, times bkg_factor(M) of the bin if given
 
-each divided by its integral over the mass window (fit_utils, "Weighting by a
-Dalitz-bin factor f(M)"). signal_factor / bkg_factor are functions
-f(M, m12_range, m23_range), e.g. kinematics.phase_space_factor or
-kinematics.dalitz_factor; None (the default) fits the plain shapes.
+each divided by its integral over the mass window (fit_utils, "Weighting by a Dalitz-bin factor
+f(M)"). signal_factor / bkg_factor are functions f(M, m12_range, m23_range), e.g.
+kinematics.phase_space_factor or kinematics.dalitz_factor; None (the default) fits the plain shapes.
 
 Per-bin fit:
     mean, sigma   float, with a NormalConstraint from the global fit's
@@ -30,8 +29,8 @@ Per-bin fit:
     With signal_factor 0 at m_eta (a bin the eta cannot reach), n_sig is
     fixed to 0 and mean, sigma to the global fit's values.
 
-signal_only=True (truth-matched signal MC) fixes n_bkg to 0 and c0, c1 to
-fit_utils.BKG_INIT in the global fit and in every bin.
+signal_only=True (truth-matched signal MC) fixes n_bkg to 0 and c0, c1 to fit_utils.BKG_INIT in the
+global fit and in every bin.
 """
 
 import os
@@ -57,8 +56,8 @@ def bin_mask(m12s, m23s, m12_range, m23_range):
 
 
 def bin_factor_grid(factor, m12_range, m23_range, xmin, xmax):
-    """factor_grid = (masses, factor values) of one Dalitz bin: `factor` with
-    the bin's m12 and m23 ranges, sampled by fit_utils.sample_factor."""
+    """factor_grid = (masses, factor values) of one Dalitz bin: `factor` with the bin's m12 and m23
+    ranges, sampled by fit_utils.sample_factor."""
     def factor_of_mass(M):
         return factor(M, m12_range, m23_range)
     return fit_utils.sample_factor(factor_of_mass, xmin, xmax)
@@ -76,8 +75,8 @@ def fit_bin(counts, mass_edges, xmin, xmax, seed, prior_cov, bkg_seed,
     signal_factor_grid, bkg_factor_grid : (masses, factor) or None
     signal_only        n_bkg fixed to 0, c0 and c1 to fit_utils.BKG_INIT
 
-    Returns (fit, no_signal): the Minuit object, and whether n_sig was fixed
-    to 0 (signal factor 0 at m_eta).
+    Returns (fit, no_signal): the Minuit object, and whether n_sig was fixed to 0 (signal factor 0
+    at m_eta).
     """
     n_cand = counts.sum()
     no_signal = (signal_factor_grid is not None
@@ -89,8 +88,8 @@ def fit_bin(counts, mass_edges, xmin, xmax, seed, prior_cov, bkg_seed,
                                     bkg_factor_grid=bkg_factor_grid)
             + NormalConstraint(PRIOR_PARAMS, (seed['mean'], seed['sigma']), error=prior_cov))
 
-    # Global init shape; half signal and half background default; Chebyshev from
-    # bkg_seed, or flat when its variable spans the bin's reachable masses
+    # Global init shape; half signal and half background default; Chebyshev from bkg_seed, or flat
+    # when its variable spans the bin's reachable masses
     init = dict(seed,
                 n_sig=0.0 if no_signal else 0.5 * n_cand,
                 n_bkg=n_cand if no_signal else 0.5 * n_cand,
@@ -111,11 +110,11 @@ def fit_bin(counts, mass_edges, xmin, xmax, seed, prior_cov, bkg_seed,
 
 def bin_prediction(fit, counts, mass_edges, xmin, xmax,
                    signal_factor_grid=None, bkg_factor_grid=None):
-    """Expected signal and background counts per mass bin, Neyman chi2 and
-    data-based pulls of one bin's fit.
+    """Expected signal and background counts per mass bin, Neyman chi2 and data-based pulls of one
+    bin's fit.
 
-    Returns {bin_sig, bin_bkg, pulls, chi2, ndof}. chi2 = sum (d - f)^2 / d
-    and pulls = (d - f) / sqrt(d) over mass bins with d > 0.
+    Returns {bin_sig, bin_bkg, pulls, chi2, ndof}. chi2 = sum (d - f)^2 / d and pulls = (d - f) /
+    sqrt(d) over mass bins with d > 0.
     """
     values = fit.values
     signal_cdf = fit_utils.dcb_cdf
@@ -140,9 +139,8 @@ def bin_prediction(fit, counts, mass_edges, xmin, xmax,
 
 
 def bkg_goes_negative(fit, xmin, xmax, bkg_factor_grid=None):
-    """True if the fitted Chebyshev, before the BKG_FLOOR floor, is below 0 at
-    a mass the background can reach: anywhere in [xmin, xmax] without
-    bkg_factor_grid, where the factor is > 0 with it."""
+    """True if the fitted Chebyshev, before the BKG_FLOOR floor, is below 0 at a mass the background
+    can reach: anywhere in [xmin, xmax] without bkg_factor_grid, where the factor is > 0 with it."""
     coefficients = [fit.values[name] for name in fit_utils.BKG_PARAMS]
     if bkg_factor_grid is None:
         masses = np.linspace(xmin, xmax, 2000)
@@ -168,24 +166,21 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
     m12_edges, m23_edges : Dalitz-bin edges on each axis [GeV^2]
     xmin, xmax, nbins : mass window [MeV] and number of mass bins
     mean_init, sigma_init : global-fit start values [MeV]
-    tail_prior : (values, cov) of the global fit's TAIL_PARAMS prior, or None;
-             see fit_dcb()
-    signal_prior_factor : the per-bin mean/sigma prior is the global fit's
-             covariance with stdevs times this
-    min_candidates : bins with this many candidates in the window or fewer
-             are not fit
-    signal_factor, bkg_factor : f(M, m12_range, m23_range) multiplying the
-             signal / background shape in each bin, or None
-    signal_only : fix n_bkg to 0 and c0, c1 to fit_utils.BKG_INIT in the
-             global and per-bin fits (truth-matched signal MC)
+    tail_prior : (values, cov) of the global fit's TAIL_PARAMS prior, or None; see fit_dcb()
+    signal_prior_factor : the per-bin mean/sigma prior is the global fit's covariance with stdevs
+             times this
+    min_candidates : bins with this many candidates in the window or fewer are not fit
+    signal_factor, bkg_factor : f(M, m12_range, m23_range) multiplying the signal / background shape
+             in each bin, or None
+    signal_only : fix n_bkg to 0 and c0, c1 to fit_utils.BKG_INIT in the global and per-bin fits
+             (truth-matched signal MC)
     limits : the global fit's limits; see fit_dcb()
 
     Returns:
     --------
-    result : fit_dcb()'s result dict of the global fit, plus result['dalitz']
-             with one entry per Dalitz bin ('bins'), the outcome counts, the
-             yield closure and the mean, median and max chi2/ndof of the
-             valid bins.
+    result : fit_dcb()'s result dict of the global fit, plus result['dalitz'] with one entry per
+             Dalitz bin ('bins'), the outcome counts, the yield closure and the mean, median and max
+             chi2/ndof of the valid bins.
     global_fit : the global fit's Minuit object.
     """
     mass_edges = np.linspace(xmin, xmax, nbins + 1)
@@ -316,9 +311,8 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
 
 
 def hole_neighbors(result):
-    """For each fitted bin whose fit is invalid: (i, j, n_cand, neighbors),
-    with neighbors {(di, dj): n_cand} of the fitted bins directly above,
-    below, left and right of it."""
+    """For each fitted bin whose fit is invalid: (i, j, n_cand, neighbors), with neighbors
+    {(di, dj): n_cand} of the fitted bins directly above, below, left and right of it."""
     bins = {(b['i'], b['j']): b for b in result['dalitz']['bins']}
     holes = []
     for (i, j), b in bins.items():

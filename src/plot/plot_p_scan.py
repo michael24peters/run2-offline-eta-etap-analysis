@@ -1,17 +1,15 @@
 """
 plot_p_scan.py
 
-The muon momentum cut step of plot_cut_steps.py for a range of thresholds,
-with no fit:
+The muon momentum cut step of plot_cut_steps.py for a range of thresholds, with no fit:
 
     mass_p_<NN>_gev.png   the mass after the cuts before the p cut in
                           plot_cut_steps.cut_steps ([truth match], TOS per
                           trigger level, muon pT), and after p(muon) > NN GeV
                           on top of them, for NN in P_MIN_GEV
 
-The cuts after p (eta, ProbNNmu, ghost, IP chi2, IsMuonTight, random candidate,
-fit window) are not applied. Every muon daughter must pass the threshold; a
-non-muon daughter passes.
+The cuts after p (eta, ProbNNmu, ghost, IP chi2, IsMuonTight, random candidate, fit window) are not
+applied. Every muon daughter must pass the threshold; a non-muon daughter passes.
 
 Usage:
     python src/plot/plot_p_scan.py INFILE --outdir OUTDIR

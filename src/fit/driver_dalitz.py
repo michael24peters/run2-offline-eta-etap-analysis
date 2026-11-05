@@ -21,8 +21,7 @@ Per-Dalitz-bin mass fits of eta -> mu+ mu- gamma from a ROOT file:
     tag_dtf_m  tag_dtf_m; m12, m23 from the DTF daughters prt_dtf_px/py/pz/e (default)
     tag_m      tag_m; m12, m23 from prt_px/py/pz/e
 
---factor picks the per-bin factor on the signal and background shapes
-(FACTORS):
+--factor picks the per-bin factor on the signal and background shapes (FACTORS):
 
     none      no factor on either shape (default)
     flat      kinematics.phase_space_factor on the signal and the background
@@ -32,25 +31,21 @@ Per-Dalitz-bin mass fits of eta -> mu+ mu- gamma from a ROOT file:
 One candidate per event is picked at random among those that pass the cuts
 (cut_utils.random_candidate_mask, seed SEED).
 
---truth-match (signal MC only) keeps the candidates with every daughter
-truth-matched to eta -> mu+ mu- gamma (bkg_utils.signal_candidate_mask). It is
-the first cut, before TOS, pnn_mu and the candidate pick. The matched
-candidates are fit with no tail prior and the background fixed to 0
+--truth-match (signal MC only) keeps the candidates with every daughter truth-matched to eta -> mu+
+mu- gamma (bkg_utils.signal_candidate_mask). It is the first cut, before TOS, pnn_mu and the
+candidate pick. The matched candidates are fit with no tail prior and the background fixed to 0
 (fit_dalitz signal_only).
 
---tail-prior takes the 'fit' block of a results JSON (results_dcb.json of
-driver_mass_fit.py, or dalitz_fit_<factor>.json): the global fit carries the
-tail prior of that fit, its stdevs times TAIL_PRIOR_FACTOR. Without it the
-tails float free.
+--tail-prior takes the 'fit' block of a results JSON (results_dcb.json of driver_mass_fit.py, or
+dalitz_fit_<factor>.json): the global fit carries the tail prior of that fit, its stdevs times
+TAIL_PRIOR_FACTOR. Without it the tails float free.
 
 --n-max is the upper limit of the global fit's tail exponents n_L and n_R.
 
-The number of candidates outside their own kinematic limits
-(kinematics.m123_limits) is printed. No mass-window or Dalitz-grid cut is
-applied to the selection.
+The number of candidates outside their own kinematic limits (kinematics.m123_limits) is printed. No
+mass-window or Dalitz-grid cut is applied to the selection.
 
-select_candidates() is the selection on its own, for fit_dalitz.ipynb and
-plot_phase_space.py.
+select_candidates() is the selection on its own, for fit_dalitz.ipynb and plot_phase_space.py.
 
 Usage:
     python src/fit/driver_dalitz.py INFILE --outdir OUTDIR
@@ -83,8 +78,8 @@ from plot_dalitz_bins import plot_dalitz_fit
 
 SEED = 0                          # random candidate pick
 
-# Muon requirements of the dark-photon ananote (LHCb-ANA-2017-027, Tables 1 and 3), with p at
-# the 2018 Hlt1DiMuonNoIP threshold. Every muon daughter must pass each; a non-muon daughter passes.
+# Muon requirements of the dark-photon ananote (LHCb-ANA-2017-027, Tables 1 and 3), with p at the
+# 2018 Hlt1DiMuonNoIP threshold. Every muon daughter must pass each; a non-muon daughter passes.
 MU_PT_MIN = 1000.0                # pT [MeV]
 MU_P_MIN = 10000.0                # p [MeV]
 MU_ETA_RANGE = (2.0, 4.5)         # pseudorapidity
@@ -142,9 +137,9 @@ def select_candidates(infile, mass='tag_dtf_m', truth_match=False, max_events=No
     """
     Read infile, select, and pick one candidate per event at random.
 
-    Returns (m12s, m23s, masses, selection): the Dalitz variables [GeV^2] and
-    gamma mu+ mu- mass [MeV] of each event's picked candidate, and the
-    selection settings and report (the contents of selection.json).
+    Returns (m12s, m23s, masses, selection): the Dalitz variables [GeV^2] and gamma mu+ mu- mass
+    [MeV] of each event's picked candidate, and the selection settings and report (the contents of
+    selection.json).
     """
     momenta = MASS_SOURCES[mass]
     branches = ([mass, 'prt_idx_mom', 'prt_pid', 'prt_pnn_mu',

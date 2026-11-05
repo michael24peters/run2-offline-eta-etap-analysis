@@ -1,10 +1,9 @@
 """
 Unit tests for cut_utils.align_muons().
 
-The ntuple stores prt_mu, prt_loose_mu and prt_tight_mu for muon daughters
-only, one entry per muon in daughter order. In eta -> mu mu gamma that is 2
-entries per 3-daughter candidate, so the branch does not line up with prt_pid
-by position; align_muons expands it to one entry per daughter.
+The ntuple stores prt_mu, prt_loose_mu and prt_tight_mu for muon daughters only, one entry per muon
+in daughter order. In eta -> mu mu gamma that is 2 entries per 3-daughter candidate, so the branch
+does not line up with prt_pid by position; align_muons expands it to one entry per daughter.
 """
 
 import pytest

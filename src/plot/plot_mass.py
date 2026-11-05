@@ -16,8 +16,7 @@ import awkward as ak
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Project imports
-# Ensure utils/cut_utils.py is importable
+# Project imports Ensure utils/cut_utils.py is importable
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 import cut_utils
@@ -31,16 +30,15 @@ parser.add_argument('input',
                     help='Input ROOT file')
 parser.add_argument('output', nargs='?', default='mass_plot.png',
                     help='Output PNG file (default: mass_plot.png)')
-# Flag to only plot one randomly picked candidate per event, using
-# cut_utils.random_candidate_mask() to pick it.
+# Flag to only plot one randomly picked candidate per event, using cut_utils.random_candidate_mask()
+# to pick it.
 parser.add_argument('--random-candidate', action='store_true', default=False,
                     help='Only plot one randomly picked candidate per event (default: False)')
-# Flag to plot full mass range (400-1200 MeV) instead of zoomed-in range 
-# (450-600 MeV).
+# Flag to plot full mass range (400-1200 MeV) instead of zoomed-in range (450-600 MeV).
 parser.add_argument('--full-range', action='store_true', default=False,
                     help='Plot full mass range (400-1200 MeV) instead of zoomed-in range (450-600 MeV) (default: False)')
-# Selection, matching driver_dcb.py / driver_gauss.py. Defaults to no additional
-# cut, so a bare run is a diagnostic overview of everything in the file.
+# Selection, matching driver_dcb.py / driver_gauss.py. Defaults to no additional cut, so a bare run
+# is a diagnostic overview of everything in the file.
 parser.add_argument('--tos', action='store_true', default=False,
                     help='Require candidates to be TOS on at least one line at every '
                          'trigger level (L0, HLT1, HLT2)')
@@ -52,14 +50,14 @@ parser.add_argument('--mass', choices=['tag_dtf_m', 'tag_m'], default='tag_dtf_m
 args = parser.parse_args()
 print(f'Reading from {args.input} and writing to {args.output}.')
 
-# Raw, per-event jagged array of candidate masses (always needed for the
-# candidate-multiplicity diagnostics below, regardless of --random-candidate).
-# The prt_/trigger branches are read and validated unconditionally so that every
-# selection variant runs over the same event sample and differs only by the cut.
+# Raw, per-event jagged array of candidate masses (always needed for the candidate-multiplicity
+# diagnostics below, regardless of --random-candidate). The prt_/trigger branches are read and
+# validated unconditionally so that every selection variant runs over the same event sample and
+# differs only by the cut.
 DAUGHTER_FIELDS = ['prt_pid', 'prt_pnn_mu']
 MUON_PID = 13
-# Trigger-on-signal lines per trigger level; TOS requires at least one line at
-# every level (cut_utils.tos_mask). A property of this ntuple, not of cut_utils.
+# Trigger-on-signal lines per trigger level; TOS requires at least one line at every level
+# (cut_utils.tos_mask). A property of this ntuple, not of cut_utils.
 TOS_LINES = {
     'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
     'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass
@@ -79,10 +77,9 @@ print(f'Events with 1 candidate:  {np.sum(lengths == 1)}')
 print(f'Events with 2+ candidates: {np.sum(lengths >= 2)}')
 print(f'Events with 3+ candidates: {np.sum(lengths >= 3)}')
 print(f'Max candidates in an event: {lengths.max()}')
-# Candidates plotted with --random-candidate=False is every candidate
-# (lengths.sum()); with --random-candidate=True it's one per event that has at
-# least one candidate. Report both so the effect of --random-candidate is
-# visible regardless of which mode this run actually uses.
+# Candidates plotted with --random-candidate=False is every candidate (lengths.sum()); with
+# --random-candidate=True it's one per event that has at least one candidate. Report both so the
+# effect of --random-candidate is visible regardless of which mode this run actually uses.
 n_all_candidates = int(lengths.sum())
 n_random_candidates = int(np.sum(lengths >= 1))
 print(f'Candidates plotted (--random-candidate=False): {n_all_candidates}')
@@ -90,15 +87,15 @@ print(f'Candidates plotted (--random-candidate=True):  {n_random_candidates}')
 print(f'Difference (candidates dropped by --random-candidate selection): {n_all_candidates - n_random_candidates}')
 print(f"{'─' * 48}")
 
-# Apply the selection. pnn_mu_min defaults to the upstream floor, so a bare run
-# passes every candidate and only --tos / a raised threshold narrow it.
+# Apply the selection. pnn_mu_min defaults to the upstream floor, so a bare run passes every
+# candidate and only --tos / a raised threshold narrow it.
 keep = ak.ones_like(tree[args.mass], dtype=bool)
 if args.tos:
     tos, _ = cut_utils.tos_mask(tree, TOS_LINES, tag_ref=args.mass)
     keep = keep & tos
 if args.pnn_mu_min is not None:
-    # "passes OR isn't a muon", reduced onto the candidate, so a candidate is cut
-    # only when one of its own muon daughters fails.
+    # "passes OR isn't a muon", reduced onto the candidate, so a candidate is cut only when one of
+    # its own muon daughters fails.
     muon_ok = ((tree['prt_pnn_mu'] > args.pnn_mu_min)
                | (abs(tree['prt_pid']) != MUON_PID))
     keep = keep & cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all',
@@ -110,9 +107,8 @@ print(f'Selection [{applied or "none"}]: '
       f'{int(ak.sum(ak.num(mass)))} / {n_all_candidates} candidates pass')
 
 if args.random_candidate:
-    # Pick one candidate per event at random. `keep` is the eligibility mask, so
-    # each event keeps a random candidate that survived the selection; events
-    # with none left simply contribute nothing.
+    # Pick one candidate per event at random. `keep` is the eligibility mask, so each event keeps a
+    # random candidate that survived the selection; events with none left simply contribute nothing.
     picked = cut_utils.random_candidate_mask(keep, seed=0)
     tag_m = cut_utils.values(tree, args.mass, picked)
 # Flatten to every surviving candidate

@@ -1,6 +1,6 @@
 """
-Unit tests for the per-Dalitz-bin fit library, src/fit/fit_dalitz.py, on toy
-candidates: a Gaussian eta peak and a flat background in mass. Two toys:
+Unit tests for the per-Dalitz-bin fit library, src/fit/fit_dalitz.py, on toy candidates: a Gaussian
+eta peak and a flat background in mass. Two toys:
 
     physical_toy     density per unit Dalitz area the same at every mass,
                      zero outside the mass's Dalitz region: in a Dalitz bin,
@@ -10,8 +10,8 @@ candidates: a Gaussian eta peak and a flat background in mass. Two toys:
                      the eta's Dalitz region, background uniform over the
                      grid): the model of the plain DCB + Chebyshev fit
 
-A 3 x 3 grid over the same m12/m23 ranges as driver_dalitz_fit.py keeps the
-fits fast. Fixed RNG seeds.
+A 3 x 3 grid over the same m12/m23 ranges as driver_dalitz_fit.py keeps the fits fast. Fixed RNG
+seeds.
 """
 
 import numpy as np
@@ -25,8 +25,8 @@ M12_EDGES = np.linspace(0.0, 0.21, 4)   # [GeV^2]
 M23_EDGES = np.linspace(0.0, 0.31, 4)   # [GeV^2]
 N_SIG, N_BKG = 4000, 8000
 MIN_CANDIDATES = 10
-# Global-fit prior on (alphaL, nL, alphaR, nR): Gaussian-like tails, as the
-# driver's MC tail prior provides for data
+# Global-fit prior on (alphaL, nL, alphaR, nR): Gaussian-like tails, as the driver's MC tail prior
+# provides for data
 TAIL_PRIOR = (np.array([3.0, 5.0, 3.0, 5.0]), np.diag([0.1**2] * 4))
 BOX = (XMAX / 1000.0)**2   # side of the (m12, m23) square the toy points are drawn in [GeV^2]
 
@@ -47,10 +47,9 @@ def draw_eta_mass(rng, size):
 
 
 def phase_space_candidates(rng, draw_masses, n):
-    """n candidates (m12s, m23s, masses): a mass from draw_masses and (m12, m23)
-    uniform in [0, BOX] x [0, BOX] [GeV^2], kept where kinematics.m123_limits
-    contains the mass. In a Dalitz bin, their mass density is draw_masses's
-    density times the bin's phase-space factor."""
+    """n candidates (m12s, m23s, masses): a mass from draw_masses and (m12, m23) uniform in [0, BOX]
+    x [0, BOX] [GeV^2], kept where kinematics.m123_limits contains the mass. In a Dalitz bin, their
+    mass density is draw_masses's density times the bin's phase-space factor."""
     kept = []
     n_kept = 0
     while n_kept < n:
@@ -66,8 +65,8 @@ def phase_space_candidates(rng, draw_masses, n):
 
 @pytest.fixture(scope='module')
 def physical_toy():
-    """m12s, m23s, masses, is_signal: N_SIG signal then N_BKG background
-    candidates from phase_space_candidates."""
+    """m12s, m23s, masses, is_signal: N_SIG signal then N_BKG background candidates from
+    phase_space_candidates."""
     rng = np.random.default_rng(7)
     signal = phase_space_candidates(rng, draw_signal_masses, N_SIG)
     background = phase_space_candidates(rng, draw_bkg_masses, N_BKG)
@@ -77,8 +76,8 @@ def physical_toy():
 
 @pytest.fixture(scope='module')
 def independent_toy():
-    """m12s, m23s, masses, is_signal: signal uniform over the eta's Dalitz
-    region and background uniform over the grid, whatever their mass."""
+    """m12s, m23s, masses, is_signal: signal uniform over the eta's Dalitz region and background
+    uniform over the grid, whatever their mass."""
     rng = np.random.default_rng(8)
     signal_m12s, signal_m23s, _ = phase_space_candidates(rng, draw_eta_mass, N_SIG)
     m12s = np.concatenate([signal_m12s, rng.uniform(M12_EDGES[0], M12_EDGES[-1], N_BKG)])
@@ -178,8 +177,8 @@ def test_bins_the_eta_cannot_reach_have_n_sig_fixed_at_zero(phase_space):
 @pytest.mark.parametrize('fit_name, toy_name', [('baseline', 'independent_toy'),
                                                 ('phase_space', 'physical_toy')])
 def test_summed_signal_matches_the_injected_signal(fit_name, toy_name, request):
-    """Summed n_sig over bins where it floats is within 3 combined standard
-    deviations of the signal toys those bins hold."""
+    """Summed n_sig over bins where it floats is within 3 combined standard deviations of the signal
+    toys those bins hold."""
     result = request.getfixturevalue(fit_name)
     toy = request.getfixturevalue(toy_name)
     floating = [b for b in result['dalitz']['bins']
@@ -203,8 +202,8 @@ def test_hole_neighbors_lists_fitted_neighbors_of_invalid_bins():
 
 
 def test_signal_only_fixes_the_background_to_zero(physical_toy):
-    """signal_only on signal toys: n_bkg is 0 in the global fit and in every
-    bin, and n_sig equals the bin's candidates wherever it floats."""
+    """signal_only on signal toys: n_bkg is 0 in the global fit and in every bin, and n_sig equals
+    the bin's candidates wherever it floats."""
     m12s, m23s, masses, is_signal = physical_toy
     result, global_fit = fit_dalitz(m12s[is_signal], m23s[is_signal], masses[is_signal],
                                     M12_EDGES, M23_EDGES, xmin=XMIN, xmax=XMAX,

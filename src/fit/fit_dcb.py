@@ -34,28 +34,23 @@ def fit_dcb(values, xmin=500.0, xmax=600.0, nbins=100,
     Arguments:
     ----------
     values : 1-D numpy array of values to fit.
-    xmin, xmax, nbins : float, float, int : The range and number of bins for the
-             histogram.
+    xmin, xmax, nbins : float, float, int : The range and number of bins for the histogram.
     mean_init, sigma_init : float : Initial values for the DCB parameters.
     alphaL_init, nL_init : float : Initial values for the left tail parameters.
     alphaR_init, nR_init : float : Initial values for the right tail parameters.
-    tail_prior : optional (values, cov) for TAIL_PARAMS as a group -- `values`
-             a length-4 array/dict, `cov` its 4x4 covariance. Adds
-             NormalConstraint(TAIL_PARAMS, values, error=cov) to the cost, so
-             the tails float but are penalized for straying from `values`
-             (e.g. an MC-derived tail shape) by an amount set by `cov` --
-             looser than hard-fixing them via `fixed_params`.
-    sigma_prior : optional (values, cov) for sigma -- `values` a length-1
-             array, `cov` its 1x1 covariance. Adds
-             NormalConstraint(('sigma',), values, error=cov) to the cost, as
+    tail_prior : optional (values, cov) for TAIL_PARAMS as a group -- `values` a length-4
+             array/dict, `cov` its 4x4 covariance. Adds
+             NormalConstraint(TAIL_PARAMS, values, error=cov) to the cost, so the tails float but
+             are penalized for straying from `values` (e.g. an MC-derived tail shape) by an amount
+             set by `cov` -- looser than hard-fixing them via `fixed_params`.
+    sigma_prior : optional (values, cov) for sigma -- `values` a length-1 array, `cov` its 1x1
+             covariance. Adds NormalConstraint(('sigma',), values, error=cov) to the cost, as
              tail_prior does for the tails.
-    fixed_params : optional dict {param_name: value}, any of mean, sigma,
-             alphaL, nL, alphaR, nR, n_sig, n_bkg, c0, c1. Each is seeded at
-             the given value and held fixed through both fit stages instead
-             of floating.
-    limits : optional dict {param_name: (lo, hi)} replacing the default
-             limits of those parameters, e.g. {'nL': (0, 50), 'nR': (0, 50)};
-             either bound may be None.
+    fixed_params : optional dict {param_name: value}, any of mean, sigma, alphaL, nL, alphaR, nR,
+             n_sig, n_bkg, c0, c1. Each is seeded at the given value and held fixed through both fit
+             stages instead of floating.
+    limits : optional dict {param_name: (lo, hi)} replacing the default limits of those parameters,
+             e.g. {'nL': (0, 50), 'nR': (0, 50)}; either bound may be None.
 
     Returns:
     --------
@@ -97,11 +92,10 @@ def fit_dcb(values, xmin=500.0, xmax=600.0, nbins=100,
         n_sig=(0.0, None), n_bkg=(0.0, None),
     ) | (limits or {})
 
-    # Stage 1: fit with the background params, and the tail params fixed at
-    # their init values (also anything in fixed_params).
-    # Stage 2: float everything except fixed_params, starting from stage 1's
-    # result.
-    # stage1_fixed = set(TAIL_PARAMS) | set(fit_utils.BKG_PARAMS) | set(fixed_params or {})
+    # Stage 1: fit with the background params, and the tail params fixed at their init values (also
+    # anything in fixed_params). Stage 2: float everything except fixed_params, starting from stage
+    # 1's result. stage1_fixed = set(TAIL_PARAMS) | set(fit_utils.BKG_PARAMS) |
+    # set(fixed_params or {})
     stage1_fixed = set(TAIL_PARAMS) | set(fixed_params or {})
     stage1 = fit_utils.run_fit(cost, init, limits, fixed=list(stage1_fixed))
     # init2 = dict(init, mean=stage1.values['mean'], sigma=stage1.values['sigma'],
@@ -122,15 +116,15 @@ def fit_dcb(values, xmin=500.0, xmax=600.0, nbins=100,
     print(f"[INFO] α_R={p['alphaR']:.3f}±{e['alphaR']:.3f}  n_R={p['nR']:.3f}±{e['nR']:.3f}",
           file=sys.stderr)
 
-    # Compute bin predictions. Integrating the PDF over each bin (CDF at the
-    # upper edge minus the lower edge) is exact, unlike sampling the PDF at bin
-    # centres, which biases bins where the PDF has curvature (i.e. the peak).
+    # Compute bin predictions. Integrating the PDF over each bin (CDF at the upper edge minus the
+    # lower edge) is exact, unlike sampling the PDF at bin centres, which biases bins where the PDF
+    # has curvature (i.e. the peak).
     bw = (xmax - xmin) / nbins
     sig_cdf_edges = fit_utils.dcb_cdf(bin_edges, xmin, xmax, p['mean'], p['sigma'],
                                     p['alphaL'], p['nL'], p['alphaR'], p['nR'])
     bkg_cdf_edges = fit_utils.cheb_cdf(bin_edges, xmin, xmax, p['c0'], p['c1'])
-    # Both CDFs run 0 -> 1 across the window, so np.diff gives the fraction of
-    # each component in each bin; scale by the yields to get expected counts.
+    # Both CDFs run 0 -> 1 across the window, so np.diff gives the fraction of each component in
+    # each bin; scale by the yields to get expected counts.
     bin_sig = np.diff(sig_cdf_edges) * p['n_sig']
     bin_bkg = np.diff(bkg_cdf_edges) * p['n_bkg']
     bin_fit = bin_sig + bin_bkg
@@ -159,11 +153,10 @@ def fit_dcb(values, xmin=500.0, xmax=600.0, nbins=100,
             'matrix': np.asarray(m.covariance).tolist(),
         }
 
-    # Build JSON. Everything a plotting script needs travels in the result, so
-    # plotting never has to re-open the ROOT file or re-run the fit: `meta` for
-    # metadata, `fit` for the numbers, `histogram` for the points/residuals,
-    # and `curve` for the overlays. Arrays are .tolist()'d since numpy types
-    # are not JSON-serialisable.
+    # Build JSON. Everything a plotting script needs travels in the result, so plotting never has to
+    # re-open the ROOT file or re-run the fit: `meta` for metadata, `fit` for the numbers,
+    # `histogram` for the points/residuals, and `curve` for the overlays. Arrays are .tolist()'d
+    # since numpy types are not JSON-serialisable.
     result = {
         'meta': {
             'n_input': int(values.size),

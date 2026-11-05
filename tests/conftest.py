@@ -1,12 +1,12 @@
 """
 Shared pytest fixtures and path setup.
 
-`src/utils`, `src/root` and `src/fit` are not packages, so they go on sys.path
-the same way every script in the repo does it.
+`src/utils`, `src/root` and `src/fit` are not packages, so they go on sys.path the same way every
+script in the repo does it.
 
-Every fixture here is a hand-built toy tree -- no ROOT files, no network. The
-trees are small enough to verify by eye, which is the point: a test that needs
-a 600 MB ntuple to explain itself is not a unit test.
+Every fixture here is a hand-built toy tree -- no ROOT files, no network. The trees are small enough
+to verify by eye, which is the point: a test that needs a 600 MB ntuple to explain itself is not a
+unit test.
 
 Ntuple conventions the fixtures reproduce:
   - every branch is float64, including the index branches
@@ -31,15 +31,13 @@ sys.path.insert(0, os.path.join(_here, '..', 'src', 'fit'))
 def make_tree(**fields):
     """Build a toy tree from plain nested lists.
 
-    Everything is float64, to match the real ntuple -- casting index branches
-    back to int is part of what follow() and reduce() do, and the tests should
-    exercise that rather than side-step it.
+    Everything is float64, to match the real ntuple -- casting index branches back to int is part of
+    what follow() and reduce() do, and the tests should exercise that rather than side-step it.
 
-    Built via ak.unflatten rather than ak.Array so that a branch which is empty
-    in EVERY event still comes out typed `var * float64`. ak.Array would infer
-    `var * unknown` there, which uproot never produces (a ROOT branch carries a
-    declared type whether or not any entry is filled) and which would make these
-    tests fail for a reason the real pipeline cannot hit.
+    Built via ak.unflatten rather than ak.Array so that a branch which is empty in EVERY event still
+    comes out typed `var * float64`. ak.Array would infer `var * unknown` there, which uproot never
+    produces (a ROOT branch carries a declared type whether or not any entry is filled) and which
+    would make these tests fail for a reason the real pipeline cannot hit.
     """
     built = {}
     for name, rows in fields.items():
@@ -53,8 +51,8 @@ def make_tree(**fields):
 def kinematic_tree(particles):
     """Build an mc_* tree from (pid, mother_idx, px, py, pz) tuples per event.
 
-    Momenta are chosen by the caller so a particle either clears or misses the
-    fiducial cuts (eta in [2, 4.5], pT > 500, p > 3000 for muons).
+    Momenta are chosen by the caller so a particle either clears or misses the fiducial cuts (eta in
+    [2, 4.5], pT > 500, p > 3000 for muons).
     """
     return ak.Array({
         'mc_pid':     ak.Array([[float(p[0]) for p in ev] for ev in particles]),
@@ -65,17 +63,17 @@ def kinematic_tree(particles):
     })
 
 
-# (px, py, pz) triples calibrated against the fiducial cuts in fid_reqs.py
-# (eta in [2, 4.5]; pT > 500; and p > 3000 for muons and electrons), so a test
-# can say IN or FWD instead of three magic numbers. Verified values:
+# (px, py, pz) triples calibrated against the fiducial cuts in fid_reqs.py (eta in [2, 4.5]; pT >
+# 500; and p > 3000 for muons and electrons), so a test can say IN or FWD instead of three magic
+# numbers. Verified values:
 #
 #            pT       p       eta    muon   photon
 #   IN     1000.0  10049.9   3.00    pass    pass
 #   FWD    1000.0  74206.7   5.00    fail    fail    <- fails on eta ALONE
 #   LOW_PT  100.0   1005.0   3.00    fail    fail    <- fails on pT (and p)
 #
-# FWD is the one to reach for when a test needs a particle to fail for exactly
-# one reason; LOW_PT trips more than one cut at once for muons.
+# FWD is the one to reach for when a test needs a particle to fail for exactly one reason; LOW_PT
+# trips more than one cut at once for muons.
 IN = (600.0, 800.0, 10000.0)
 FWD = (600.0, 800.0, 74200.0)
 LOW_PT = (60.0, 80.0, 1000.0)
@@ -102,9 +100,8 @@ def reco():
 def shared_track():
     """One event, 2 candidates that SHARE a reco track.
 
-    Daughters 1 and 2 both matched generator particle 2, which is what makes the
-    daughter -> gen -> daughter round trip lossy. A real and common situation in
-    multi-candidate events.
+    Daughters 1 and 2 both matched generator particle 2, which is what makes the daughter -> gen ->
+    daughter round trip lossy. A real and common situation in multi-candidate events.
 
         prt_idx_mom = [0, 0, 1, 1]   two candidates
         prt_idx_gen = [1, 2, 2, 3]   daughters 1 and 2 share gen particle 2
@@ -125,8 +122,8 @@ def shared_track():
 def gen():
     """Two events of generator particles, eta -> mu+ mu-.
 
-    Index 0 is the eta and has NO mother, so mc_idx_mom is -1 there. That
-    sentinel is what most of the reduce() tests are about.
+    Index 0 is the eta and has NO mother, so mc_idx_mom is -1 there. That sentinel is what most of
+    the reduce() tests are about.
     """
     return make_tree(
         mc_pid=[[221, -13, 13], [221, -13, 13]],
@@ -138,9 +135,9 @@ def gen():
 def gen_with_strays():
     """One event: a clean eta -> mu mu gamma decay plus MC-matched junk.
 
-    Taken from real eta2mumugamma MC, where the generator record holds the
-    signal decay AND every particle the reconstruction matched onto. The strays
-    are motherless, so they are nobody's daughters.
+    Taken from real eta2mumugamma MC, where the generator record holds the signal decay AND every
+    particle the reconstruction matched onto. The strays are motherless, so they are nobody's
+    daughters.
 
         mc_pid     = [221, -13, 13, 22,  22, -211, 2112]
         mc_idx_mom = [ -1,   0,  0,  0,  -1,   -1,   -1]
@@ -156,8 +153,8 @@ def gen_with_strays():
 def two_gen_candidates():
     """One event with TWO complete eta -> mu mu gamma decays.
 
-    Second eta is at index 4 and its daughters point at 4, not 0. Exercises the
-    case where 'any' and 'all' over mothers disagree.
+    Second eta is at index 4 and its daughters point at 4, not 0. Exercises the case where 'any' and
+    'all' over mothers disagree.
     """
     return make_tree(
         mc_pid=[[221, -13, 13, 22, 221, -13, 13, 22]],

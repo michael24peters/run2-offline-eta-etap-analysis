@@ -1,23 +1,20 @@
 """
 trig_eff.py
 
-Trigger efficiency of every line and of each level's TOS selection, per
-candidate, two ways:
+Trigger efficiency of every line and of each level's TOS selection, per candidate, two ways:
 
     true     eff = N(TOS) / N                  (with MC truth, the actual efficiency)
     TISTOS   eff = N(TIS & TOS) / N(TIS)       (the data-driven estimate)
 
-TOS selection: TOS on at least one of the level's TOS_LINES. TIS: TIS on at
-least one line of the level (every line in LINES, including the dedicated TIS
-line). Each level is evaluated on the candidates that pass the TOS selection
-of every earlier level (L0 -> HLT1 -> HLT2, as cut_utils.tos_mask applies
-them), so the per-level efficiencies multiply to the total.
+TOS selection: TOS on at least one of the level's TOS_LINES. TIS: TIS on at least one line of the
+level (every line in LINES, including the dedicated TIS line). Each level is evaluated on the
+candidates that pass the TOS selection of every earlier level (L0 -> HLT1 -> HLT2, as
+cut_utils.tos_mask applies them), so the per-level efficiencies multiply to the total.
 
-With --daughter-pids, the candidates are the MC-truth-matched ones (every
-daughter matches eta -> daughter-pids, bkg_utils.signal_candidate_mask) whose
-generated decay is in the fiducial region (fid_reqs.fiducial_candidate_mask);
-decays outside it are not counted. Truth-matching is the first selection, before
-any trigger level. Without, every candidate.
+With --daughter-pids, the candidates are the MC-truth-matched ones (every daughter matches eta ->
+daughter-pids, bkg_utils.signal_candidate_mask) whose generated decay is in the fiducial region
+(fid_reqs.fiducial_candidate_mask); decays outside it are not counted. Truth-matching is the first
+selection, before any trigger level. Without, every candidate.
 
 Errors are binomial: sqrt(eff (1 - eff) / denominator).
 
@@ -43,15 +40,15 @@ from fid_reqs import fiducial_candidate_mask
 TAG_REF    = 'tag_m'
 MOTHER_PID = 221
 
-# Every line of each level, in ntuple order: line i is tag_<level>_tos<i> /
-# tag_<level>_tis<i> (~/ana/src/ntuple.py l0Trgs / hlt1Trgs / hlt2Trgs).
+# Every line of each level, in ntuple order: line i is tag_<level>_tos<i> / tag_<level>_tis<i>
+# (~/ana/src/ntuple.py l0Trgs / hlt1Trgs / hlt2Trgs).
 LINES = {
     'L0':   ['L0DiMuon', 'L0Muon', 'L0Hadron'],
     'HLT1': ['Hlt1DiMuonNoIP', 'Hlt1DiMuonLowMass', 'Hlt1MultiDiMuonNoIP', 'Hlt1TrackMVA'],
     'HLT2': ['Hlt2ExoticaPrmptDiMuonTurbo', 'Hlt2ExoticaDiMuonNoIPTurbo', 'Hlt2Topo'],
 }
-# TOS selection per level: every di-muon line. The TOS_LINES of src/fit/driver_mass_fit.py
-# and driver_dalitz.py currently omit tag_hlt1_tos1 and tag_hlt2_tos1.
+# TOS selection per level: every di-muon line. The TOS_LINES of src/fit/driver_mass_fit.py and
+# driver_dalitz.py currently omit tag_hlt1_tos1 and tag_hlt2_tos1.
 TOS_LINES = {
     'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
     'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos1'],   # Hlt1DiMuonNoIP, Hlt1DiMuonLowMass

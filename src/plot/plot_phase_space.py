@@ -1,8 +1,7 @@
 """
 plot_phase_space.py
 
-Figures for docs/phase-space-factor.md, explaining the Dalitz phase-space
-factor f(M).
+Figures for docs/phase-space-factor.md, explaining the Dalitz phase-space factor f(M).
 
 Usage:
     python src/plot/plot_phase_space.py \
@@ -10,10 +9,9 @@ Usage:
         [--infile  ntuple/lhcb/eta2mumugamma/20261006/combined_files.root [--mass tag_dtf_m]] \
         [--outdir  out/phase-space-factor]
 
-Pure kinematics (always made): f(m_eta) map and the step-by-step
-construction of f for one bin. With --results: the decomposition of one bin
-(what f and renormalization do to its signal and background shapes). With
---infile: the worked-example and within-bin uniformity figures, which need the
+Pure kinematics (always made): f(m_eta) map and the step-by-step construction of f for one bin. With
+--results: the decomposition of one bin (what f and renormalization do to its signal and background
+shapes). With --infile: the worked-example and within-bin uniformity figures, which need the
 candidates' Dalitz positions (driver_dalitz.select_candidates of the file).
 """
 
@@ -69,8 +67,8 @@ def f_of(M, i, j):
 
 
 def inside_region(m12, m23, M):
-    """True where the Dalitz point (m12, m23) [GeV^2] is kinematically
-    reachable by a system of mass M [MeV] -- eq. (1) of the write-up."""
+    """True where the Dalitz point (m12, m23) [GeV^2] is kinematically reachable by a system of mass
+    M [MeV] -- eq. (1) of the write-up."""
     M2 = (M / 1000.0)**2
     ok = (m23 > 4 * MMU2) & (m23 < M2)
     beta = np.sqrt(np.clip(1 - 4 * MMU2 / np.where(ok, m23, 1.0), 0, None))
@@ -89,8 +87,8 @@ def dalitz_boundary(M, n=3000):
 
 
 def draw_bin_at_mass(ax, i, j, M, margin=0.6, n=400):
-    """Zoom on bin (i, j): the Dalitz region at mass M in light grey, the
-    part of the bin inside it in violet, the bin outline in black."""
+    """Zoom on bin (i, j): the Dalitz region at mass M in light grey, the part of the bin inside it
+    in violet, the bin outline in black."""
     (a, b), (lo, hi) = bin_ranges(i, j)
     w, h = b - a, hi - lo
     x0, x1 = max(a - margin * w, 0), b + margin * w
@@ -154,8 +152,8 @@ def fig_construction(outdir):
 
 
 def fig_decomposition(outdir, results, i, j):
-    """Bin (i, j)'s f, and what multiplying by f and renormalizing does to
-    its background (fitted c0, c1) and signal (global-fit DCB) shapes."""
+    """Bin (i, j)'s f, and what multiplying by f and renormalizing does to its background (fitted
+    c0, c1) and signal (global-fit DCB) shapes."""
     g = results['fit']['parameters']
     entry = next(b for b in results['dalitz']['bins'] if (b['i'], b['j']) == (i, j))
     dcb = [g[p]['value'] for p in ('mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR')]
@@ -200,8 +198,8 @@ def fig_decomposition(outdir, results, i, j):
 
 
 def fig_worked_example(outdir, events):
-    """The worked-example Dalitz point against D(M) at six masses, and the
-    masses of the candidates reconstructed near it."""
+    """The worked-example Dalitz point against D(M) at six masses, and the masses of the candidates
+    reconstructed near it."""
     x, y = WORKED_POINT
     m_min, m_max = (float(v) for v in kinematics.m123_limits(x, y))
     masses = [kinematics.M_ETA, m_min, 620.0, 680.0, m_max, 760.0]
@@ -249,8 +247,8 @@ def fig_worked_example(outdir, events):
 
 
 def fig_strips(outdir):
-    """How f is measured at one mass: the bin cut into horizontal strips,
-    each strip's covered length (violet), and the covered fraction per strip."""
+    """How f is measured at one mass: the bin cut into horizontal strips, each strip's covered
+    length (violet), and the covered fraction per strip."""
     i, j = CONSTRUCTION_BIN
     (a, b), (lo, hi) = bin_ranges(i, j)
     M = STRIPS_MASS
@@ -288,8 +286,8 @@ def fig_strips(outdir):
 
 
 def fig_uniformity(outdir, events, i, j):
-    """How the bin's candidates are actually spread across it, and f
-    computed from that spread instead of from area."""
+    """How the bin's candidates are actually spread across it, and f computed from that spread
+    instead of from area."""
     (a, b), (lo, hi) = bin_ranges(i, j)
     sel = ((events['m12s'] >= a) & (events['m12s'] < b)
            & (events['m23s'] >= lo) & (events['m23s'] < hi))

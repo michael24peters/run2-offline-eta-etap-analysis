@@ -1,8 +1,8 @@
 """
 plot_mc_pt.py
 
-MC truth transverse momentum (pT) for the eta and its mu+, mu-, gamma
-daughters, from a signal eta -> mu mu gamma ROOT ntuple.
+MC truth transverse momentum (pT) for the eta and its mu+, mu-, gamma daughters, from a signal eta
+-> mu mu gamma ROOT ntuple.
 
 Usage:
     python plot_mc_pt.py input.root [output_dir]
@@ -47,10 +47,9 @@ if __name__ == '__main__':
 
     tree = cut_utils.read_branches(args.input, ['mc_pid', 'mc_px', 'mc_py', 'mc_idx_mom'])
 
-    # Signal etas: generator particles with exactly one mu+, one mu- and one
-    # gamma daughter. daughter_mask brings that mother-level selection down to
-    # the daughter level via mc_idx_mom (see cut_utils.follow), so each
-    # daughter species can then be picked out by PID.
+    # Signal etas: generator particles with exactly one mu+, one mu- and one gamma daughter.
+    # daughter_mask brings that mother-level selection down to the daughter level via mc_idx_mom
+    # (see cut_utils.follow), so each daughter species can then be picked out by PID.
     eta_mask = cut_utils.decay_mask(tree, 221, [-13, 13, 22])
     daughter_mask = (cut_utils.follow(tree, eta_mask, 'mc_idx_mom')
                      & cut_utils.valid(tree, 'mc_idx_mom'))

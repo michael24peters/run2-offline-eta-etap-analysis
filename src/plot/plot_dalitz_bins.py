@@ -1,8 +1,8 @@
 """
 plot_dalitz_bins.py
 
-Figures from one driver_dalitz_fit.py result, written with `prefix` (the
-results JSON's path without .json):
+Figures from one driver_dalitz_fit.py result, written with `prefix` (the results JSON's path without
+.json):
 
     global_fit.png                      the global DCB + Chebyshev fit, next to
                                         the results JSON (the same for every
@@ -13,8 +13,8 @@ results JSON's path without .json):
     <prefix>_per_bin_fits_horizontal.pdf  the same pages, j outer, i inner
                                         (horizontal=True / --horizontal)
 
-plot_dalitz_fit(result, prefix, horizontal=False) writes all of them;
-driver_dalitz_fit.py calls it after the fit.
+plot_dalitz_fit(result, prefix, horizontal=False) writes all of them; driver_dalitz_fit.py calls it
+after the fit.
 
 Usage:
     python src/plot/plot_dalitz_bins.py RESULTS.json [--horizontal]
@@ -50,9 +50,8 @@ def mass_binning(dalitz):
 
 
 def plot_yield_maps(result, prefix):
-    """<prefix>_signal_yield.png and <prefix>_bkg_yield.png: the fitted n_sig
-    and n_bkg of each valid bin on the Dalitz grid, with the eta's Dalitz
-    region. Bins without a valid fit are 0."""
+    """<prefix>_signal_yield.png and <prefix>_bkg_yield.png: the fitted n_sig and n_bkg of each
+    valid bin on the Dalitz grid, with the eta's Dalitz region. Bins without a valid fit are 0."""
     dalitz = result['dalitz']
     m12_edges = np.array(dalitz['m12_edges'])
     m23_edges = np.array(dalitz['m23_edges'])
@@ -78,8 +77,8 @@ def plot_yield_maps(result, prefix):
 
 
 def make_build_text(n_cand):
-    """Stats-box builder for a per-bin page: the dcb_text layout without the
-    tails (fixed per bin), with n_cand next to chi2/ndof."""
+    """Stats-box builder for a per-bin page: the dcb_text layout without the tails (fixed per bin),
+    with n_cand next to chi2/ndof."""
     def build_text(params, chi2_per_ndof):
         mean, mean_err = plot_utils.val_err(params['mean'])
         sigma, sigma_err = plot_utils.val_err(params['sigma'])
@@ -103,9 +102,8 @@ def make_build_text(n_cand):
 
 
 def bin_page(result, b):
-    """The figure of one bin's page: data, fit components, the bin's factors
-    and pulls for a valid fit; otherwise the data and the reason there is no
-    fit."""
+    """The figure of one bin's page: data, fit components, the bin's factors and pulls for a valid
+    fit; otherwise the data and the reason there is no fit."""
     dalitz = result['dalitz']
     mass_edges, mass_centers, mass_bin_width = mass_binning(dalitz)
     xmin, xmax = mass_edges[0], mass_edges[-1]
@@ -178,8 +176,8 @@ def bin_page(result, b):
 
 
 def write_per_bin_pdf(result, pdf_path, horizontal=False):
-    """One bin_page per bin into pdf_path: i (m12) outer and j (m23) inner, or
-    j outer and i inner with horizontal=True."""
+    """One bin_page per bin into pdf_path: i (m12) outer and j (m23) inner, or j outer and i inner
+    with horizontal=True."""
     bins = {(b['i'], b['j']): b for b in result['dalitz']['bins']}
     n12 = len(result['dalitz']['m12_edges']) - 1
     n23 = len(result['dalitz']['m23_edges']) - 1
@@ -197,8 +195,8 @@ def write_per_bin_pdf(result, pdf_path, horizontal=False):
 
 
 def plot_dalitz_fit(result, prefix, horizontal=False):
-    """global_fit.png next to prefix, the yield maps, and the per-bin pages
-    (also in horizontal order with horizontal=True)."""
+    """global_fit.png next to prefix, the yield maps, and the per-bin pages (also in horizontal
+    order with horizontal=True)."""
     plot_fit(result, os.path.join(os.path.dirname(os.path.abspath(prefix)), 'global_fit.png'),
              dcb_text)
     plot_yield_maps(result, prefix)

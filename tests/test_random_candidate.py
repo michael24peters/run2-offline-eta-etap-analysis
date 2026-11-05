@@ -1,14 +1,13 @@
 """
 Unit tests for cut_utils.random_candidate_mask().
 
-Reduces each event to one randomly chosen candidate, restricted to the
-candidates that survived the cuts.
+Reduces each event to one randomly chosen candidate, restricted to the candidates that survived the
+cuts.
 
-The subtlety worth testing hardest: `eligible` is applied TWICE -- once via
-ak.where to push losers out of the draw, and again as a final `& eligible`.
-The second one is not redundant. argmax over an event where every score is -inf
-still has to return something, and it returns 0, so without the final AND an
-event where nothing survived the cuts would silently select candidate 0.
+The subtlety worth testing hardest: `eligible` is applied TWICE -- once via ak.where to push losers
+out of the draw, and again as a final `& eligible`. The second one is not redundant. argmax over an
+event where every score is -inf still has to return something, and it returns 0, so without the
+final AND an event where nothing survived the cuts would silently select candidate 0.
 """
 
 import awkward as ak
@@ -45,8 +44,8 @@ def eligible():
 def test_all_ineligible_event_selects_nothing(eligible):
     """Event 1 has no surviving candidate. It must select NOTHING.
 
-    Without the final `& eligible`, argmax over [-inf, -inf] returns 0 (ties go
-    to the first entry) and candidate 0 would be picked despite being cut.
+    Without the final `& eligible`, argmax over [-inf, -inf] returns 0 (ties go to the first entry)
+    and candidate 0 would be picked despite being cut.
     """
     for seed in SEEDS:
         picked = cut_utils.random_candidate_mask(eligible, seed)
@@ -56,8 +55,8 @@ def test_all_ineligible_event_selects_nothing(eligible):
 def test_argmax_alone_would_have_picked_candidate_zero(eligible):
     """Pins the reason the final AND is needed, so nobody 'simplifies' it away.
 
-    Reproduces the internals up to the point before `& eligible` and shows the
-    phantom winner it would otherwise leave behind.
+    Reproduces the internals up to the point before `& eligible` and shows the phantom winner it
+    would otherwise leave behind.
     """
     score = ak.where(eligible, ak.ones_like(eligible, dtype=float), -np.inf)
     idx = ak.argmax(score, axis=1, keepdims=True)
@@ -75,8 +74,8 @@ def test_every_candidate_ineligible_everywhere():
 
 
 def test_all_ineligible_does_not_leak_into_values(cands, eligible):
-    """The consequence that matters downstream: a cut event must contribute no
-    entry to the fitted array, not a spurious one."""
+    """The consequence that matters downstream: a cut event must contribute no entry to the fitted
+    array, not a spurious one."""
     picked = cut_utils.random_candidate_mask(eligible, 0)
     masses = cut_utils.values(cands, 'tag_dtf_m', picked)
     assert len(masses) == 2                       # events 0 and 2 only
@@ -99,8 +98,8 @@ def test_pick_is_always_eligible(eligible):
 
 
 def test_ineligible_candidate_never_picked(eligible):
-    """Candidate 1 of event 0 was cut, so it must not compete. This is the whole
-    reason `eligible` goes IN rather than being ANDed afterwards."""
+    """Candidate 1 of event 0 was cut, so it must not compete. This is the whole reason `eligible`
+    goes IN rather than being ANDed afterwards."""
     for seed in SEEDS:
         picked = cut_utils.random_candidate_mask(eligible, seed)
         assert not picked[0][1]
@@ -129,8 +128,8 @@ def test_same_seed_gives_the_same_mask(eligible):
 # --- truth matching first ----------------------------------------------------
 
 def test_cutting_all_but_one_candidate_keeps_the_event():
-    """If only the second candidate is matched, the event keeps it for every
-    seed rather than being dropped."""
+    """If only the second candidate is matched, the event keeps it for every seed rather than being
+    dropped."""
     matched = ak.Array([[False, True]])
     for seed in SEEDS:
         picked = cut_utils.random_candidate_mask(matched, seed)
@@ -138,8 +137,8 @@ def test_cutting_all_but_one_candidate_keeps_the_event():
 
 
 def test_picking_before_matching_would_lose_events():
-    """Pins why matching goes first: pick-then-match drops the event whenever
-    the pick is the unmatched candidate."""
+    """Pins why matching goes first: pick-then-match drops the event whenever the pick is the
+    unmatched candidate."""
     everything = ak.Array([[True, True]])
     matched = ak.Array([[False, True]])
     kept = sum(int(ak.sum(cut_utils.random_candidate_mask(everything, seed) & matched))
@@ -150,8 +149,8 @@ def test_picking_before_matching_would_lose_events():
 # --- shape, empties, errors --------------------------------------------------
 
 def test_event_with_no_candidates_selects_nothing(eligible):
-    """argmax returns None there; fill_none(-1) must make it match no position
-    rather than defaulting to 0."""
+    """argmax returns None there; fill_none(-1) must make it match no position rather than
+    defaulting to 0."""
     picked = cut_utils.random_candidate_mask(eligible, 0)
     assert picked[3].tolist() == []
 
@@ -162,8 +161,8 @@ def test_result_is_candidate_shaped(eligible):
 
 
 def test_result_is_a_plain_ndarray_not_masked(cands, eligible):
-    """No option type in the output, so ak.to_numpy gives a plain ndarray --
-    which is what lets values() hand a clean array to a fit."""
+    """No option type in the output, so ak.to_numpy gives a plain ndarray -- which is what lets
+    values() hand a clean array to a fit."""
     picked = cut_utils.random_candidate_mask(eligible, 0)
     out = cut_utils.values(cands, 'tag_dtf_m', picked)
     assert isinstance(out, np.ndarray)

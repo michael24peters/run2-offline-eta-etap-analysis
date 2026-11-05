@@ -1,8 +1,8 @@
 """
 plot_style.py
 
-Repeatable plot style for figures: text-box stat summaries, text placement (auto
-or manual), and summary statistics both to terminal and matplotlib.
+Repeatable plot style for figures: text-box stat summaries, text placement (auto or manual), and
+summary statistics both to terminal and matplotlib.
 """
 
 import math
@@ -19,8 +19,8 @@ COLORS = {
     'phase_space': '#4a3aa7',
 }
 
-# (label, mass [MeV], linestyle) of the resonances marked on full-range mass
-# plots, drawn in COLORS['reference'] next to the eta's dashed line.
+# (label, mass [MeV], linestyle) of the resonances marked on full-range mass plots, drawn in
+# COLORS['reference'] next to the eta's dashed line.
 RESONANCES = [
     (r'$\rho$', 770.0, '-.'),
     (r'$\omega$', 782.65, ':'),
@@ -28,8 +28,8 @@ RESONANCES = [
     (r'$\phi$', 1019.46, (0, (3, 1, 1, 1, 1, 1))),
 ]
 
-# LaTeX decay string for each channel, keyed by the channel segment of
-# meta.input_file ('ntuple/lhcb/<channel>/<date>/combined_files.root').
+# LaTeX decay string for each channel, keyed by the channel segment of meta.input_file
+# ('ntuple/lhcb/<channel>/<date>/combined_files.root').
 CHANNEL_LABELS = {
     'eta2mumu':      r'\eta \to \mu^+ \mu^-',
     'eta2mumugamma': r'\eta \to \mu^+ \mu^- \gamma',
@@ -38,9 +38,8 @@ CHANNEL_LABELS = {
 
 def decay_label(meta):
     """
-    LaTeX x-axis mass label for a fit-result's meta dict, derived from the
-    channel segment of meta['input_file']. Falls back to a bare 'Mass' label
-    if no known channel is found.
+    LaTeX x-axis mass label for a fit-result's meta dict, derived from the channel segment of
+    meta['input_file']. Falls back to a bare 'Mass' label if no known channel is found.
     """
     segments = meta.get('input_file', '').split('/')
     for segment in segments:
@@ -50,8 +49,8 @@ def decay_label(meta):
 
 def build_stats_text(stats, extra=None):
     """
-    Build the matplotlib (LaTeX) and terminal (plain Unicode) renderings of a
-    fit's stats box from one shared spec, so each symbol is written once.
+    Build the matplotlib (LaTeX) and terminal (plain Unicode) renderings of a fit's stats box from
+    one shared spec, so each symbol is written once.
 
     stats: list of "rows"; each row is a list of one or more
         (latex_symbol, plain_symbol, value, error, fmt, unit) tuples. Tuples
@@ -83,9 +82,9 @@ def build_stats_text(stats, extra=None):
 
 def add_stats_box(ax, plot_text):
     """
-    Draw a boxed text annotation in `ax`'s upper-left corner. Does nothing and
-    returns None if plot_text is empty. Returns the Text artist otherwise, so
-    the caller can measure it (see reserve_top_margin).
+    Draw a boxed text annotation in `ax`'s upper-left corner. Does nothing and returns None if
+    plot_text is empty. Returns the Text artist otherwise, so the caller can measure it (see
+    reserve_top_margin).
     """
     if not plot_text:
         return None
@@ -98,10 +97,9 @@ def add_stats_box(ax, plot_text):
 
 def reserve_top_margin(ax, content_max, artists, ymin=0, growth=1.15, max_iter=8):
     """
-    Grow ax's y-limit (from content_max upward) until none of `artists`
-    (already placed at fixed axes-fraction corners, e.g. the stats box and
-    legend) extends down past content_max in data coordinates -- so the
-    reserved headroom is sized to whatever was actually rendered, rather than
+    Grow ax's y-limit (from content_max upward) until none of `artists` (already placed at fixed
+    axes-fraction corners, e.g. the stats box and legend) extends down past content_max in data
+    coordinates -- so the reserved headroom is sized to whatever was actually rendered, rather than
     a hand-tuned fraction.
     """
     artists = [a for a in artists if a is not None]
@@ -125,8 +123,8 @@ def reserve_top_margin(ax, content_max, artists, ymin=0, growth=1.15, max_iter=8
     ax.set_ylim(ymin, ymax)
 
 def style_axes(ax, minor_y=True):
-    """Inward, mirrored major+minor ticks on all four sides, and heavier
-    spines. Set minor_y=False to disable minor ticks on the y-axis."""
+    """Inward, mirrored major+minor ticks on all four sides, and heavier spines. Set minor_y=False
+    to disable minor ticks on the y-axis."""
     ax.minorticks_on()
     if not minor_y:
         ax.yaxis.set_minor_locator(mticker.NullLocator())
@@ -136,12 +134,10 @@ def style_axes(ax, minor_y=True):
         spine.set_linewidth(2.0)
 
 def add_bin_index_axes(ax, x_edges, y_edges, x_label='bin i', y_label='bin j'):
-    """Secondary top/right axes giving each Dalitz bin's (i, j) grid index,
-    alongside the primary physical-value axes on the bottom/left -- so a bin
-    spotted on a Dalitz grid figure can be read off directly, in the same
-    (i, j) numbering used for e.g. per_bin_fits.pdf's page titles. Assumes
-    uniform bin edges, matching every Dalitz grid in this codebase
-    (np.linspace)."""
+    """Secondary top/right axes giving each Dalitz bin's (i, j) grid index, alongside the primary
+    physical-value axes on the bottom/left -- so a bin spotted on a Dalitz grid figure can be read
+    off directly, in the same (i, j) numbering used for e.g. per_bin_fits.pdf's page titles. Assumes
+    uniform bin edges, matching every Dalitz grid in this codebase (np.linspace)."""
     ax.tick_params(which='both', top=False, right=False)  # would collide with these
     nx, ny = len(x_edges) - 1, len(y_edges) - 1
     x0, dx = x_edges[0], (x_edges[-1] - x_edges[0]) / nx
@@ -164,18 +160,16 @@ def add_bin_index_axes(ax, x_edges, y_edges, x_label='bin i', y_label='bin j'):
 
 def format_y_axis(ax):
     """
-    Plain integer y-tick labels, offset by whatever power of ten keeps the
-    mantissa a short integer (e.g. 0, 100, 200, 300 with a x10^2 marker)
-    instead of matplotlib's default single-digit-plus-decimal mantissa (0.0,
-    0.5, ..., 3.0 x10^4). Values under 1000 need no offset at all. Reads ax's
-    current y-limit, so call this after the axis range is final (i.e. after
+    Plain integer y-tick labels, offset by whatever power of ten keeps the mantissa a short integer
+    (e.g. 0, 100, 200, 300 with a x10^2 marker) instead of matplotlib's default
+    single-digit-plus-decimal mantissa (0.0, 0.5, ..., 3.0 x10^4). Values under 1000 need no offset
+    at all. Reads ax's current y-limit, so call this after the axis range is final (i.e. after
     reserve_top_margin).
     """
-    # Candidate counts are always non-negative integers, so tick positions
-    # should be too -- otherwise adjacent fractional ticks can round to the
-    # same displayed integer (e.g. a near-empty bin autoscaled to [0, 1]).
-    # nbins/steps match mpl's default AutoLocator, so normal-range plots keep
-    # the same tick choices as before; integer=True is the only real change.
+    # Candidate counts are always non-negative integers, so tick positions should be too --
+    # otherwise adjacent fractional ticks can round to the same displayed integer (e.g. a near-empty
+    # bin autoscaled to [0, 1]). nbins/steps match mpl's default AutoLocator, so normal-range plots
+    # keep the same tick choices as before; integer=True is the only real change.
     ax.yaxis.set_major_locator(
         mticker.MaxNLocator(nbins='auto', steps=[1, 2, 2.5, 5, 10], integer=True))
     ymax = ax.get_ylim()[1]

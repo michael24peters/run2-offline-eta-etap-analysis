@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Mass fits of the NTUPLE ntuples into out/<channel>/<turbo|signal>/<today>/,
-# for each channel (both by default):
+# Mass fits of the NTUPLE ntuples into out/<channel>/<turbo|signal>/<today>/, for each channel (both
+# by default):
 #
 #   1. truth-matched signal MC, Gaussian then DCB, no prior   signal/<date>/truth_no_prior/
 #   2. truth-matched signal MC, Gaussian then DCB with the
@@ -9,11 +9,10 @@
 #      prior                                                  turbo/<date>/mc_prior/
 #   4. data, Gaussian then DCB, no prior                      turbo/<date>/no_prior/
 #
-# 1 -> 2 -> 3 is the chain; 1 and 4 are the no-prior comparisons. The data jobs
-# (3, 4) pass --n-max N_MAX, the upper limit of the DCB tail exponents n_L, n_R.
+# 1 -> 2 -> 3 is the chain; 1 and 4 are the no-prior comparisons. The data jobs (3, 4) pass --n-max
+# N_MAX, the upper limit of the DCB tail exponents n_L, n_R.
 #
-# Every job prints to the terminal with its lines prefixed [job]; failed jobs
-# are listed at the end.
+# Every job prints to the terminal with its lines prefixed [job]; failed jobs are listed at the end.
 #
 # Usage:
 #   src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma"]

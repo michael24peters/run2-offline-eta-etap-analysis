@@ -2,17 +2,17 @@
 plot_ip_chi2.py
 
 Muon prt_ip_chi2 of every ntuple candidate vs the fit sample (the last step of
-plot_cut_steps.cut_steps: [truth match], TOS, muon cuts, random candidate, fit
-window [--fit-xmin, --fit-xmax)), with no fit:
+plot_cut_steps.cut_steps: [truth match], TOS, muon cuts, random candidate, fit window [--fit-xmin,
+--fit-xmax)), with no fit:
 
     ip_chi2[_logy].png        linear x up to --ip-chi2-max (linear, log y)
     ip_chi2_logx[_logy].png   the same on a log x axis over the full range
                               (whole decades around every value > 0)
 
 prt_ip_chi2 is the IP chi2 of the daughter to its related PV
-(IDistanceCalculator::distance(particle, PV, ip, ipChi2) in ../ana/src/ntuple.py),
-not the track chi2. -1 is stored when there is no PV; those entries are
-counted and printed, and fall outside the plotted range.
+(IDistanceCalculator::distance(particle, PV, ip, ipChi2) in ../ana/src/ntuple.py), not the track
+chi2. -1 is stored when there is no PV; those entries are counted and printed, and fall outside the
+plotted range.
 
 Usage:
     python src/plot/plot_ip_chi2.py INFILE --outdir OUTDIR

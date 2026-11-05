@@ -3,16 +3,15 @@ plot_utils.py
 
 Generic plotting helpers: font setup and param-dict unpacking.
 
-For "house style" presentation logic (stats-box text, text placement,
-save/report boilerplate), see plot_style.py.
+For "house style" presentation logic (stats-box text, text placement, save/report boilerplate), see
+plot_style.py.
 """
 
 import matplotlib.pyplot as plt
 
 
 def apply_font():
-    """Set up the Inter font, falling back to the default sans-serif if it's
-    not installed."""
+    """Set up the Inter font, falling back to the default sans-serif if it's not installed."""
     family = 'Inter'
     try:
         import matplotlib.font_manager as fm

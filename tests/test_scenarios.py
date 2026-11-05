@@ -1,10 +1,10 @@
 """
 Scenario tests: the situations this ntuple actually produces.
 
-Each test builds the smallest tree that reproduces one real-world structure and
-pins down what the framework should say about it. These are the cases that broke
-earlier implementations -- stride grouping, the -1 sentinel, shared tracks --
-so they are written as narratives rather than API coverage.
+Each test builds the smallest tree that reproduces one real-world structure and pins down what the
+framework should say about it. These are the cases that broke earlier implementations -- stride
+grouping, the -1 sentinel, shared tracks -- so they are written as narratives rather than API
+coverage.
 """
 
 import awkward as ak
@@ -17,9 +17,8 @@ from conftest import make_tree
 def test_reco_muon_matched_to_a_generator_pion():
     """A reco track called a muon whose MC match is a pion (211).
 
-    Real: 'matched gen pids' on eta2mumu MC comes back as [-13, 13, 211]. The
-    framework must report the TRUTH pid, not the reco hypothesis, when asked
-    through prt_idx_gen.
+    Real: 'matched gen pids' on eta2mumu MC comes back as [-13, 13, 211]. The framework must report
+    the TRUTH pid, not the reco hypothesis, when asked through prt_idx_gen.
     """
     tree = make_tree(
         mc_pid=[[221, -13, 13, 211]],
@@ -64,8 +63,8 @@ def test_a_pion_is_not_a_signal_daughter():
 def test_two_candidates_share_one_generator_particle(shared_track):
     """Daughters 1 and 2 both matched gen particle 2 -- a shared track.
 
-    This is why daughter -> gen -> daughter is one-way lossy: 'any' widens the
-    selection to both candidates on the way back down.
+    This is why daughter -> gen -> daughter is one-way lossy: 'any' widens the selection to both
+    candidates on the way back down.
     """
     selected = ak.Array([[True, False]])                    # candidate 0 only
     dmask = cut_utils.follow(shared_track, selected, 'prt_idx_mom')
@@ -82,8 +81,8 @@ def test_two_candidates_share_one_generator_particle(shared_track):
 def test_two_candidates_from_one_generator_decay():
     """Two reco candidates, both pointing at the same generator eta.
 
-    Counting candidates per generator mother is a reduce chain: reco daughter
-    -> gen particle, then gen daughter -> gen mother.
+    Counting candidates per generator mother is a reduce chain: reco daughter -> gen particle, then
+    gen daughter -> gen mother.
     """
     tree = make_tree(
         tag_dtf_m=[[550.0, 549.0]],
@@ -113,8 +112,8 @@ def test_random_candidate_survives_a_shared_track(shared_track):
 # --- generator particles with no daughters -----------------------------------
 
 def test_motherless_daughter_particle():
-    """A muon with mc_idx_mom == -1: reconstructed and matched, but not from
-    the signal decay. It must not be counted as anyone's daughter."""
+    """A muon with mc_idx_mom == -1: reconstructed and matched, but not from the signal decay. It
+    must not be counted as anyone's daughter."""
     tree = make_tree(mc_pid=[[221, -13, 13, -13]],
                      mc_idx_mom=[[-1, 0, 0, -1]])
     everything = ak.ones_like(tree['mc_pid'], dtype=bool)
@@ -124,8 +123,8 @@ def test_motherless_daughter_particle():
 
 
 def test_childless_particles_reduce_to_the_identity():
-    """The muons have no daughters, so how='all' gives them True (empty all)
-    and how='any' gives them False. Both are correct and both are traps."""
+    """The muons have no daughters, so how='all' gives them True (empty all) and how='any' gives
+    them False. Both are correct and both are traps."""
     tree = make_tree(mc_pid=[[221, -13, 13]], mc_idx_mom=[[-1, 0, 0]])
     vals = ak.Array([[True, False, False]])
     as_all = cut_utils.reduce(tree, vals, 'mc_idx_mom', how='all',
@@ -137,8 +136,7 @@ def test_childless_particles_reduce_to_the_identity():
 
 
 def test_every_particle_motherless():
-    """A record of pure strays -- no decay at all. Nothing should match and
-    nothing should raise."""
+    """A record of pure strays -- no decay at all. Nothing should match and nothing should raise."""
     tree = make_tree(mc_pid=[[22, 22, 211]], mc_idx_mom=[[-1, -1, -1]])
     assert not ak.any(cut_utils.decay_mask(tree, 221, [-13, 13]))
     everything = ak.ones_like(tree['mc_pid'], dtype=bool)
@@ -167,8 +165,8 @@ def test_two_generator_decays_are_independent(two_gen_candidates):
 
 
 def test_any_versus_all_over_generator_mothers(two_gen_candidates):
-    """With two decays, 'does the event have a good one' and 'are they all
-    good' genuinely differ. This is the open decision in fid_reqs.py."""
+    """With two decays, 'does the event have a good one' and 'are they all good' genuinely differ.
+    This is the open decision in fid_reqs.py."""
     signal = cut_utils.decay_mask(two_gen_candidates, 221, [-13, 13, 22])
     # Pretend the second eta's photon (index 7) is out of acceptance.
     ok = ak.Array([[True] * 7 + [False]])
@@ -181,8 +179,8 @@ def test_any_versus_all_over_generator_mothers(two_gen_candidates):
 
 
 def test_second_decay_daughters_point_at_the_second_mother(two_gen_candidates):
-    """Guards against an off-by-one in the offset arithmetic: daughter 5 must
-    resolve to the eta at index 4, not the one at index 0."""
+    """Guards against an off-by-one in the offset arithmetic: daughter 5 must resolve to the eta at
+    index 4, not the one at index 0."""
     mother_pid = cut_utils.follow(two_gen_candidates, two_gen_candidates['mc_pid'],
                                   'mc_idx_mom')
     ok = cut_utils.valid(two_gen_candidates, 'mc_idx_mom')
@@ -191,9 +189,8 @@ def test_second_decay_daughters_point_at_the_second_mother(two_gen_candidates):
 
 
 def test_generator_decays_in_separate_events_stay_separate():
-    """The same structure split across two events must give the same answer as
-    one event holding both -- the per-event offset is the only thing keeping
-    them apart."""
+    """The same structure split across two events must give the same answer as one event holding
+    both -- the per-event offset is the only thing keeping them apart."""
     one = make_tree(mc_pid=[[221, -13, 13, 221, -13, 13]],
                     mc_idx_mom=[[-1, 0, 0, -1, 3, 3]])
     two = make_tree(mc_pid=[[221, -13, 13], [221, -13, 13]],

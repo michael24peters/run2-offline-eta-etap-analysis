@@ -1,8 +1,8 @@
 '''
 plot_branch.py
 
-Rough plot of a branch from a ROOT file, using uproot and matplotlib. Useful for
-quick checks of distributions.
+Rough plot of a branch from a ROOT file, using uproot and matplotlib. Useful for quick checks of
+distributions.
 
 Usage:
     python plot_branch.py input.root branch_name [output.png] [--n-evts N]
@@ -38,8 +38,8 @@ def plot_branch(input, branch_name, n_evts=-1, output='branch_plot.png'):
         branch_data = tree[branch_name].array(library='np')
         print(f'[INFO] Loaded {len(branch_data)} entries for branch {branch_name}.')
     else:
-        # Assume input is just an array of numbers, which needs to be converted
-        # to numpy if not already
+        # Assume input is just an array of numbers, which needs to be converted to numpy if not
+        # already
         branch_data = input if isinstance(input, np.ndarray) else np.array(input)
         print(f'[INFO] Loaded {len(branch_data)} entries from {input}.')
     if n_evts > 0:

@@ -1,8 +1,8 @@
 """
 plot_mass_fit.py
 
-Fit + pull plots of mass-fit result dicts (fit_gauss / fit_dcb / a per-bin
-Dalitz fit), with the stats box of the fit model:
+Fit + pull plots of mass-fit result dicts (fit_gauss / fit_dcb / a per-bin Dalitz fit), with the
+stats box of the fit model:
 
     plot_fit(result, output, gauss_text)   Gaussian + Chebyshev
     plot_fit(result, output, dcb_text)     DCB + Chebyshev
@@ -56,8 +56,8 @@ def dcb_text(params, chi2_per_ndof):
     alphaR, alphaR_err = plot_utils.val_err(params.get('alphaR', {}))
     nR, nR_err         = plot_utils.val_err(params.get('nR', {}))
 
-    # Whatever key in `params` isn't one of the known signal/yield names
-    # above is a background parameter (c0, c1).
+    # Whatever key in `params` isn't one of the known signal/yield names above is a background
+    # parameter (c0, c1).
     SIGNAL_KEYS = {'mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR', 'n_sig', 'n_bkg'}
     bkg_row = [(name, name, *plot_utils.val_err(params[name]), '.3f', '')
                for name in params if name not in SIGNAL_KEYS]
@@ -74,8 +74,8 @@ def dcb_text(params, chi2_per_ndof):
         [(r'n_{bkg}', 'n_bkg', n_bkg, n_bkg_err, '.0f', '')],
         bkg_row,
     ]
-    # Values which are not a value-error pair (e.g., chi2/ndof). Must provide
-    # exact strings for desired LaTeX and terminal output.
+    # Values which are not a value-error pair (e.g., chi2/ndof). Must provide exact strings for
+    # desired LaTeX and terminal output.
     extra = (
         fr'$\chi^2/ndof$ = {chi2_per_ndof:.2f}',
         f'χ²/ndof = {chi2_per_ndof:.2f}',
@@ -85,20 +85,18 @@ def dcb_text(params, chi2_per_ndof):
 
 def build_fit_figure(data, build_text, x_lim=None, title=None):
     """
-    Draw a fit + pull figure from a result dict. Does not save or print
-    anything; plot_fit() does both.
+    Draw a fit + pull figure from a result dict. Does not save or print anything; plot_fit() does
+    both.
 
-    build_text(params, chi2_per_ndof) returns the stats box as
-    (plot_text, term_text): gauss_text, dcb_text, or a per-bin Dalitz one.
+    build_text(params, chi2_per_ndof) returns the stats box as (plot_text, term_text): gauss_text,
+    dcb_text, or a per-bin Dalitz one.
 
-    x_lim: (xmin, xmax) override; defaults to the data range.
-    title: optional plot title (e.g. to identify one page of a multi-page
-    PDF); omitted entirely when not given.
+    x_lim: (xmin, xmax) override; defaults to the data range. title: optional plot title (e.g. to
+    identify one page of a multi-page PDF); omitted entirely when not given.
 
-    If `data` has a 'phase_space' entry ({'x': [...], 'f': [...]}, the
-    per-bin phase-space factor f(M) the fit multiplied its shapes by), it is
-    drawn in its own panel between the fit and the pulls, on the same mass
-    axis. An optional 'f_sig' in it is a separate signal factor (with 'f'
+    If `data` has a 'phase_space' entry ({'x': [...], 'f': [...]}, the per-bin phase-space factor
+    f(M) the fit multiplied its shapes by), it is drawn in its own panel between the fit and the
+    pulls, on the same mass axis. An optional 'f_sig' in it is a separate signal factor (with 'f'
     then the background's), drawn dashed in the same panel.
 
     Returns (fig, term_text).
@@ -156,8 +154,8 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
                 elinewidth=1.3,
                 capsize=0
     )
-    # Background as a filled region from zero, total fit drawn on top of it --
-    # the gap between the fill's top edge and the fit curve reads as signal.
+    # Background as a filled region from zero, total fit drawn on top of it -- the gap between the
+    # fill's top edge and the fit curve reads as signal.
     ax.fill_between(x, 0, bkg, label='Background',
                      color=plot_style.COLORS['background'], alpha=0.35,
                      linewidth=0.8, edgecolor=plot_style.COLORS['background'])
@@ -181,8 +179,8 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     plot_text, term_text = build_text(params, chi2_per_ndof)
     stats_box = plot_style.add_stats_box(ax, plot_text)
 
-    # Reserve headroom above the data/curves for the stats box + legend,
-    # sized by actually measuring what was rendered -- not a fixed fraction.
+    # Reserve headroom above the data/curves for the stats box + legend, sized by actually measuring
+    # what was rendered -- not a fixed fraction.
     content_max = max(fit.max(), (y + yerr).max())
     plot_style.reserve_top_margin(ax, content_max, artists=[stats_box, legend])
     plot_style.format_y_axis(ax)
@@ -198,8 +196,8 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     ax_pull.set_ylabel('Pulls')
     ax_pull.set_xlabel(plot_style.decay_label(data.get('meta', {})))
 
-    # The leftmost x-tick label sits right where the pull axis's bottom
-    # y-tick label ends, so it collides with it -- drop it.
+    # The leftmost x-tick label sits right where the pull axis's bottom y-tick label ends, so it
+    # collides with it -- drop it.
     xticklabels = ax_pull.get_xticklabels()
     if xticklabels:
         min(xticklabels, key=lambda t: t.get_position()[0]).set_visible(False)
@@ -208,8 +206,7 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
 
 
 def plot_fit(data, output, build_text):
-    """Fit + pull plot of a result dict, saved to output, with its stats
-    printed to the terminal."""
+    """Fit + pull plot of a result dict, saved to output, with its stats printed to the terminal."""
     fig, term_text = build_fit_figure(data, build_text)
     plot_style.save_plot(fig, output)
     plot_style.print_summary(term_text)

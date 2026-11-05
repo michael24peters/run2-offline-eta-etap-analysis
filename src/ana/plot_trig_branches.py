@@ -21,8 +21,8 @@ args = parser.parse_args()
 
 with uproot.open(args.infile) as f:
     tree = f['tree']
-    # Extract all branches that begin with `tag_l0_`, `tag_hlt1_`, or `tag_hlt2_`
-    # from the tree and plot them as histograms.
+    # Extract all branches that begin with `tag_l0_`, `tag_hlt1_`, or `tag_hlt2_` from the tree and
+    # plot them as histograms.
     branches = []
     for name in tree.keys():
         if name.startswith('tag_l0_') or name.startswith('tag_hlt1_') or name.startswith('tag_hlt2_'):

@@ -48,11 +48,10 @@ with uproot.open(args.input) as f:
         library='np'
     )
 
-# Define variables for m^2(gamma, mu+) and m^2(mu+, mu-).
-# mc contains all MC particles, including the eta and its daughters. We need to
-# loop over events and find the gamma, mu+, and mu- for each event to compute
-# the invariant masses.
-# Reco contains only reconstructed particles, i.e., muons and photons, no eta.
+# Define variables for m^2(gamma, mu+) and m^2(mu+, mu-). mc contains all MC particles, including
+# the eta and its daughters. We need to loop over events and find the gamma, mu+, and mu- for each
+# event to compute the invariant masses. Reco contains only reconstructed particles, i.e., muons and
+# photons, no eta.
 if IS_MC:
     pids = branches['mc_pid']
     pxs = branches['mc_px']
@@ -78,10 +77,9 @@ for i in range(len(pids)):
         pz = pzs[i][j] / 1000.
         e = es[i][j] / 1000.
 
-        # None check used since only one candidate max is expected per event.
-        # Don't overwrite if multiple candidates are found, since if that
-        # happens, it's because there was a reconstruction error (i.e.,
-        # background).
+        # None check used since only one candidate max is expected per event. Don't overwrite if
+        # multiple candidates are found, since if that happens, it's because there was a
+        # reconstruction error (i.e., background).
         if pid == -13 and p1 is None: p1 = (px, py, pz, e)
         elif pid == 13 and p2 is None: p2 = (px, py, pz, e)
 

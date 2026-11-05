@@ -1,8 +1,8 @@
 """
 plot_pt.py
 
-Shared pT-histogram plotting library: single-species and multi-species overlay
-histograms in house style. Used by plot_mc_pt.py and plot_reco_pt.py.
+Shared pT-histogram plotting library: single-species and multi-species overlay histograms in house
+style. Used by plot_mc_pt.py and plot_reco_pt.py.
 """
 
 import os

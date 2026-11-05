@@ -1,10 +1,9 @@
 """
 plot_bkg_mass.py
 
-Script to plot eta mass distributions broken down by background category. Each
-candidate is assigned to exactly one category based on the combination of
-daughter error types from bkg.py classification. Uses uproot for ROOT I/O (no
-PyROOT dependency).
+Script to plot eta mass distributions broken down by background category. Each candidate is assigned
+to exactly one category based on the combination of daughter error types from bkg.py classification.
+Uses uproot for ROOT I/O (no PyROOT dependency).
 
 Usage:
     python plot_bkg_mass.py input.root [--outfile out/output.png]
@@ -25,13 +24,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import uproot
 
-# Python auto-adds this script's own directory (src/ana/) to sys.path, so bkg
-# is importable directly when this script is run as `python plot_bkg_mass.py`.
+# Python auto-adds this script's own directory (src/ana/) to sys.path, so bkg is importable directly
+# when this script is run as `python plot_bkg_mass.py`.
 from bkg import Candidate, ErrorType, classify_candidate
 
 # --- Category definitions ---
-# Ordered for legend display: signal first, then mismatch group, error group,
-# then catch-all.
+# Ordered for legend display: signal first, then mismatch group, error group, then catch-all.
 CATEGORIES = [
     'Signal',
     'Muon PID mismatch only',
@@ -66,9 +64,9 @@ def parse_args():
 # --- Per-candidate label ---
 def get_candidate_label(can: Candidate) -> str:
     """
-    Map a Candidate to exactly one category label based on the full set of
-    daughter error types. Candidates with a mix of PID-mismatch and error
-    daughters (or any OTHER_ERROR) fall into 'Other error'.
+    Map a Candidate to exactly one category label based on the full set of daughter error types.
+    Candidates with a mix of PID-mismatch and error daughters (or any OTHER_ERROR) fall into 'Other
+    error'.
     """
     # Signal candidates
     if can.is_sig: return 'Signal'
@@ -108,13 +106,11 @@ def get_candidate_label(can: Candidate) -> str:
 # --- Event loop ---
 def run_event_loop(args) -> dict[str, list[float]]:
     """
-    Loop over events, classify each candidate, and collect tag_m values
-    grouped by category label.
+    Loop over events, classify each candidate, and collect tag_m values grouped by category label.
 
-    All branches are read once via a single bulk uproot call, then converted
-    to plain Python lists -- classify_candidate's per-candidate branching
-    logic stays a Python loop either way, so this only replaces PyROOT's
-    per-entry tree.GetEntry() calls with pre-loaded in-memory data.
+    All branches are read once via a single bulk uproot call, then converted to plain Python
+    lists -- classify_candidate's per-candidate branching logic stays a Python loop either way, so
+    this only replaces PyROOT's per-entry tree.GetEntry() calls with pre-loaded in-memory data.
     """
     masses: dict[str, list[float]] = defaultdict(list)
 
@@ -165,8 +161,8 @@ def run_event_loop(args) -> dict[str, list[float]]:
 # --- Plot ---
 def plot_masses(masses: dict[str, list[float]], outfile: str) -> None:
     """
-    Overlay eta mass histograms for each category on a single matplotlib
-    figure and save to {outfile}.png.
+    Overlay eta mass histograms for each category on a single matplotlib figure and save to
+    {outfile}.png.
     """
     bins = np.arange(400, 710, 10)  # 400–700 MeV, 10 MeV bins
     colors = plt.get_cmap('tab10').colors  # 10 distinct colours
@@ -228,8 +224,7 @@ def main():
     # Run the event loop to classify candidates and collect masses by category
     masses = run_event_loop(args)
 
-    # Log the number of candidates in each category and their percentage of the
-    # total
+    # Log the number of candidates in each category and their percentage of the total
     total = sum(len(v) for v in masses.values())
     for label in CATEGORIES:
         n = len(masses.get(label, []))

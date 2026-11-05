@@ -1,10 +1,9 @@
 """
 Unit tests for cut_utils's fitting counterpart, src/utils/fit_utils.py.
 
-Covers shared infrastructure: run_fit's optional limits, that
-fit_gauss()/fit_dcb() hand back the fitted Minuit object, the Chebyshev
-background (pdf, cost and result JSON), and build_prior(). All toy data, no ROOT files, a
-fixed RNG seed -- consistent with the house style in conftest.py.
+Covers shared infrastructure: run_fit's optional limits, that fit_gauss()/fit_dcb() hand back the
+fitted Minuit object, the Chebyshev background (pdf, cost and result JSON), and build_prior(). All
+toy data, no ROOT files, a fixed RNG seed -- consistent with the house style in conftest.py.
 """
 
 import os
@@ -61,10 +60,10 @@ def test_run_fit_partial_limits():
 # --- NormalConstraint is actually wired into the minimised cost --------------
 
 def test_constraint_pulls_a_low_statistics_fit():
-    """With few signal events, sigma is poorly determined by the data alone.
-    A NormalConstraint on sigma must pull the fitted value measurably closer
-    to the constrained value than the same fit with no constraint -- proof the
-    constraint changes what gets minimised, not just decoration on the cost."""
+    """With few signal events, sigma is poorly determined by the data alone. A NormalConstraint on
+    sigma must pull the fitted value measurably closer to the constrained value than the same fit
+    with no constraint -- proof the constraint changes what gets minimised, not just decoration on
+    the cost."""
     rng = np.random.default_rng(1)
     counts, edges = toy_histogram(rng, n_sig=40, n_bkg=400, sigma=8.0)
     limits = dict(sigma=(0.0, None), n_sig=(0.0, None), n_bkg=(0.0, None))
@@ -96,8 +95,8 @@ def test_fit_gauss_returns_result_and_minuit():
 
 
 def test_fit_gauss_minuit_covariance_is_usable():
-    """The whole point of returning m: a later fit can build a real,
-    correlation-aware constraint from it."""
+    """The whole point of returning m: a later fit can build a real, correlation-aware constraint
+    from it."""
     rng = np.random.default_rng(2)
     vals = np.concatenate([rng.normal(547.9, 8.0, 1500),
                            rng.uniform(XMIN, XMAX, 6000)])
@@ -117,8 +116,8 @@ def test_fit_dcb_returns_result_and_minuit():
 
 
 def test_fit_dcb_limits_replace_the_defaults():
-    """limits replaces the default limits of the parameters it names and
-    leaves the others; the fitted tails stay within them."""
+    """limits replaces the default limits of the parameters it names and leaves the others; the
+    fitted tails stay within them."""
     rng = np.random.default_rng(3)
     vals = np.concatenate([rng.normal(547.9, 8.0, 1500),
                            rng.uniform(XMIN, XMAX, 6000)])
@@ -131,8 +130,8 @@ def test_fit_dcb_limits_replace_the_defaults():
 
 
 def test_fit_dcb_sigma_prior_pulls_sigma_towards_its_value():
-    """A tight (values, cov) sigma_prior holds sigma near its value even though
-    the data prefer a larger one; without it sigma follows the data."""
+    """A tight (values, cov) sigma_prior holds sigma near its value even though the data prefer a
+    larger one; without it sigma follows the data."""
     rng = np.random.default_rng(3)
     vals = np.concatenate([rng.normal(547.9, 8.0, 3000),
                            rng.uniform(XMIN, XMAX, 6000)])
@@ -144,8 +143,8 @@ def test_fit_dcb_sigma_prior_pulls_sigma_towards_its_value():
 
 
 def test_fit_gauss_fixed_params_stay_fixed():
-    """fixed_params holds its parameters at the given values through both
-    stages, as for a signal-only fit of truth-matched MC."""
+    """fixed_params holds its parameters at the given values through both stages, as for a
+    signal-only fit of truth-matched MC."""
     rng = np.random.default_rng(3)
     vals = rng.normal(547.9, 8.0, 1500)
     _, m = fit_gauss(vals, xmin=XMIN, xmax=XMAX, nbins=60,
@@ -157,9 +156,8 @@ def test_fit_gauss_fixed_params_stay_fixed():
 # --- Chebyshev background ---------------------------------------------------
 
 def test_background_pdf_integrates_to_one_and_is_nonnegative():
-    """The Chebyshev pdf is a real, non-negative density over [XMIN, XMAX] at
-    its default and at mild coefficients (it can dip negative in principle,
-    but not at these values)."""
+    """The Chebyshev pdf is a real, non-negative density over [XMIN, XMAX] at its default and at
+    mild coefficients (it can dip negative in principle, but not at these values)."""
     xg = np.linspace(XMIN, XMAX, 3000)
     for c0, c1 in [(fit_utils.BKG_INIT['c0'], fit_utils.BKG_INIT['c1']), (0.3, -0.2)]:
         y = fit_utils.cheb_bkg_pdf(xg, XMIN, XMAX, c0, c1)
@@ -168,9 +166,9 @@ def test_background_pdf_integrates_to_one_and_is_nonnegative():
 
 
 def test_make_gauss_cost_recovers_toy_params():
-    """make_gauss_cost builds a cost Minuit can actually fit -- proof the
-    dynamically-named signature (_make_scaled_cdf / ExtendedBinnedNLL's
-    name=) works end to end, not just that describe() parses it."""
+    """make_gauss_cost builds a cost Minuit can actually fit -- proof the dynamically-named
+    signature (_make_scaled_cdf / ExtendedBinnedNLL's name=) works end to end, not just that
+    describe() parses it."""
     rng = np.random.default_rng(10)
     sig = rng.normal(547.9, 8.0, 2000)
     bkg = rng.uniform(XMIN, XMAX, 6000)
@@ -188,9 +186,9 @@ def test_make_gauss_cost_recovers_toy_params():
 
 
 def test_fit_dcb_bkg_params_roundtrip_through_json():
-    """fit_dcb's result JSON names the background parameters c0, c1, and
-    build_prior_from_result on that JSON gives the live fit's values and
-    covariance for them (so a later fit reading this JSON back finds them)."""
+    """fit_dcb's result JSON names the background parameters c0, c1, and build_prior_from_result on
+    that JSON gives the live fit's values and covariance for them (so a later fit reading this JSON
+    back finds them)."""
     rng = np.random.default_rng(11)
     sig = rng.normal(547.9, 8.0, 2000)
     bkg = rng.uniform(XMIN, XMAX, 6000)
@@ -200,9 +198,8 @@ def test_fit_dcb_bkg_params_roundtrip_through_json():
 
     for name in fit_utils.BKG_PARAMS:
         assert name in result['fit']['parameters']
-        # JSON values are round()ed to 6 decimals -- an absolute, not relative,
-        # tolerance, so a value near 0 needs abs= rather than approx()'s default
-        # relative one.
+        # JSON values are round()ed to 6 decimals -- an absolute, not relative, tolerance, so a
+        # value near 0 needs abs= rather than approx()'s default relative one.
         assert result['fit']['parameters'][name]['value'] == pytest.approx(
             m.values[name], abs=1e-5)
 
@@ -228,9 +225,9 @@ def test_build_prior_scalar_factor_matches_cov_times_factor_squared():
 
 
 def test_build_prior_excluded_param_gets_no_prior():
-    """A parameter simply left out of `params` is how a prior is dropped
-    entirely -- build_prior only ever returns values/cov for what it's asked
-    for, so the caller's NormalConstraint(params, ...) never mentions it."""
+    """A parameter simply left out of `params` is how a prior is dropped entirely -- build_prior
+    only ever returns values/cov for what it's asked for, so the caller's
+    NormalConstraint(params, ...) never mentions it."""
     rng = np.random.default_rng(3)
     vals = np.concatenate([rng.normal(547.9, 8.0, 1500),
                            rng.uniform(XMIN, XMAX, 6000)])
@@ -243,9 +240,8 @@ def test_build_prior_excluded_param_gets_no_prior():
 
 
 def test_build_prior_falls_back_to_diagonal_when_covariance_is_none():
-    """A results JSON with no 'covariance' block (HESSE's matrix inversion
-    failed on the original fit) must fall back to a diagonal matrix built
-    from the errors, not raise."""
+    """A results JSON with no 'covariance' block (HESSE's matrix inversion failed on the original
+    fit) must fall back to a diagonal matrix built from the errors, not raise."""
     fit_block = {
         'valid': True, 'fval': 0.0, 'n_free_params': 2,
         'parameters': {
@@ -263,9 +259,8 @@ def test_build_prior_falls_back_to_diagonal_when_covariance_is_none():
 # --- DCB tails ---------------------------------------------------------------
 
 def test_dcb_tails_match_the_power_law_and_stay_finite_for_large_n():
-    """dcb_unnorm's tails equal A * (B + u)^(-n), A = (n/alpha)^n exp(-alpha^2/2),
-    B = n/alpha - alpha, where that is finite, and stay finite where A alone
-    overflows."""
+    """dcb_unnorm's tails equal A * (B + u)^(-n), A = (n/alpha)^n exp(-alpha^2/2), B = n/alpha -
+    alpha, where that is finite, and stay finite where A alone overflows."""
     t = np.linspace(-20, 20, 4001)
     for alpha, n in [(1.5, 2.0), (0.8, 5.5), (2.5, 0.2), (1.2, 40.0)]:
         A = (n / alpha)**n * np.exp(-0.5 * alpha**2)
