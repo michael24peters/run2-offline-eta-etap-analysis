@@ -50,16 +50,17 @@ On data the DCB tails are poorly constrained. They come from truth-matched signa
 # 1. truth-matched signal MC: Gaussian, then DCB with no background (n_bkg = 0, c0 = c1 = 0) and
 #    sigma under the prior of the Gaussian
 python src/fit/driver_mass_fit.py ntuple/mc/eta2mumugamma/signal_20261006/combined_files.root \
-    --outdir out/eta2mumugamma/signal/$(date +%Y%m%d)/truth --truth-match -13 13 22
+    --outdir out/eta2mumugamma/signal/$(date +%Y%m%d)/truth --truth-match -13 13 22 \
+    --xmin 450 --xmax 650 --nbins 200
 # 2. data, tails under the MC prior of 1
 python src/fit/driver_mass_fit.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
-    --outdir out/eta2mumugamma/turbo/$(date +%Y%m%d)/mc_prior \
+    --outdir out/eta2mumugamma/turbo/$(date +%Y%m%d)/mc_prior --xmin 450 --xmax 650 --nbins 200 \
     --tail-prior out/eta2mumugamma/signal/$(date +%Y%m%d)/truth/results_dcb.json
 ```
 
 `--truth-match` takes the signal daughter PIDs: `-13 13` for eta -> mu+ mu-, `-13 13 22` for eta -> mu+ mu- gamma, `-13 -13 13 13` for eta -> 4mu. For an `eta2mumumumu` input path, HLT1 TOS also accepts Hlt1MultiDiMuonNoIP (`TOS_LINES_4MU`); every muon cut applies to all four muons. The Gaussian fit keeps its Chebyshev background floating: with no background, a Gaussian has no stable minimum on the radiative tail of the MC. The DCB fit runs with no background.
 
-`src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma"]` runs the chain for each channel on the 20261006 ntuples, into `out/<channel>/<turbo|signal>/<today>/`: the truth-matched MC (`signal/<today>/truth/`) and data with its tail prior (`turbo/<today>/mc_prior/`). Data with no prior (`turbo/<today>/no_prior/`) is the comparison run. The data jobs pass `--n-max 50` (`N_MAX` in the script). The header of `run_mass_fits.sh` lists every run and fit in order.
+`src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma"]` runs the chain for each channel on the 20261006 ntuples, into `out/<channel>/<turbo|signal>/<today>/`: the truth-matched MC (`signal/<today>/truth/`) and data with its tail prior (`turbo/<today>/mc_prior/`). Data with no prior (`turbo/<today>/no_prior/`) is the comparison run. Every job fits 500-600 MeV in 100 bins for eta2mumu and 450-650 MeV in 200 bins for eta2mumugamma, whose peak is wider (`mass_window` in the script). The data jobs pass `--n-max 50` (`N_MAX` in the script). The header of `run_mass_fits.sh` lists every run and fit in order.
 
 ### Fit stages
 

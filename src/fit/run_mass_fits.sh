@@ -23,7 +23,7 @@
 #
 # Comparison, with no prior: 3. data, Gaussian then DCB with the tails free
 # (turbo/<date>/no_prior/). The data jobs (2, 3) pass --n-max N_MAX, the upper limit of the DCB tail
-# exponents n_L, n_R.
+# exponents n_L, n_R. Every job of a channel fits the window of mass_window.
 #
 # Every job prints to the terminal with its lines prefixed [job]; failed jobs are listed at the end.
 #
@@ -63,6 +63,14 @@ daughter_pids() {
     esac
 }
 
+# Mass window of each channel, 1 MeV bins
+mass_window() {
+    case $1 in
+        eta2mumugamma) echo "--xmin 450 --xmax 650 --nbins 200" ;;
+        *)             echo "--xmin 500 --xmax 600 --nbins 100" ;;
+    esac
+}
+
 # mass_fits CHANNEL: steps 1-3 for one channel
 mass_fits() {
     local channel=$1
@@ -70,10 +78,12 @@ mass_fits() {
     local mc=ntuple/mc/$channel/signal_$NTUPLE/combined_files.root
     local turbo=out/$channel/turbo/$DATE
     local signal=out/$channel/signal/$DATE
-    run "$channel no_prior" $PY src/fit/driver_mass_fit.py $data --outdir $turbo/no_prior --n-max $N_MAX &
-    run "$channel truth" $PY src/fit/driver_mass_fit.py $mc --outdir $signal/truth \
+    local window=$(mass_window $channel)
+    run "$channel no_prior" $PY src/fit/driver_mass_fit.py $data --outdir $turbo/no_prior $window \
+        --n-max $N_MAX &
+    run "$channel truth" $PY src/fit/driver_mass_fit.py $mc --outdir $signal/truth $window \
         --truth-match $(daughter_pids $channel)
-    run "$channel mc_prior" $PY src/fit/driver_mass_fit.py $data --outdir $turbo/mc_prior \
+    run "$channel mc_prior" $PY src/fit/driver_mass_fit.py $data --outdir $turbo/mc_prior $window \
         --tail-prior $signal/truth/results_dcb.json --n-max $N_MAX
     wait
 }
