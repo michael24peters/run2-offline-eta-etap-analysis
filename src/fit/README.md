@@ -30,7 +30,7 @@ sigma. The flag values below are the defaults.
 ```
 python src/fit/driver_mass_fit.py data.root \
     --outdir OUT \
-    --xmin 480 --xmax 620 --nbins 80 \
+    --xmin 500 --xmax 600 --nbins 80 \
     --mean-init 547.862 --sigma-init 5.0 \
     --alphaL-init 1.5 --nL-init 2.0 --alphaR-init 1.5 --nR-init 2.0
 ```
