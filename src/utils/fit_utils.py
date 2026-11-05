@@ -1,10 +1,7 @@
 """
 fit_utils.py
 
-PDFs/CDFs, iminuit cost functions, the fit driver and fit results. Pure numpy -- this module
-knows nothing about ROOT files, awkward arrays, events, or candidates. Selection and candidate
-reduction happen upstream in cut_utils; by the time anything here is called, the data is a flat
-array of values.
+PDFs/CDFs, iminuit cost functions, the fit driver and fit results, on flat numpy arrays.
 """
 
 import math
@@ -103,15 +100,14 @@ def gauss_cdf(x, xmin, xmax, mean, sigma):
 
 
 # --- Double Crystal Ball ---
-"""
-A Gaussian core with independent power-law tails on each side of the peak:
-
-          {  A_L · (B_L − t)^{−n_L}    if   t < −α_L        (left  tail)
-  f(t) =  {  exp(−t²/2)                if  −α_L ≤ t ≤ α_R   (Gaussian core)
-          {  A_R · (B_R + t)^{−n_R}    if   t >  α_R        (right tail)
-
-  where   t = (x − μ) / σ.
-"""
+#
+# A Gaussian core with independent power-law tails on each side of the peak:
+#
+#           {  A_L · (B_L − t)^{−n_L}    if   t < −α_L        (left  tail)
+#   f(t) =  {  exp(−t²/2)                if  −α_L ≤ t ≤ α_R   (Gaussian core)
+#           {  A_R · (B_R + t)^{−n_R}    if   t >  α_R        (right tail)
+#
+#   where   t = (x − μ) / σ.
 
 # DCB shape parameters, in the order the DCB functions take them
 DCB_PARAMS = ('mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR')
@@ -427,9 +423,7 @@ def run_fit(cost, initial_values, limits=None, fixed=None):
     m.migrad(ncall=100000)
     m.hesse()
     if not m.valid:
-        # A single MIGRAD pass can land close enough for HESSE to succeed but still miss MIGRAD's
-        # own EDM convergence goal -- standard MINUIT practice is to re-run it once more from there,
-        # refining off the now-improved Hessian estimate, before giving up.
+        # Not converged: MIGRAD and HESSE once more, from where the first pass ended
         m.migrad(ncall=100000)
         m.hesse()
     return m
@@ -524,16 +518,13 @@ def build_prior(fit, params, factor=1.0):
     fit's parameters, with each parameter's uncertainty scaled by `factor`.
 
     fit    : an iminuit.Minuit.
-    params : names to constrain. A parameter NOT in this list gets no prior at all -- this is how a
-             prior is dropped entirely for a given stage of a fit chain (e.g. floating a background
-             parameter completely on the per-bin fits after constraining it on the data fit).
+    params : names to constrain; a parameter not in this list gets no prior.
     factor : stdev multiplier applied to every parameter in `params`, so the covariance scales by
              factor**2. The correlations cov_ij / (sigma_i * sigma_j) of the original fit are
              unchanged.
 
     Falls back to a diagonal matrix built from `fit.errors` when `fit.covariance` is None (HESSE's
-    matrix inversion failed) -- no cross-parameter term, but still a usable prior instead of a
-    crash.
+    matrix inversion failed).
     """
     params = list(params)
     values = np.array([fit.values[p] for p in params], dtype=float)

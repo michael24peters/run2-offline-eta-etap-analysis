@@ -110,12 +110,8 @@ def test_negative_index_fails_silently(gen):
     """-1 means "no mother", but follow() does numpy-style indexing, so it reads the LAST entry
     instead of raising.
 
-    This is asserted deliberately: the docstring promises this behaviour and tells callers to use
-    valid(). If follow() ever starts raising or masking instead, this test should fail so the docs
-    get updated with it.
-
-    So in a way, we're actually checking for the presence of an issue: follow() is not a safe
-    operation on its own, and the caller must use valid() to ignore the wrapped values.
+    The follow() docstring states this and tells callers to use valid(); if follow() starts
+    raising or masking instead, this test fails and the docstring needs updating.
     """
     out = cut_utils.follow(gen, gen['mc_pid'], 'mc_idx_mom')
     # Entry 0 is the eta, whose mc_idx_mom is -1 -> wraps to mc_pid[-1] == 13.

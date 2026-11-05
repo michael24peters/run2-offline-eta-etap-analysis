@@ -4,9 +4,8 @@ Shared pytest fixtures and path setup.
 `src/utils`, `src/root` and `src/fit` are not packages, so they go on sys.path the same way every
 script in the repo does it.
 
-Every fixture here is a hand-built toy tree -- no ROOT files, no network. The trees are small enough
-to verify by eye, which is the point: a test that needs a 600 MB ntuple to explain itself is not a
-unit test.
+Every fixture here is a hand-built toy tree, small enough to verify by eye: no ROOT files, no
+network.
 
 Ntuple conventions the fixtures reproduce:
   - every branch is float64, including the index branches

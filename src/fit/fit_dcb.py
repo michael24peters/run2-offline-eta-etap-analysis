@@ -45,7 +45,7 @@ def fit_dcb(values, xmin=500.0, xmax=600.0, nbins=100,
              array/dict, `cov` its 4x4 covariance. Adds
              NormalConstraint(TAIL_PARAMS, values, error=cov) to the cost, so the tails float but
              are penalized for straying from `values` (e.g. an MC-derived tail shape) by an amount
-             set by `cov` -- looser than hard-fixing them via `fixed_params`.
+             set by `cov`.
     sigma_prior : optional (values, cov) for sigma -- `values` a length-1 array, `cov` its 1x1
              covariance. Adds NormalConstraint(('sigma',), values, error=cov) to the cost, as
              tail_prior does for the tails.

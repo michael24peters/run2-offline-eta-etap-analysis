@@ -225,9 +225,8 @@ def test_build_prior_scalar_factor_matches_cov_times_factor_squared():
 
 
 def test_build_prior_excluded_param_gets_no_prior():
-    """A parameter simply left out of `params` is how a prior is dropped entirely -- build_prior
-    only ever returns values/cov for what it's asked for, so the caller's
-    NormalConstraint(params, ...) never mentions it."""
+    """build_prior returns values/cov only for the parameters in `params`, so a parameter left out
+    gets no prior."""
     rng = np.random.default_rng(3)
     vals = np.concatenate([rng.normal(547.9, 8.0, 1500),
                            rng.uniform(XMIN, XMAX, 6000)])

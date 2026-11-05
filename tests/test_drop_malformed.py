@@ -35,7 +35,7 @@ def test_well_formed_event_is_kept():
 # --- reason 1: no candidates -------------------------------------------------
 
 def test_drops_event_with_no_candidates():
-    """The most common drop -- ~99% of MC events reconstruct nothing."""
+    """An event with no candidates is dropped."""
     tree = make_tree(tag_dtf_m=[[], [550.0]], tag_hlt2_tos0=[[], [1.0]],
                      prt_idx_mom=[[], [0, 0]], prt_pid=[[], [-13, 13]])
     kept, report = cut_utils.drop_malformed(tree)

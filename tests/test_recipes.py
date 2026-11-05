@@ -17,9 +17,8 @@ One event, eta -> mu+ mu- gamma, small enough to read by eye.
                  top of the chain   |    so nobody's children.
 
   RECO -- two candidates. COMPOSITION IS FIXED by the decay descriptor: every
-  candidate is exactly one mu+, one mu- and one gamma, verified on real MC
-  (5914 of 5914 candidates). A candidate with any other composition is
-  malformed, not background.
+  candidate is exactly one mu+, one mu- and one gamma. A candidate with any
+  other composition is malformed, not background.
 
     index         0    1    2  |  3    4    5
     prt_idx_mom [  0,   0,   0 |  1,   1,   1]
@@ -30,9 +29,9 @@ One event, eta -> mu+ mu- gamma, small enough to read by eye.
                                       matched the STRAY pion: a mis-ID
 
   What DOES vary is truth matching -- which generator particle each track
-  really was. On real MC 25% of reco daughters match a motherless generator
-  particle and 5.6% disagree with their own reco PID. Candidate 0 here is
-  cleanly matched; candidate 1 shares a track and picks up two bad matches.
+  really was: a reco daughter can match a motherless generator particle, or one
+  whose PID disagrees with its own. Candidate 0 here is cleanly matched;
+  candidate 1 shares a track and picks up two bad matches.
   That is the distinction the recipes below turn on: composition is guaranteed,
   truth matching is not.
 """
@@ -208,10 +207,10 @@ def test_which_candidates_pass_a_pid_cut(event):
 def test_which_candidates_have_exactly_one_photon(event):
     """A multiplicity requirement: sum the PID flag, compare to 1.
 
-    On this ntuple it is a no-op -- the decay descriptor guarantees exactly one photon per
-    candidate, and it does hold on real MC. The recipe exists as a SAFETY CHECK on that guarantee
-    (fit_dalitz_new.ipynb runs it before computing Dalitz variables), and it is not a no-op for a
-    channel whose reconstruction does not fix the composition.
+    On this ntuple the decay descriptor guarantees exactly one photon per candidate, so the recipe
+    is a check on that guarantee (driver_dalitz.select_candidates runs it before computing the
+    Dalitz variables); it is not a no-op for a channel whose reconstruction does not fix the
+    composition.
     """
     n_gamma = cut_utils.reduce(event, event['prt_pid'] == 22, 'prt_idx_mom',
                                how='sum', target_ref='tag_dtf_m')

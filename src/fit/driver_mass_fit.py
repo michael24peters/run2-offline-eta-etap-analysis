@@ -8,8 +8,8 @@ Gaussian and DCB + Chebyshev mass fits of one ROOT file:
                 results_dcb.json, dcb_mass_fit.png
 
 This script owns everything about the input: which file, which branches, which selection (the
-constants and cut_steps of selection.py). fit_gauss() and fit_dcb() downstream see only a numpy array
-of masses.
+constants and cut_steps of selection.py). fit_gauss() and fit_dcb() downstream see only a numpy
+array of masses.
 
 One candidate per event is picked at random among those that pass the cuts
 (cut_utils.random_candidate_mask, seed selection.SEED).
@@ -29,9 +29,6 @@ SIGMA_PRIOR_FACTOR**2) to the DCB fit.
 
 --tail-prior RESULTS_JSON floats the DCB tails under NormalConstraint(TAIL_PARAMS, MC values, MC
 covariance * TAIL_PRIOR_FACTOR**2), starting from the MC values.
-
-A single power-law tail cannot describe both the near and deep tails of MC:
-nL/nR are a compromise that over-predicts the deepest tail (~17% at 17-23 sigma). See README.md.
 
 Usage:
     python src/fit/driver_mass_fit.py INFILE --outdir OUTDIR

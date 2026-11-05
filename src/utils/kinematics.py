@@ -29,9 +29,7 @@ def p(px, py, pz):
 def invariant_mass2(px1, py1, pz1, e1, px2, py2, pz2, e2):
     """Mass squared of the sum of two 4-vectors.
 
-    Squared rather than the mass itself because reconstructed pairs can come out with M^2 < 0, and
-    Dalitz variables are conventionally m^2 anyway. Take the square root yourself if you want a
-    mass, after checking positivity.
+    Squared, since reconstructed pairs can have M^2 < 0 and the Dalitz variables are m^2.
     """
     e  = e1  + e2
     px = px1 + px2
@@ -44,9 +42,7 @@ def eta(px, py, pz):
     """
     Vectorized pseudorapidity, matching ROOT.TVector3::PseudoRapidity().
 
-    Uses np.where instead of try/except to handle division by zero.
-    Source: https://root.cern.ch/doc/master/classTVector3.html#aedc6fc6f5f6f3f3d4e4f4e4f4f4f4f4
-    Code: https://root.cern.ch/doc/master/TVector3_8cxx_source.html#l00345
+    Source: https://root.cern.ch/doc/master/classTVector3.html
     """
     px, py, pz = np.asarray(px, float), np.asarray(py, float), np.asarray(pz, float)
     mom = p(px, py, pz)  # momentum

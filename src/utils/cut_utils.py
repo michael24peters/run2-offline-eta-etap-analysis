@@ -14,9 +14,9 @@ list per event, with no nesting:
     mc_pid       = [221.0, -13.0, 13.0]        3 generator particles (mc_*)
 
 Everything here is a mask, and every mask is shaped like the collection it belongs to. Masks on the
-same collection compose with plain `&` and `|`. There is deliberately no cut-specific helper beyond
-`tos_mask` -- a PID cut, a kinematic cut and a multiplicity cut are all just comparisons on a
-branch, moved to the level you want with `follow` / `reduce`:
+same collection compose with plain `&` and `|`. There is no cut-specific helper beyond `tos_mask`:
+a PID cut, a kinematic cut and a multiplicity cut are all comparisons on a branch, moved to the
+level you want with `follow` / `reduce`:
 
     # every muon daughter of the candidate has pnn_mu > 0.95
     muon_ok = (tree['prt_pnn_mu'] > 0.95) | (abs(tree['prt_pid']) != 13)
@@ -323,13 +323,8 @@ def random_candidate_mask(eligible, seed):
 
     Every eligible candidate of an event is equally likely to be picked.
 
-    Returns a mask on the full candidate axis, so it composes with `&` like every other mask here
-    and indexes any other per-candidate branch directly. Events with no eligible candidate simply
-    select nothing -- no need to filter empty events first, and no option type, so ak.to_numpy gives
-    a plain ndarray rather than a MaskedArray.
-
-    To reach the daughter branches of the picked candidates, pass this mask to
-    follow(tree, mask, 'prt_idx_mom').
+    Returns a mask on the full candidate axis; an event with no eligible candidate selects nothing.
+    follow(tree, mask, 'prt_idx_mom') gives the daughters of the picked candidates.
     """
     # -------------------------------------------------------------------------
     # Example:
@@ -422,7 +417,7 @@ def follow(tree, array, idx_branch):
     NOTE: a negative index (mc_idx_mom uses -1 for "no mother") is NOT caught here -- numpy-style it
     silently wraps to the last entry. AND in valid(tree, idx_branch) to handle those.
     """
-    # The index branch is stored as float64, but indexes are just integers, so convert them to in64.
+    # The index branch is stored as float64, but indexes are integers, so convert them to int64.
     idx = ak.values_astype(tree[idx_branch], np.int64)
 
     # Broadcast array to the same jagged structure as idx_branch
@@ -501,15 +496,8 @@ def reduce(tree, array, idx_branch, how='all', target_ref='tag_dtf_m'):
         idx_branch = 'mc_idx_mom' = [[-1.0, 0.0, 0.0], [-1.0, 0.0, 0.0, -1.0, -1.0]]
         reduce(tree, array, 'mc_idx_mom', how='sum', target_ref='mc_pid') = [[2], [2]]
 
-    Note that for all of these example, it is assumed the negative indices are masked off with
-    valid(tree, idx_branch) before reducing. Otherwise, the negative would get counted as a daughter
-    of the last candidate, which confuses the result. In example 3, the sum of the daughters of the
-    eta is 2, but the negative indices if counted would make the second event's eta have 4 daughters
-    instead of 2.
-
-    NOTE: as in follow(), a negative index is not caught -- it wraps into the previous event's
-    segment. AND in valid(tree, 'mc_idx_mom') before reducing along mc_idx_mom. This must be handled
-    by the caller.
+    A negative index (prt_idx_mom or mc_idx_mom = -1, pointing nowhere) is left out of the
+    aggregation, so reduce() needs no valid() mask, unlike follow().
     """
     if how not in ('all', 'any', 'sum', 'min', 'max'):
         raise ValueError(f"Invalid how {how!r}. Must be 'all', 'any', 'sum', 'min' or 'max'.")
@@ -609,21 +597,19 @@ def reduce(tree, array, idx_branch, how='all', target_ref='tag_dtf_m'):
         #                            v                 v
         #     ids[~vals] =         [ 1,                2 ]
         #
-        # Read this as "a daughter of candidate 1 failed, and a daughter of candidate 2 failed". It
-        # is a list of complaints, one per failing daughter, labelled by which candidate the
-        # complaint is against. The same candidate appears once per failing daughter, so bincount
-        # tallies the complaints:
+        # Read this as "a daughter of candidate 1 failed, and a daughter of candidate 2 failed": one
+        # entry per failing daughter, labelled by its candidate. bincount counts the failing
+        # daughters of each candidate:
         #     np.bincount([1, 2], minlength=3) = [0, 1, 1]
         #                                         ^  ^  ^
-        #                                         |  |  candidate 2: 1 complaint
-        #                                         |  candidate 1: 1 complaint
-        #                                         candidate 0: no complaints
+        #                                         |  |  candidate 2: 1 failing daughter
+        #                                         |  candidate 1: 1 failing daughter
+        #                                         candidate 0: none
         #     == 0                             = [True, False, False]
         #
-        # A candidate that nothing points at collects no complaints, so it comes back True -- the
-        # identity of an empty all(). That is deliberate (it is what lets a candidate with no muons
-        # pass a muon cut) but it is a trap when propagating a selection upward: use how='any'
-        # there, whose identity is False.
+        # A candidate that nothing points at has no failing daughter, so it comes back True, the
+        # identity of an empty all(): a candidate with no muons passes a muon cut. To propagate a
+        # selection upward, use how='any', whose identity is False.
         out = np.bincount(ids[~vals], minlength=n_total) == 0
     elif how == 'any':
         # Mirror image: count the PASSING daughters per candidate, require >= 1.
