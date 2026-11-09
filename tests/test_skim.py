@@ -1,65 +1,84 @@
 """
-skim.event_mask on toy eta -> mu+ mu- and eta -> mu+ mu- gamma trees.
+skim.candidate_mask and skim.keep_candidates on toy eta -> mu+ mu- and eta -> mu+ mu- gamma trees.
 
-Every candidate is TOS at every level. Every muon has pT 1500 MeV, p 15075 MeV and eta 3.0, and
+Every candidate is TOS at every level. Every muon has pT ~1500 MeV, p ~15075 MeV and eta ~3.0, and
 passes every muon cut unless noted.
 """
 
+import awkward as ak
+import numpy as np
+
+import selection
 import skim
 from conftest import make_tree
 
 
 def mumu_tree():
     """
-    Four eta -> mu+ mu- events:
+    Five eta -> mu+ mu- events, prt_px numbering each daughter:
 
-      event 0: 2 candidates, a muon of candidate 0 has ProbNNmu 0.5     candidate 1 passes
-      event 1: 1 candidate with a muon of ProbNNmu 0.5                   no candidate passes
-      event 2: 1 candidate, a daughter's prt_idx_mom is 1                malformed
-      event 3: 1 candidate                                               passes
-    """
-    n_daughters = [4, 2, 2, 2]
-    return make_tree(
-        tag_dtf_m=[[548, 550], [547], [549], [546]],
-        tag_l0_tos0=[[1, 1], [1], [1], [1]],
-        tag_l0_tos1=[[0, 0], [0], [0], [0]],
-        tag_hlt1_tos0=[[1, 1], [1], [1], [1]],
-        tag_hlt2_tos0=[[1, 1], [1], [1], [1]],
-        prt_idx_mom=[[0, 0, 1, 1], [0, 0], [0, 1], [0, 0]],
-        prt_pid=[[-13, 13, -13, 13], [-13, 13], [-13, 13], [-13, 13]],
-        prt_pnn_mu=[[0.99, 0.5, 0.99, 0.99], [0.99, 0.5], [0.99, 0.99], [0.99, 0.99]],
-        prt_prb_ghost=[[0.01] * n for n in n_daughters],
-        prt_ip_chi2=[[1.0] * n for n in n_daughters],
-        prt_tight_mu=[[1] * n for n in n_daughters],
-        prt_px=[[900] * n for n in n_daughters],
-        prt_py=[[1200] * n for n in n_daughters],
-        prt_pz=[[15000] * n for n in n_daughters],
-    )
-
-
-def test_event_with_one_passing_candidate_is_kept():
-    mask, _ = skim.event_mask(mumu_tree())
-    assert mask[0]
-
-
-def test_event_with_no_passing_candidate_is_dropped():
-    mask, _ = skim.event_mask(mumu_tree())
-    assert not mask[1]
-
-
-def test_malformed_event_is_dropped():
-    """The passing event after the malformed one keeps its own row."""
-    mask, _ = skim.event_mask(mumu_tree())
-    assert mask.tolist() == [True, False, False, True]
-
-
-def test_mumugamma_tight_mu_one_entry_per_muon():
-    """
-    Two eta -> mu+ mu- gamma events of 2 candidates each, prt_tight_mu stored one entry per muon:
-    in event 0 both muons of candidate 0 are tight, in event 1 one muon of each candidate is not.
+      event 0: 3 candidates: 548 MeV with a muon of ProbNNmu 0.5, 550 MeV,     candidate 1 kept
+               750 MeV
+      event 1: 1 candidate at 950 MeV                                          kept
+      event 2: 1 candidate at 750 MeV                                          dropped
+      event 3: 1 candidate, a daughter's prt_idx_mom is 1                      malformed
+      event 4: 1 candidate at 547 MeV with a muon of ProbNNmu 0.5              dropped
     """
     tree = make_tree(
-        tag_dtf_m=[[548, 550], [548, 550]],
+        tag_dtf_m=[[548, 550, 750], [950], [750], [549], [547]],
+        tag_l0_tos0=[[1, 1, 1], [1], [1], [1], [1]],
+        tag_l0_tos1=[[0, 0, 0], [0], [0], [0], [0]],
+        tag_hlt1_tos0=[[1, 1, 1], [1], [1], [1], [1]],
+        tag_hlt2_tos0=[[1, 1, 1], [1], [1], [1], [1]],
+        tag_hlt2_tos1=[[5, 6, 7], [], [8], [9], [4]],   # empty in event 1
+        prt_idx_mom=[[0, 0, 1, 1, 2, 2], [0, 0], [0, 0], [0, 1], [0, 0]],
+        prt_pid=[[-13, 13] * 3, [-13, 13], [-13, 13], [-13, 13], [-13, 13]],
+        prt_pnn_mu=[[0.99, 0.5, 0.99, 0.99, 0.99, 0.99], [0.99] * 2, [0.99] * 2, [0.99] * 2,
+                    [0.99, 0.5]],
+        prt_prb_ghost=[[0.01] * 6] + [[0.01] * 2] * 4,
+        prt_ip_chi2=[[1.0] * 6] + [[1.0] * 2] * 4,
+        prt_tight_mu=[[1] * 6] + [[1] * 2] * 4,
+        prt_px=[[900, 901, 910, 911, 920, 921], [930, 931], [940, 941], [950, 951], [960, 961]],
+        prt_py=[[1200] * 6] + [[1200] * 2] * 4,
+        prt_pz=[[15000] * 6] + [[15000] * 2] * 4,
+    )
+    return ak.with_field(tree, np.array([10.0, 11.0, 12.0, 13.0, 14.0]), 'run_n')
+
+
+def skim_tree(tree):
+    """keep_candidates of candidate_mask with selection.TOS_LINES."""
+    rows, keep, _, _ = skim.candidate_mask(tree, selection.TOS_LINES)
+    return skim.keep_candidates(tree[rows], keep)
+
+
+def test_candidates_pass_the_selection_inside_the_mass_windows():
+    rows, keep, steps, _ = skim.candidate_mask(mumu_tree(), selection.TOS_LINES)
+    assert rows.tolist() == [0, 1, 2, 4]   # event 3 is malformed
+    assert keep.tolist() == [[False, True, False], [True], [False], [False]]
+    assert steps[-1][0] == 'tag_dtf_m in 400-700 or 800-1100 MeV'
+
+
+def test_kept_candidates_keep_their_daughters_renumbered():
+    out = skim_tree(mumu_tree())
+    assert out['tag_dtf_m'].tolist() == [[550], [950]]
+    assert out['prt_idx_mom'].tolist() == [[0, 0], [0, 0]]
+    assert out['prt_px'].tolist() == [[910, 911], [930, 931]]
+    assert out['run_n'].tolist() == [10, 11]
+
+
+def test_tag_branch_empty_in_an_event_stays_empty():
+    out = skim_tree(mumu_tree())
+    assert out['tag_hlt2_tos1'].tolist() == [[6], []]
+
+
+def mumugamma_tree():
+    """
+    Two eta -> mu+ mu- gamma events of 2 candidates each, prt_tight_mu stored one entry per muon:
+    in event 0 a muon of candidate 0 is not tight, in event 1 candidate 1 is at 300 MeV and has a
+    muon that is not tight.
+    """
+    return make_tree(
+        tag_dtf_m=[[548, 550], [549, 300]],
         tag_l0_tos0=[[1, 1], [1, 1]],
         tag_l0_tos1=[[0, 0], [0, 0]],
         tag_hlt1_tos0=[[1, 1], [1, 1]],
@@ -69,11 +88,25 @@ def test_mumugamma_tight_mu_one_entry_per_muon():
         prt_pnn_mu=[[0.99, 0.99, 0.0] * 2, [0.99, 0.99, 0.0] * 2],
         prt_prb_ghost=[[0.01, 0.01, 1.0] * 2, [0.01, 0.01, 1.0] * 2],
         prt_ip_chi2=[[1.0, 1.0, -1.0] * 2, [1.0, 1.0, -1.0] * 2],
-        prt_tight_mu=[[1, 1, 0, 0], [1, 0, 0, 1]],
-        prt_px=[[900] * 6, [900] * 6],
+        prt_tight_mu=[[1, 0, 1, 1], [1, 1, 0, 1]],
+        prt_px=[[900, 901, 902, 910, 911, 912], [920, 921, 922, 930, 931, 932]],
         prt_py=[[1200] * 6, [1200] * 6],
         prt_pz=[[15000] * 6, [15000] * 6],
     )
-    mask, _ = skim.event_mask(tree)
-    assert mask.tolist() == [True, False]
-    assert tree['prt_tight_mu'].tolist() == [[1, 1, 0, 0], [1, 0, 0, 1]]   # left as stored
+
+
+def test_mumugamma_tight_mu_keeps_one_entry_per_kept_muon():
+    tree = mumugamma_tree()
+    out = skim_tree(tree)
+    assert out['prt_tight_mu'].tolist() == [[1, 1], [1, 1]]
+    assert out['prt_px'].tolist() == [[910, 911, 912], [920, 921, 922]]
+    assert out['prt_idx_mom'].tolist() == [[0, 0, 0], [0, 0, 0]]
+    assert tree['prt_tight_mu'].tolist() == [[1, 0, 1, 1], [1, 1, 0, 1]]   # left as stored
+
+
+def test_skim_of_a_skim_keeps_everything():
+    for tree in [mumu_tree(), mumugamma_tree()]:
+        skimmed = ak.Array(skim_tree(tree))
+        rows, keep, _, _ = skim.candidate_mask(skimmed, selection.TOS_LINES)
+        assert len(rows) == len(skimmed)
+        assert ak.all(keep)

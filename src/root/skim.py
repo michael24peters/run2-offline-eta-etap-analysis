@@ -1,26 +1,31 @@
 """
 skim.py
 
-Skim of a data ntuple production for the drivers: every event with at least one candidate that
-passes driver_mass_fit's selection, with only the branches the drivers read.
+Skim of an ntuple production for the drivers: the candidates that pass driver_mass_fit's selection
+with MASS_BRANCH in MASS_WINDOWS, their daughters and the events holding them, with only the
+branches the drivers read.
 
     read the sorted glob in STEP_SIZE chunks (uproot.iterate)
-      -> event_mask: align_muons, drop_malformed, selection.cut_steps with selection.TOS_LINES,
-         then any candidate passing the last cut
-      -> OUTFILE, TTree 'tree': the kept events, every branch as stored (prt_tight_mu unaligned)
-      -> skim.json next to OUTFILE: input files, branches, TOS_LINES, cut labels, events read,
-         events kept and candidates kept (passing the last cut)
+      -> candidate_mask: align_muons, drop_malformed, selection.cut_steps, then MASS_WINDOWS
+      -> keep_candidates: the kept candidates and their daughters, prt_idx_mom renumbered to them,
+         events with no kept candidate dropped
+      -> OUTFILE, TTree 'tree'
+      -> skim.json next to OUTFILE: input files, branches, TOS lines, mass windows, cut labels,
+         events read, malformed and kept, and candidates kept
 
-The selection reads only driver_mass_fit's branches (SELECTION_BRANCHES), so drop_malformed checks
-the same branches as in driver_mass_fit. No mass-window cut is applied.
+The selection is driver_mass_fit's without a truth match: selection.TOS_LINES_4MU for an input
+glob with an eta2mumumumu segment, selection.TOS_LINES otherwise. drop_malformed checks every
+branch written.
 
 The branches written are WRITE_BRANCHES (both mass branches of driver_dalitz.MASS_SOURCES and
-their daughter four-momenta, prt_idx_mom, selection.MUON_CUT_BRANCHES, run_n, evt_n) and every
-tag_*_tos* branch of the input. uproot adds a counter branch n<branch> per jagged branch.
+their daughter four-momenta, prt_idx_mom, selection.MUON_CUT_BRANCHES, run_n, evt_n), every
+tag_*_tos* branch of the input and, in MC, selection.TRUTH_BRANCHES. prt_tight_mu keeps one entry
+per muon daughter, as stored; the mc_* branches are kept whole. uproot adds a counter branch
+n<branch> per jagged branch.
 
 Usage:
-    python src/root/skim.py 'ntuple/lhcb/<channel>/<date>/mag*/*.root' \
-        ntuple/lhcb/<channel>/<date>/skim.root
+    python src/root/skim.py 'ntuple/<lhcb|mc>/<channel>/<production>/mag*/*.root' \
+        ntuple/<lhcb|mc>/<channel>/<production>/skim.root
 """
 
 import argparse
@@ -40,42 +45,92 @@ import cut_utils
 import selection
 from driver_dalitz import MASS_SOURCES
 
-MASS_BRANCH = 'tag_dtf_m'   # MASS_BRANCH of driver_mass_fit
-STEP_SIZE = '2 GB'          # uproot.iterate chunk size
+MASS_BRANCH = 'tag_dtf_m'                          # MASS_BRANCH of driver_mass_fit
+MASS_WINDOWS = [(400.0, 700.0), (800.0, 1100.0)]   # MASS_BRANCH ranges of the kept candidates [MeV]
+STEP_SIZE = '2 GB'                                 # uproot.iterate chunk size
+MUON_ONLY_BRANCHES = ['prt_tight_mu']              # written branches stored one entry per muon
 
-# The branches of driver_mass_fit, the only ones the selection reads
-SELECTION_BRANCHES = ([MASS_BRANCH, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
-                      + [line for lines in selection.TOS_LINES.values() for line in lines])
 # Written with every tag_*_tos* branch of the input; in order, without duplicates
 WRITE_BRANCHES = list(dict.fromkeys(
     list(MASS_SOURCES) + [branch for momenta in MASS_SOURCES.values() for branch in momenta]
     + ['prt_idx_mom'] + selection.MUON_CUT_BRANCHES + ['run_n', 'evt_n']))
+WINDOWS_LABEL = (f'{MASS_BRANCH} in '
+                 + ' or '.join(f'{low:g}-{high:g}' for low, high in MASS_WINDOWS) + ' MeV')
 
 
-def event_mask(tree):
+def candidate_mask(tree, tos_lines):
     """
-    Per-event numpy mask of `tree`: True for every event with at least one candidate passing
-    driver_mass_fit's selection (align_muons, drop_malformed, then selection.cut_steps with
-    selection.TOS_LINES). Reads the SELECTION_BRANCHES of `tree` and leaves `tree` unchanged.
+    The candidates of `tree` that pass driver_mass_fit's selection (align_muons, drop_malformed,
+    then selection.cut_steps with `tos_lines`) with MASS_BRANCH in MASS_WINDOWS. drop_malformed
+    checks every field of `tree`; `tree` is left unchanged.
 
-    Returns (mask, steps): the mask, and the [(label, keep), ...] of cut_steps on the events
-    drop_malformed keeps.
+    Returns (rows, keep, steps, drop_report):
+        rows        : numpy indices of the events of `tree` that drop_malformed keeps
+        keep        : per-candidate mask of those events, shaped like MASS_BRANCH
+        steps       : [(label, keep), ...] of cut_steps, then WINDOWS_LABEL
+        drop_report : the report of drop_malformed
     """
-    events = tree[SELECTION_BRANCHES]
+    events = tree[tree.fields]   # a new array: the fields set below leave `tree` unchanged
     # Row of each event in `tree`; drop_malformed checks only tag_* and prt_* fields
     events['skim_index'] = np.arange(len(events))
     events['prt_tight_mu'] = cut_utils.align_muons(events, 'prt_tight_mu')   # stored for muons only
-    events, _ = cut_utils.drop_malformed(events, tag_ref=MASS_BRANCH)
-    steps, _ = selection.cut_steps(events, MASS_BRANCH, selection.TOS_LINES)
-    passes = ak.any(steps[-1][1], axis=1)
-    mask = np.zeros(len(tree), dtype=bool)
-    mask[ak.to_numpy(events['skim_index'][passes])] = True
-    return mask, steps
+    events, drop_report = cut_utils.drop_malformed(events, tag_ref=MASS_BRANCH)
+    steps, _ = selection.cut_steps(events, MASS_BRANCH, tos_lines)
+
+    mass = events[MASS_BRANCH]
+    in_windows = ak.zeros_like(mass, dtype=bool)
+    for low, high in MASS_WINDOWS:
+        in_windows = in_windows | ((mass >= low) & (mass <= high))
+    keep = steps[-1][1] & in_windows
+    steps.append((WINDOWS_LABEL, keep))
+    return ak.to_numpy(events['skim_index']), keep, steps, drop_report
+
+
+def keep_candidates(tree, keep):
+    """
+    Every field of `tree` reduced to the candidates where `keep` and their daughters, in the events
+    with at least one kept candidate. `tree` holds well-formed events (drop_malformed) with
+    prt_tight_mu as stored; `keep` is per candidate, shaped like MASS_BRANCH.
+
+        tag_*               the kept candidates; a branch empty in an event stays empty
+        prt_*               the daughters of the kept candidates; prt_idx_mom renumbered to them
+        MUON_ONLY_BRANCHES  the muon daughters of the kept candidates
+        any other field     whole (run_n, evt_n, mc_*)
+
+    Returns {field: awkward array}.
+    """
+    daughter_keep = cut_utils.follow(tree, keep, 'prt_idx_mom')
+    muon_keep = daughter_keep[abs(tree['prt_pid']) == selection.MUON_PID]
+
+    # Index of each candidate among the kept ones of its event, e.g. [[F, T, T]] -> [[0, 0, 1]]
+    n_candidates = ak.to_numpy(ak.num(keep))
+    flat_keep = ak.to_numpy(ak.flatten(keep)).astype(np.int64)
+    kept_before = np.cumsum(flat_keep) - flat_keep   # kept candidates before each, over all events
+    first = np.repeat(np.cumsum(n_candidates) - n_candidates, n_candidates)   # its event's first
+    new_index = ak.unflatten((kept_before - kept_before[first]).astype(np.float64), n_candidates)
+
+    has_kept = ak.any(keep, axis=1)
+    out = {}
+    for field in tree.fields:
+        if field == 'prt_idx_mom':
+            values = cut_utils.follow(tree, new_index, 'prt_idx_mom')[daughter_keep]
+        elif field in MUON_ONLY_BRANCHES:
+            values = tree[field][muon_keep]
+        elif field.startswith('prt_'):
+            values = tree[field][daughter_keep]
+        elif field.startswith('tag_'):
+            # Per candidate: its event stores the branch
+            present = ak.broadcast_arrays(ak.num(tree[field]) > 0, keep)[0]
+            values = tree[field][keep[present]]
+        else:
+            values = tree[field]
+        out[field] = values[has_kept]
+    return out
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Skim a data ntuple production to the events and branches the drivers read',
+        description='Skim an ntuple production to the candidates and branches the drivers read',
         formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     parser.add_argument('inglob', help='Quoted glob of the input ROOT files')
     parser.add_argument('outfile', help='Output ROOT file; skim.json is written next to it')
@@ -84,31 +139,38 @@ def main():
     paths = sorted(glob.glob(args.inglob))
     if not paths:
         parser.error(f'no file matches {args.inglob}')
+    tos_lines = (selection.TOS_LINES_4MU if 'eta2mumumumu' in args.inglob.split('/')
+                 else selection.TOS_LINES)
     with uproot.open(paths[0]) as f:
-        branches = WRITE_BRANCHES + f['tree'].keys(filter_name='tag_*_tos*')
+        input_branches = f['tree'].keys()
+        branches = (WRITE_BRANCHES + f['tree'].keys(filter_name='tag_*_tos*')
+                    + [branch for branch in selection.TRUTH_BRANCHES if branch in input_branches])
 
-    n_read = n_kept = n_candidates = 0
+    n_read = n_malformed = n_kept = n_candidates = 0
     with uproot.recreate(args.outfile) as out:
         chunks = uproot.iterate({path: 'tree' for path in paths}, branches,
                                 step_size=STEP_SIZE, library='ak')
         for i, chunk in enumerate(chunks):
-            mask, steps = event_mask(chunk)
-            kept = {branch: chunk[branch][mask] for branch in branches}
+            rows, keep, steps, _ = candidate_mask(chunk, tos_lines)
+            kept = keep_candidates(chunk[rows], keep)
             if i == 0:
                 out.mktree('tree', kept)   # a TTree; assigning out['tree'] writes an RNTuple
             else:
                 out['tree'].extend(kept)
             n_read += len(chunk)
-            n_kept += int(np.sum(mask))
-            n_candidates += int(ak.sum(steps[-1][1]))
+            n_malformed += len(chunk) - len(rows)
+            n_kept += len(kept['run_n'])
+            n_candidates += int(ak.sum(keep))
             print(f'[INFO] events: read {n_read}, kept {n_kept}', file=sys.stderr)
 
     report = {
         'input_files': paths,
         'branches': branches,
-        'tos_lines': selection.TOS_LINES,
+        'tos_lines': tos_lines,
+        'mass_windows': MASS_WINDOWS,
         'cuts': [label for label, _ in steps],
         'events_read': n_read,
+        'events_malformed': n_malformed,
         'events_kept': n_kept,
         'candidates_kept': n_candidates,
     }
