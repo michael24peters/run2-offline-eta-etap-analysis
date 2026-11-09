@@ -12,20 +12,22 @@ import selection
 import skim
 from conftest import make_tree
 
+ETA_WINDOW = (450.0, 650.0)
+ETAPRIME_WINDOW = (800.0, 1100.0)
+
 
 def mumu_tree():
     """
     Five eta -> mu+ mu- events, prt_px numbering each daughter:
 
-      event 0: 3 candidates: 548 MeV with a muon of ProbNNmu 0.5, 550 MeV,     candidate 1 kept
-               750 MeV
-      event 1: 1 candidate at 950 MeV                                          kept
-      event 2: 1 candidate at 750 MeV                                          dropped
-      event 3: 1 candidate, a daughter's prt_idx_mom is 1                      malformed
-      event 4: 1 candidate at 547 MeV with a muon of ProbNNmu 0.5              dropped
+      event 0: 3 candidates: 548 MeV with a muon of ProbNNmu 0.5, 550 MeV, 560 MeV
+      event 1: 1 candidate at 1100 MeV, the upper edge of ETAPRIME_WINDOW
+      event 2: 1 candidate at 750 MeV, between the windows
+      event 3: 1 candidate, a daughter's prt_idx_mom is 1 (malformed)
+      event 4: 1 candidate at 547 MeV with a muon of ProbNNmu 0.5
     """
     tree = make_tree(
-        tag_dtf_m=[[548, 550, 750], [950], [750], [549], [547]],
+        tag_dtf_m=[[548, 550, 560], [1100], [750], [549], [547]],
         tag_l0_tos0=[[1, 1, 1], [1], [1], [1], [1]],
         tag_l0_tos1=[[0, 0, 0], [0], [0], [0], [0]],
         tag_hlt1_tos0=[[1, 1, 1], [1], [1], [1], [1]],
@@ -45,30 +47,35 @@ def mumu_tree():
     return ak.with_field(tree, np.array([10.0, 11.0, 12.0, 13.0, 14.0]), 'run_n')
 
 
-def skim_tree(tree):
+def skim_tree(tree, window):
     """keep_candidates of candidate_mask with selection.TOS_LINES."""
-    rows, keep, _, _ = skim.candidate_mask(tree, selection.TOS_LINES)
+    rows, keep, _, _ = skim.candidate_mask(tree, selection.TOS_LINES, window)
     return skim.keep_candidates(tree[rows], keep)
 
 
-def test_candidates_pass_the_selection_inside_the_mass_windows():
-    rows, keep, steps, _ = skim.candidate_mask(mumu_tree(), selection.TOS_LINES)
+def test_candidates_pass_the_selection_inside_the_window():
+    rows, keep, steps, _ = skim.candidate_mask(mumu_tree(), selection.TOS_LINES, ETA_WINDOW)
     assert rows.tolist() == [0, 1, 2, 4]   # event 3 is malformed
-    assert keep.tolist() == [[False, True, False], [True], [False], [False]]
-    assert steps[-1][0] == 'tag_dtf_m in 400-700 or 800-1100 MeV'
+    assert keep.tolist() == [[False, True, True], [False], [False], [False]]
+    assert steps[-1][0] == 'tag_dtf_m in 450-650 MeV'
+
+
+def test_window_includes_its_edges():
+    _, keep, _, _ = skim.candidate_mask(mumu_tree(), selection.TOS_LINES, ETAPRIME_WINDOW)
+    assert keep.tolist() == [[False, False, False], [True], [False], [False]]
 
 
 def test_kept_candidates_keep_their_daughters_renumbered():
-    out = skim_tree(mumu_tree())
-    assert out['tag_dtf_m'].tolist() == [[550], [950]]
-    assert out['prt_idx_mom'].tolist() == [[0, 0], [0, 0]]
-    assert out['prt_px'].tolist() == [[910, 911], [930, 931]]
-    assert out['run_n'].tolist() == [10, 11]
+    out = skim_tree(mumu_tree(), ETA_WINDOW)
+    assert out['tag_dtf_m'].tolist() == [[550, 560]]
+    assert out['prt_idx_mom'].tolist() == [[0, 0, 1, 1]]
+    assert out['prt_px'].tolist() == [[910, 911, 920, 921]]
+    assert out['run_n'].tolist() == [10]
 
 
 def test_tag_branch_empty_in_an_event_stays_empty():
-    out = skim_tree(mumu_tree())
-    assert out['tag_hlt2_tos1'].tolist() == [[6], []]
+    assert skim_tree(mumu_tree(), ETA_WINDOW)['tag_hlt2_tos1'].tolist() == [[6, 7]]
+    assert skim_tree(mumu_tree(), ETAPRIME_WINDOW)['tag_hlt2_tos1'].tolist() == [[]]
 
 
 def mumugamma_tree():
@@ -97,7 +104,7 @@ def mumugamma_tree():
 
 def test_mumugamma_tight_mu_keeps_one_entry_per_kept_muon():
     tree = mumugamma_tree()
-    out = skim_tree(tree)
+    out = skim_tree(tree, ETA_WINDOW)
     assert out['prt_tight_mu'].tolist() == [[1, 1], [1, 1]]
     assert out['prt_px'].tolist() == [[910, 911, 912], [920, 921, 922]]
     assert out['prt_idx_mom'].tolist() == [[0, 0, 0], [0, 0, 0]]
@@ -106,7 +113,7 @@ def test_mumugamma_tight_mu_keeps_one_entry_per_kept_muon():
 
 def test_skim_of_a_skim_keeps_everything():
     for tree in [mumu_tree(), mumugamma_tree()]:
-        skimmed = ak.Array(skim_tree(tree))
-        rows, keep, _, _ = skim.candidate_mask(skimmed, selection.TOS_LINES)
+        skimmed = ak.Array(skim_tree(tree, ETA_WINDOW))
+        rows, keep, _, _ = skim.candidate_mask(skimmed, selection.TOS_LINES, ETA_WINDOW)
         assert len(rows) == len(skimmed)
         assert ak.all(keep)

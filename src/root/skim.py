@@ -2,15 +2,15 @@
 skim.py
 
 Skim of an ntuple production for the drivers: the candidates that pass driver_mass_fit's selection
-with MASS_BRANCH in MASS_WINDOWS, their daughters and the events holding them, with only the
+with MASS_BRANCH in the --window range, their daughters and the events holding them, with only the
 branches the drivers read.
 
     read the sorted glob in STEP_SIZE chunks (uproot.iterate)
-      -> candidate_mask: align_muons, drop_malformed, selection.cut_steps, then MASS_WINDOWS
+      -> candidate_mask: align_muons, drop_malformed, selection.cut_steps, then the window
       -> keep_candidates: the kept candidates and their daughters, prt_idx_mom renumbered to them,
          events with no kept candidate dropped
       -> OUTFILE, TTree 'tree'
-      -> skim.json next to OUTFILE: input files, branches, TOS lines, mass windows, cut labels,
+      -> OUTFILE with .json for .root: input files, branches, TOS lines, window, cut labels,
          events read, malformed and kept, and candidates kept
 
 The selection is driver_mass_fit's without a truth match: selection.TOS_LINES_4MU for an input
@@ -25,7 +25,12 @@ n<branch> per jagged branch.
 
 Usage:
     python src/root/skim.py 'ntuple/<lhcb|mc>/<channel>/<production>/mag*/*.root' \
-        ntuple/<lhcb|mc>/<channel>/<production>/skim.root
+        ntuple/<lhcb|mc>/<channel>/<production>/skim_eta.root --window 450 650
+
+The skims of a production, next to its mag* directories:
+
+    skim_eta.root       --window 450 650 (eta2mumugamma) or 500 600 (eta2mumu, eta2mumumumu)
+    skim_etaprime.root  --window 800 1100, data only
 """
 
 import argparse
@@ -45,29 +50,26 @@ import cut_utils
 import selection
 from driver_dalitz import MASS_SOURCES
 
-MASS_BRANCH = 'tag_dtf_m'                          # MASS_BRANCH of driver_mass_fit
-MASS_WINDOWS = [(400.0, 700.0), (800.0, 1100.0)]   # MASS_BRANCH ranges of the kept candidates [MeV]
-STEP_SIZE = '2 GB'                                 # uproot.iterate chunk size
-MUON_ONLY_BRANCHES = ['prt_tight_mu']              # written branches stored one entry per muon
+MASS_BRANCH = 'tag_dtf_m'               # MASS_BRANCH of driver_mass_fit
+STEP_SIZE = '2 GB'                      # uproot.iterate chunk size
+MUON_ONLY_BRANCHES = ['prt_tight_mu']   # written branches stored one entry per muon
 
 # Written with every tag_*_tos* branch of the input; in order, without duplicates
 WRITE_BRANCHES = list(dict.fromkeys(
     list(MASS_SOURCES) + [branch for momenta in MASS_SOURCES.values() for branch in momenta]
     + ['prt_idx_mom'] + selection.MUON_CUT_BRANCHES + ['run_n', 'evt_n']))
-WINDOWS_LABEL = (f'{MASS_BRANCH} in '
-                 + ' or '.join(f'{low:g}-{high:g}' for low, high in MASS_WINDOWS) + ' MeV')
 
 
-def candidate_mask(tree, tos_lines):
+def candidate_mask(tree, tos_lines, window):
     """
     The candidates of `tree` that pass driver_mass_fit's selection (align_muons, drop_malformed,
-    then selection.cut_steps with `tos_lines`) with MASS_BRANCH in MASS_WINDOWS. drop_malformed
-    checks every field of `tree`; `tree` is left unchanged.
+    then selection.cut_steps with `tos_lines`) with MASS_BRANCH in `window`, (low, high) [MeV]
+    with both ends included. drop_malformed checks every field of `tree`; `tree` is left unchanged.
 
     Returns (rows, keep, steps, drop_report):
         rows        : numpy indices of the events of `tree` that drop_malformed keeps
         keep        : per-candidate mask of those events, shaped like MASS_BRANCH
-        steps       : [(label, keep), ...] of cut_steps, then WINDOWS_LABEL
+        steps       : [(label, keep), ...] of cut_steps, then the window
         drop_report : the report of drop_malformed
     """
     events = tree[tree.fields]   # a new array: the fields set below leave `tree` unchanged
@@ -77,12 +79,10 @@ def candidate_mask(tree, tos_lines):
     events, drop_report = cut_utils.drop_malformed(events, tag_ref=MASS_BRANCH)
     steps, _ = selection.cut_steps(events, MASS_BRANCH, tos_lines)
 
+    low, high = window
     mass = events[MASS_BRANCH]
-    in_windows = ak.zeros_like(mass, dtype=bool)
-    for low, high in MASS_WINDOWS:
-        in_windows = in_windows | ((mass >= low) & (mass <= high))
-    keep = steps[-1][1] & in_windows
-    steps.append((WINDOWS_LABEL, keep))
+    keep = steps[-1][1] & (mass >= low) & (mass <= high)
+    steps.append((f'{MASS_BRANCH} in {low:g}-{high:g} MeV', keep))
     return ak.to_numpy(events['skim_index']), keep, steps, drop_report
 
 
@@ -133,7 +133,9 @@ def main():
         description='Skim an ntuple production to the candidates and branches the drivers read',
         formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     parser.add_argument('inglob', help='Quoted glob of the input ROOT files')
-    parser.add_argument('outfile', help='Output ROOT file; skim.json is written next to it')
+    parser.add_argument('outfile', help='Output ROOT file; its report is OUTFILE with .json')
+    parser.add_argument('--window', nargs=2, type=float, required=True, metavar=('LOW', 'HIGH'),
+                        help='MASS_BRANCH range of the kept candidates [MeV], both ends included')
     args = parser.parse_args()
 
     paths = sorted(glob.glob(args.inglob))
@@ -151,7 +153,7 @@ def main():
         chunks = uproot.iterate({path: 'tree' for path in paths}, branches,
                                 step_size=STEP_SIZE, library='ak')
         for i, chunk in enumerate(chunks):
-            rows, keep, steps, _ = candidate_mask(chunk, tos_lines)
+            rows, keep, steps, _ = candidate_mask(chunk, tos_lines, args.window)
             kept = keep_candidates(chunk[rows], keep)
             if i == 0:
                 out.mktree('tree', kept)   # a TTree; assigning out['tree'] writes an RNTuple
@@ -167,14 +169,14 @@ def main():
         'input_files': paths,
         'branches': branches,
         'tos_lines': tos_lines,
-        'mass_windows': MASS_WINDOWS,
+        'window': args.window,
         'cuts': [label for label, _ in steps],
         'events_read': n_read,
         'events_malformed': n_malformed,
         'events_kept': n_kept,
         'candidates_kept': n_candidates,
     }
-    report_path = os.path.join(os.path.dirname(args.outfile), 'skim.json')
+    report_path = os.path.splitext(args.outfile)[0] + '.json'
     with open(report_path, 'w') as f:
         json.dump(report, f, indent=2)
     print(f'[DONE] {args.outfile}, {report_path}', file=sys.stderr)
