@@ -18,7 +18,7 @@ Most everything is a library, so the drivers are the only entry point for fittin
 
 ## Usage
 
-`driver_mass_fit.py` reads a ROOT file, selects, picks one candidate per event at random, and runs the Gaussian fit, then the DCB fit seeded with the Gaussian sigma. The flag values below are the defaults.
+`driver_mass_fit.py` reads a ROOT file in chunks of `selection.STEP_SIZE`, selects and picks one candidate per event at random in each chunk, and runs the Gaussian fit, then the DCB fit seeded with the Gaussian sigma. The flag values below are the defaults.
 
 ```
 python src/fit/driver_mass_fit.py data.root \
@@ -75,7 +75,7 @@ With `--truth-match`, n_bkg, c0 and c1 of the DCB stay fixed at 0 through both s
 
 ## Changing the selection
 
-The selection constants (`SEED`, the muon cuts `MU_*` and `PNN_MU_MIN`, `TOS_LINES`, `TOS_LINES_4MU`) and the functions that apply them (`muon_cuts`, `cut_steps`) are in `src/utils/selection.py`, shared by `driver_mass_fit.py`, `driver_dalitz.py` and `plot_cut_steps.py`; the mass branch (`MASS_BRANCH`) is set in each driver. Each driver calls `selection.cut_steps` (truth match, TOS per trigger level, then each muon cut, each its own `selection.json` cutflow line), then picks the random candidate.
+The selection constants (`SEED`, `STEP_SIZE`, the muon cuts `MU_*` and `PNN_MU_MIN`, `TOS_LINES`, `TOS_LINES_4MU`) and the functions that apply them (`muon_cuts`, `cut_steps`) are in `src/utils/selection.py`, shared by `driver_mass_fit.py`, `driver_dalitz.py` and `plot_cut_steps.py`; the mass branch (`MASS_BRANCH`) is set in each driver. Each driver calls `selection.cut_steps` (truth match, TOS per trigger level, then each muon cut, each its own `selection.json` cutflow line), then picks the random candidate, one chunk of `STEP_SIZE` at a time (`cut_utils.iterate_branches`), and sums the reports of the chunks (`cut_utils.add_counts`).
 
 The muon cuts are the muon requirements of the dark-photon ananote (LHCb-ANA-2017-027, Tables 1 and 3) that the existing ntuples can apply, plus `IsMuonTight`, with p > 10 GeV (the 2018 Hlt1DiMuonNoIP threshold) in place of the ananote's 20 GeV. They are constants, not flags.
 
@@ -154,7 +154,7 @@ L0 (`tos0` L0DiMuon, `tos1` L0Muon) and HLT1 (`tos0` Hlt1DiMuonNoIP, `tos1` Hlt1
 
 **`prt_mu`, `prt_loose_mu` and `prt_tight_mu` hold one entry per muon.** In `eta2mumugamma` an event with two candidates has `prt_pid` = [-13, 13, 22, -13, 13, 22] and `prt_tight_mu` = [1, 1, 1, 1]: the photon has no entry, so the branch does not line up with `prt_pid` by position, and `drop_malformed()` drops every event for a daughter-length mismatch if it is read as is. `cut_utils.align_muons()` expands it to one entry per daughter (0 for the photon); it runs between `read_branches()` and `drop_malformed()`. In `eta2mumu` every daughter is a muon and the branch is unchanged.
 
-**Candidates cannot be ranked by `tag_dtf_chi2`.** In the 20261006 `eta2mumugamma` ntuples it is the same for every candidate of most multi-candidate events, up to floating-point rounding. The drivers pick one candidate per event at random (`random_candidate_mask()`, seed `selection.SEED`).
+**Candidates cannot be ranked by `tag_dtf_chi2`.** In the 20261006 `eta2mumugamma` ntuples it is the same for every candidate of most multi-candidate events, up to floating-point rounding. The drivers pick one candidate per event at random (`random_candidate_mask()`, seed `selection.SEED` plus the chunk index).
 
 
 ## Per-Dalitz-bin fits: the phase-space factor

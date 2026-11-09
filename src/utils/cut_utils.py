@@ -85,6 +85,46 @@ def read_branches(root_path, branches, tree='tree', entry_stop=None):
                               entry_stop=entry_stop)
 
 
+def iterate_branches(root_path, branches, step_size, tree='tree', entry_stop=None):
+    """Read `branches` as awkward arrays, one chunk of events at a time (uproot.iterate).
+
+    root_path  : a ROOT file or a glob of them, read in sorted order, as in read_branches.
+    step_size  : size of each chunk, e.g. '1 GB', or a number of events.
+    entry_stop : optional, specifies number of events to read (Default: all).
+
+    Yields one awkward array of whole events per chunk.
+    """
+    import uproot
+    paths = sorted(glob.glob(root_path))
+    if not paths:
+        raise FileNotFoundError(f'no file matches {root_path}')
+    n_read = 0
+    for chunk in uproot.iterate({path: tree for path in paths}, list(branches),
+                                step_size=step_size, library='ak'):
+        if entry_stop is not None and n_read + len(chunk) >= entry_stop:
+            yield chunk[:entry_stop - n_read]
+            return
+        n_read += len(chunk)
+        yield chunk
+
+
+def add_counts(total, counts):
+    """
+    `total` and `counts` summed key by key: dicts of counts, nested to any depth, such as two
+    reports of drop_malformed. A key in only one of them keeps its value.
+
+        add_counts({'read': 3, 'lines': {'a': 1}}, {'read': 2, 'lines': {'a': 1, 'b': 4}})
+        -> {'read': 5, 'lines': {'a': 2, 'b': 4}}
+    """
+    out = dict(total)
+    for key, value in counts.items():
+        if isinstance(value, dict):
+            out[key] = add_counts(total.get(key, {}), value)
+        else:
+            out[key] = total.get(key, 0) + value
+    return out
+
+
 def _prefix(branch):
     """Collection a branch belongs to: 'prt_idx_mom' -> 'prt_'.
 

@@ -1,5 +1,6 @@
 """
-Unit tests for cut_utils.read_branches() on a glob of ROOT files.
+Unit tests for cut_utils.read_branches() and cut_utils.iterate_branches() on a glob of ROOT
+files.
 
 Two small files with jagged tag_* / prt_* branches are written with uproot into tmp_path: a.root
 holds events 0-1 and b.root events 2-3.
@@ -44,3 +45,21 @@ def test_entry_stop_crosses_the_file_boundary(two_files):
 def test_glob_matching_nothing_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         cut_utils.read_branches(str(tmp_path / '*.root'), BRANCHES)
+
+
+def test_iterate_reads_every_file_in_sorted_order_one_chunk_at_a_time(two_files):
+    chunks = list(cut_utils.iterate_branches(str(two_files / '*.root'), BRANCHES, step_size=1))
+    assert [chunk['tag_dtf_m'].tolist() for chunk in chunks] == [
+        [[10.0, 11.0]], [[20.0]], [[30.0]], [[40.0, 41.0]]]
+
+
+def test_iterate_entry_stop_cuts_the_last_chunk(two_files):
+    chunks = list(cut_utils.iterate_branches(str(two_files / '*.root'), BRANCHES, step_size=2,
+                                             entry_stop=3))
+    assert [chunk['tag_dtf_m'].tolist() for chunk in chunks] == [
+        [[10.0, 11.0], [20.0]], [[30.0]]]
+
+
+def test_iterate_glob_matching_nothing_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        list(cut_utils.iterate_branches(str(tmp_path / '*.root'), BRANCHES, step_size=1))

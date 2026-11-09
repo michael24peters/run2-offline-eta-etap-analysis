@@ -11,8 +11,11 @@ This script owns everything about the input: which file, which branches, which s
 constants and cut_steps of selection.py). fit_gauss() and fit_dcb() downstream see only a numpy
 array of masses.
 
+The input is read, selected and reduced to the picked masses in chunks of selection.STEP_SIZE
+(cut_utils.iterate_branches); the selection report sums the chunks.
+
 One candidate per event is picked at random among those that pass the cuts
-(cut_utils.random_candidate_mask, seed selection.SEED).
+(cut_utils.random_candidate_mask, seed selection.SEED + chunk index).
 
 --truth-match PID... (signal MC only) keeps the candidates whose every daughter matches eta -> PIDs
 (bkg_utils.signal_candidate_mask). It is the first cut, before TOS, pnn_mu and the candidate pick.
@@ -42,6 +45,7 @@ import os
 import sys
 
 import awkward as ak
+import numpy as np
 
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
@@ -97,33 +101,38 @@ branches = ([MASS_BRANCH, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
             + [line for lines in tos_lines.values() for line in lines]
             + (selection.TRUTH_BRANCHES if args.truth_match else []))
 
-# --- Read --------------------------------------------------------------------
+# --- Read and select, one chunk of selection.STEP_SIZE at a time ------------
+# Per chunk: drop malformed events, [truth match], TOS per trigger level, then each muon cut
+# (selection.cut_steps), every cut a per-candidate boolean mask shaped like MASS_BRANCH; then one
+# candidate per event, picked at random among those kept. The reports sum over the chunks.
 
-tree = cut_utils.read_branches(args.infile, branches, entry_stop=args.max_events)
-tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
-tree, drop_report = cut_utils.drop_malformed(tree, tag_ref=MASS_BRANCH)
+drop_report, triggers, cutflow, mass_chunks = {}, {}, {}, []
+chunks = cut_utils.iterate_branches(args.infile, branches, selection.STEP_SIZE,
+                                    entry_stop=args.max_events)
+for i, tree in enumerate(chunks):
+    tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
+    tree, chunk_drop_report = cut_utils.drop_malformed(tree, tag_ref=MASS_BRANCH)
+    steps, chunk_triggers = selection.cut_steps(tree, MASS_BRANCH, tos_lines,
+                                                truth_pids=args.truth_match)
+    picked = cut_utils.random_candidate_mask(steps[-1][1], selection.SEED + i)
+    mass_chunks.append(cut_utils.values(tree, MASS_BRANCH, picked))  # <- awkward → numpy
+    drop_report = cut_utils.add_counts(drop_report, chunk_drop_report)
+    triggers = cut_utils.add_counts(triggers, chunk_triggers)
+    cutflow = cut_utils.add_counts(cutflow, {label: int(ak.sum(mask)) for label, mask in steps})
+    print(f"[INFO] chunk {i}: {drop_report['read']} events read", file=sys.stderr)
+masses = np.concatenate(mass_chunks)
+
 print(f"[INFO] events: read {drop_report['read']}, kept {drop_report['kept']}, "
       f"dropped {drop_report['read'] - drop_report['kept']}", file=sys.stderr)
 for reason in ('dropped_no_candidates', 'dropped_idx_out_of_range',
                'dropped_daughter_length_mismatch', 'dropped_partial_candidate_branch'):
     if drop_report[reason]:
         print(f'[INFO]   {reason}: {drop_report[reason]}', file=sys.stderr)
-
-# --- Select ------------------------------------------------------------------
-# [truth match], TOS per trigger level, then each muon cut (selection.cut_steps). Every cut is a
-# per-candidate boolean mask shaped like MASS_BRANCH.
-
-steps, triggers = selection.cut_steps(tree, MASS_BRANCH, tos_lines, truth_pids=args.truth_match)
-keep = steps[-1][1]
-cutflow = [(label, int(ak.sum(mask))) for label, mask in steps]
 for level, lines in triggers.items():
     for line, n in lines.items():
         if n == 0:
             print(f'[WARN] {level} TOS line {line} passes no candidate', file=sys.stderr)
-
-# One candidate per event: picked at random among those kept.
-picked = cut_utils.random_candidate_mask(keep, selection.SEED)
-masses = cut_utils.values(tree, MASS_BRANCH, picked)  # <- awkward → numpy
+cutflow = list(cutflow.items())
 cutflow.append(('random candidates', len(masses)))
 for label, n in cutflow:
     print(f'[INFO]   {label:24s} {n:9d}', file=sys.stderr)
@@ -141,7 +150,7 @@ selection_json = {
             'mu_ghost_max': selection.MU_GHOST_MAX,
             'mu_ip_chi2_max': selection.MU_IP_CHI2_MAX,
             'truth_match': args.truth_match,
-            'random_candidate': {'seed': selection.SEED},
+            'random_candidate': {'seed': selection.SEED, 'step_size': selection.STEP_SIZE},
             'max_events': args.max_events,
         },
     },

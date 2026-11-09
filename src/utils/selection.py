@@ -14,7 +14,8 @@ import bkg_utils
 import cut_utils
 import kinematics
 
-SEED              = 0                # random candidate pick
+SEED              = 0                # random candidate pick; the drivers' chunk i takes SEED + i
+STEP_SIZE         = '1 GB'           # chunk size the drivers read and select at a time
 MUON_PID          = 13               # |pid| the muon cuts apply to
 MOTHER_PID        = 221              # eta, for the truth match
 TRUTH_BRANCHES    = ['prt_idx_gen', 'mc_idx_mom', 'mc_pid']   # read for the truth match

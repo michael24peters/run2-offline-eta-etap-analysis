@@ -28,8 +28,11 @@ MASS_BRANCH picks the mass and, through MASS_SOURCES, the daughter momenta m12 a
     weighted  kinematics.dalitz_factor on the signal,
               kinematics.phase_space_factor on the background
 
+The input is read, selected and reduced to the picked candidates' m12s, m23s and masses in chunks of
+selection.STEP_SIZE (cut_utils.iterate_branches); the selection report sums the chunks.
+
 One candidate per event is picked at random among those that pass the cuts
-(cut_utils.random_candidate_mask, seed selection.SEED).
+(cut_utils.random_candidate_mask, seed selection.SEED + chunk index).
 
 --truth-match (signal MC only) keeps the candidates with every daughter truth-matched to eta -> mu+
 mu- gamma (bkg_utils.signal_candidate_mask). It is the first cut, before TOS, pnn_mu and the
@@ -110,7 +113,8 @@ FACTORS = {
 
 def select_candidates(infile, truth_match=False, max_events=None):
     """
-    Read infile, select, and pick one candidate per event at random.
+    Read infile, select, and pick one candidate per event at random, one chunk of
+    selection.STEP_SIZE at a time.
 
     Returns (m12s, m23s, masses, selection): the Dalitz variables [GeV^2] and gamma mu+ mu- mass
     [MeV] of each event's picked candidate, and the selection settings and report (the contents of
@@ -123,59 +127,70 @@ def select_candidates(infile, truth_match=False, max_events=None):
                 + [line for lines in selection.TOS_LINES.values() for line in lines]
                 + (selection.TRUTH_BRANCHES if truth_match else []))
 
-    # --- Read ---
+    # --- Read and select, one chunk of selection.STEP_SIZE at a time ---
+    # Per chunk: drop malformed events, [truth match to eta -> gamma mu+ mu-], TOS per trigger
+    # level, then each muon cut; then one candidate per event, picked at random among those kept,
+    # and its m12, m23 and mass. The reports sum over the chunks.
 
-    tree = cut_utils.read_branches(infile, branches, entry_stop=max_events)
-    tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
-    tree, drop_report = cut_utils.drop_malformed(tree, tag_ref=mass)
+    truth_pids = list(DAUGHTERS.values()) if truth_match else None
+    drop_report, triggers, cutflow = {}, {}, {}
+    m12_chunks, m23_chunks, mass_chunks = [], [], []
+    chunks = cut_utils.iterate_branches(infile, branches, selection.STEP_SIZE,
+                                        entry_stop=max_events)
+    for i, tree in enumerate(chunks):
+        tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
+        tree, chunk_drop_report = cut_utils.drop_malformed(tree, tag_ref=mass)
+
+        # Every candidate must have exactly one daughter of each PID.
+        for name, pid in DAUGHTERS.items():
+            n_of_pid = cut_utils.reduce(tree, tree['prt_pid'] == pid, 'prt_idx_mom',
+                                        how='sum', target_ref=mass)
+            assert ak.all(n_of_pid == 1), f'some candidates do not have exactly one {name}'
+
+        steps, chunk_triggers = selection.cut_steps(tree, mass, selection.TOS_LINES,
+                                                    truth_pids=truth_pids)
+
+        # One candidate per event: picked at random among those kept.
+        picked = cut_utils.random_candidate_mask(steps[-1][1], selection.SEED + i)
+        n_picked = int(ak.sum(picked))
+
+        # Daughter-level mask: True for the daughters of each picked candidate.
+        picked_daughter = cut_utils.follow(tree, picked, 'prt_idx_mom')
+
+        # (px, py, pz, e) [GeV] of each daughter of the picked candidates, event-aligned.
+        p4 = {}
+        for name, pid in DAUGHTERS.items():
+            match = picked_daughter & (tree['prt_pid'] == pid)
+            p4[name] = [ak.to_numpy(ak.flatten(tree[field][match])) / GEV for field in momenta]
+            assert len(p4[name][0]) == n_picked, f'{name}: not one per picked candidate'
+
+        # Dalitz variables from the four-vectors, and the picked candidate's mass.
+        m12_chunks.append(kinematics.invariant_mass2(*p4['gamma'], *p4['mu+']))
+        m23_chunks.append(kinematics.invariant_mass2(*p4['mu+'], *p4['mu-']))
+        mass_chunks.append(ak.to_numpy(cut_utils.values(tree, mass, picked)).astype(float))
+        assert len(mass_chunks[-1]) == n_picked, f'{mass}: not one per picked candidate'
+
+        drop_report = cut_utils.add_counts(drop_report, chunk_drop_report)
+        triggers = cut_utils.add_counts(triggers, chunk_triggers)
+        cutflow = cut_utils.add_counts(cutflow, {label: int(ak.sum(keep)) for label, keep in steps})
+        print(f"[INFO] chunk {i}: {drop_report['read']} events read")
+    m12s = np.concatenate(m12_chunks)
+    m23s = np.concatenate(m23_chunks)
+    masses = np.concatenate(mass_chunks)
+
     print(f"[INFO] events: read {drop_report['read']}, kept {drop_report['kept']}, "
           f"dropped {drop_report['read'] - drop_report['kept']}")
     for reason in ('dropped_no_candidates', 'dropped_idx_out_of_range',
                    'dropped_daughter_length_mismatch', 'dropped_partial_candidate_branch'):
         if drop_report[reason]:
             print(f'[INFO]   {reason}: {drop_report[reason]}')
-
-    # Every candidate must have exactly one daughter of each PID.
-    for name, pid in DAUGHTERS.items():
-        n_of_pid = cut_utils.reduce(tree, tree['prt_pid'] == pid, 'prt_idx_mom',
-                                    how='sum', target_ref=mass)
-        assert ak.all(n_of_pid == 1), f'some candidates do not have exactly one {name}'
-
-    # --- Cuts ---
-
-    # [truth match to eta -> gamma mu+ mu-], TOS per trigger level, then each muon cut
-    truth_pids = list(DAUGHTERS.values()) if truth_match else None
-    steps, triggers = selection.cut_steps(tree, mass, selection.TOS_LINES, truth_pids=truth_pids)
-    keep = steps[-1][1]
-    cutflow = [(label, int(ak.sum(mask))) for label, mask in steps]
     for level, lines in triggers.items():
         for line, n in lines.items():
             if n == 0:
                 print(f'[WARN] {level} TOS line {line} passes no candidate')
-
-    # --- Random candidate and its daughters ---
-
-    # One candidate per event: picked at random among those kept.
-    picked = cut_utils.random_candidate_mask(keep, selection.SEED)
-    n_picked = int(ak.sum(picked))
-    cutflow.append(('random candidates', n_picked))
-    assert n_picked > 0, 'no event survives the selection'
-
-    # Daughter-level mask: True for the daughters of each picked candidate.
-    picked_daughter = cut_utils.follow(tree, picked, 'prt_idx_mom')
-
-    # (px, py, pz, e) [GeV] of each daughter of the picked candidates, event-aligned.
-    p4 = {}
-    for name, pid in DAUGHTERS.items():
-        match = picked_daughter & (tree['prt_pid'] == pid)
-        p4[name] = [ak.to_numpy(ak.flatten(tree[field][match])) / GEV for field in momenta]
-        assert len(p4[name][0]) == n_picked, f'{name}: not one per picked candidate'
-
-    # Dalitz variables from the four-vectors, and the picked candidate's mass.
-    m12s = kinematics.invariant_mass2(*p4['gamma'], *p4['mu+'])
-    m23s = kinematics.invariant_mass2(*p4['mu+'], *p4['mu-'])
-    masses = ak.to_numpy(cut_utils.values(tree, mass, picked)).astype(float)
-    assert len(masses) == n_picked, f'{mass}: not one per picked candidate'
+    cutflow = list(cutflow.items())
+    cutflow.append(('random candidates', len(masses)))
+    assert len(masses) > 0, 'no event survives the selection'
 
     # A Dalitz point needs m^2 > 0 on both axes.
     physical = (m12s > 0) & (m23s > 0)
@@ -204,7 +219,7 @@ def select_candidates(infile, truth_match=False, max_events=None):
                 'mu_ghost_max': selection.MU_GHOST_MAX,
                 'mu_ip_chi2_max': selection.MU_IP_CHI2_MAX,
                 'truth_match': truth_match,
-                'random_candidate': {'seed': selection.SEED},
+                'random_candidate': {'seed': selection.SEED, 'step_size': selection.STEP_SIZE},
                 'daughters': DAUGHTERS,
                 'max_events': max_events,
             },
