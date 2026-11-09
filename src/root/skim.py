@@ -14,9 +14,8 @@ branches the drivers read.
          the drop_malformed report summed over the chunks (events read, kept, dropped per reason,
          including events with no candidate), events kept and candidates kept
 
-The selection is driver_mass_fit's without a truth match: selection.TOS_LINES_4MU for an input
-glob with an eta2mumumumu segment, selection.TOS_LINES otherwise. drop_malformed checks every
-branch written.
+The selection is driver_mass_fit's for eta -> mu+ mu- and eta -> mu+ mu- gamma
+(selection.TOS_LINES), without a truth match. drop_malformed checks every branch written.
 
 The branches written are WRITE_BRANCHES (both mass branches of driver_dalitz.MASS_SOURCES and
 their daughter four-momenta, prt_idx_mom, selection.MUON_CUT_BRANCHES, run_n, evt_n), every
@@ -30,7 +29,7 @@ Usage:
 
 The skims of a production, next to its mag* directories:
 
-    skim_eta.root       --window 450 650 (eta2mumugamma) or 500 600 (eta2mumu, eta2mumumumu)
+    skim_eta.root       --window 450 650 (eta2mumugamma) or 500 600 (eta2mumu)
     skim_etaprime.root  --window 800 1100, data only
 """
 
@@ -142,8 +141,6 @@ def main():
     paths = sorted(glob.glob(args.inglob))
     if not paths:
         parser.error(f'no file matches {args.inglob}')
-    tos_lines = (selection.TOS_LINES_4MU if 'eta2mumumumu' in args.inglob.split('/')
-                 else selection.TOS_LINES)
     with uproot.open(paths[0]) as f:
         input_branches = f['tree'].keys()
         branches = (WRITE_BRANCHES + f['tree'].keys(filter_name='tag_*_tos*')
@@ -155,7 +152,8 @@ def main():
         chunks = uproot.iterate({path: 'tree' for path in paths}, branches,
                                 step_size=STEP_SIZE, library='ak')
         for i, chunk in enumerate(chunks):
-            rows, keep, steps, chunk_drop_report = candidate_mask(chunk, tos_lines, args.window)
+            rows, keep, steps, chunk_drop_report = candidate_mask(chunk, selection.TOS_LINES,
+                                                                  args.window)
             kept = keep_candidates(chunk[rows], keep)
             if i == 0:
                 out.mktree('tree', kept)   # a TTree; assigning out['tree'] writes an RNTuple
@@ -169,7 +167,7 @@ def main():
     report = {
         'input_files': paths,
         'branches': branches,
-        'tos_lines': tos_lines,
+        'tos_lines': selection.TOS_LINES,
         'window': args.window,
         'cuts': [label for label, _ in steps],
         'drop_malformed': drop_report,
