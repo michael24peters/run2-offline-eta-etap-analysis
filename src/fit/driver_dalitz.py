@@ -222,7 +222,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='Select eta -> mu+ mu- gamma candidates and fit them per Dalitz bin',
         formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
-    parser.add_argument('infile', help='Input ROOT file')
+    parser.add_argument('infile', help='Input ROOT file, or a quoted glob of them')
     parser.add_argument('--outdir', required=True,
                         help='Directory for selection.json, dalitz_fit_<factor>.json and plots')
     parser.add_argument('--factor', default='none', choices=list(FACTORS),

@@ -64,6 +64,7 @@ one line at every level, see tos_mask):
 """
 
 import collections
+import glob
 
 import awkward as ak
 import numpy as np
@@ -72,11 +73,16 @@ import numpy as np
 def read_branches(root_path, branches, tree='tree', entry_stop=None):
     """Read `branches` as awkward arrays.
 
+    root_path  : a ROOT file or a glob of them, read in sorted order, e.g.
+                 'ntuple/mc/eta2mumu/signal_20261109/mag*/*.root'.
     entry_stop : optional, specifies number of events to read (Default: all).
     """
     import uproot
-    with uproot.open(root_path) as f:
-        return f[tree].arrays(list(branches), library='ak', entry_stop=entry_stop)
+    paths = sorted(glob.glob(root_path))
+    if not paths:
+        raise FileNotFoundError(f'no file matches {root_path}')
+    return uproot.concatenate({path: tree for path in paths}, list(branches), library='ak',
+                              entry_stop=entry_stop)
 
 
 def _prefix(branch):

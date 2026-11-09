@@ -64,7 +64,7 @@ SIGMA_PRIOR_FACTOR = 5.0  # --truth-match: Gaussian sigma stdev times this
 parser = argparse.ArgumentParser(
     description='Gaussian and DCB + Chebyshev mass fits',
     formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
-parser.add_argument('infile', help='Input ROOT file')
+parser.add_argument('infile', help='Input ROOT file, or a quoted glob of them')
 parser.add_argument('--outdir', required=True,
                     help='Directory for selection.json, results_*.json and *_mass_fit.png')
 parser.add_argument('--truth-match', nargs='+', type=int, default=None, metavar='PID',
