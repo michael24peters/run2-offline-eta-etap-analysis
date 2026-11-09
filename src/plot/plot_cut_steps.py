@@ -11,7 +11,8 @@ Mass before and after each offline selection with no fit, to check the effect of
 The cuts are cumulative, in the order of driver_mass_fit.py: [truth match], TOS per trigger level,
 each muon cut, random candidate, then the fit window [--fit-xmin, --fit-xmax) (driver_mass_fit.py's
 --xmin/--xmax defaults), so the last step is exactly what the mass fit sees. The cuts are
-selection.cut_steps with selection.TOS_LINES, as in driver_mass_fit.py.
+selection.cut_steps with selection.TOS_LINES, or selection.TOS_LINES_4MU for an input path with an
+eta2mumumumu segment, as in driver_mass_fit.py.
 
 Usage:
     python src/plot/plot_cut_steps.py INFILE --outdir OUTDIR
@@ -37,28 +38,29 @@ import plot_style
 import plot_utils
 import selection
 
-def read_tree(infile, mass_branch, truth_match=None, max_events=None):
+def read_tree(infile, mass_branch, tos_lines, truth_match=None, max_events=None):
     """
-    The branches cut_steps reads from `infile`, malformed events dropped.
+    The branches cut_steps reads from `infile` with `tos_lines`, malformed events dropped.
 
     Returns (tree, drop_report) as cut_utils.drop_malformed.
     """
     branches = ([mass_branch, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
-                + [line for lines in selection.TOS_LINES.values() for line in lines]
+                + [line for lines in tos_lines.values() for line in lines]
                 + (selection.TRUTH_BRANCHES if truth_match else []))
     tree = cut_utils.read_branches(infile, branches, entry_stop=max_events)
     tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
     return cut_utils.drop_malformed(tree, tag_ref=mass_branch)
 
 
-def cut_steps(tree, mass_branch, fit_window, truth_match=None):
+def cut_steps(tree, mass_branch, tos_lines, fit_window, truth_match=None):
     """
-    selection.cut_steps, then the random candidate and the fit window (lo, hi) [MeV] on mass_branch.
+    selection.cut_steps with `tos_lines`, then the random candidate and the fit window (lo, hi)
+    [MeV] on mass_branch.
 
     Returns [(label, mask), ...]: the per-candidate mask after each step, starting with ('all
     candidates', every candidate).
     """
-    steps, _ = selection.cut_steps(tree, mass_branch, selection.TOS_LINES, truth_pids=truth_match)
+    steps, _ = selection.cut_steps(tree, mass_branch, tos_lines, truth_pids=truth_match)
 
     keep = cut_utils.random_candidate_mask(steps[-1][1], selection.SEED)
     steps.append(('random candidate', keep))
@@ -115,12 +117,16 @@ def main():
     parser.add_argument('--logy', action='store_true', help='Log y axis on the mass plots')
     args = parser.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
+    tos_lines = (selection.TOS_LINES_4MU if 'eta2mumumumu' in args.infile.split('/')
+                 else selection.TOS_LINES)
 
-    tree, drop_report = read_tree(args.infile, args.mass, args.truth_match, args.max_events)
+    tree, drop_report = read_tree(args.infile, args.mass, tos_lines, args.truth_match,
+                                  args.max_events)
     print(f"[INFO] events: read {drop_report['read']}, kept {drop_report['kept']}",
           file=sys.stderr)
 
-    steps = cut_steps(tree, args.mass, (args.fit_xmin, args.fit_xmax), args.truth_match)
+    steps = cut_steps(tree, args.mass, tos_lines, (args.fit_xmin, args.fit_xmax),
+                      args.truth_match)
     for label, mask in steps:
         print(f'[INFO]   {label:32s} {int(ak.sum(mask)):9d}', file=sys.stderr)
 
