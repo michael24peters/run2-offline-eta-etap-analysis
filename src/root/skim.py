@@ -11,7 +11,8 @@ branches the drivers read.
          events with no kept candidate dropped
       -> OUTFILE, TTree 'tree'
       -> OUTFILE with .json for .root: input files, branches, TOS lines, window, cut labels,
-         events read, malformed and kept, and candidates kept
+         the drop_malformed report summed over the chunks (events read, kept, dropped per reason,
+         including events with no candidate), events kept and candidates kept
 
 The selection is driver_mass_fit's without a truth match: selection.TOS_LINES_4MU for an input
 glob with an eta2mumumumu segment, selection.TOS_LINES otherwise. drop_malformed checks every
@@ -148,22 +149,22 @@ def main():
         branches = (WRITE_BRANCHES + f['tree'].keys(filter_name='tag_*_tos*')
                     + [branch for branch in selection.TRUTH_BRANCHES if branch in input_branches])
 
-    n_read = n_malformed = n_kept = n_candidates = 0
+    drop_report = {}
+    n_kept = n_candidates = 0
     with uproot.recreate(args.outfile) as out:
         chunks = uproot.iterate({path: 'tree' for path in paths}, branches,
                                 step_size=STEP_SIZE, library='ak')
         for i, chunk in enumerate(chunks):
-            rows, keep, steps, _ = candidate_mask(chunk, tos_lines, args.window)
+            rows, keep, steps, chunk_drop_report = candidate_mask(chunk, tos_lines, args.window)
             kept = keep_candidates(chunk[rows], keep)
             if i == 0:
                 out.mktree('tree', kept)   # a TTree; assigning out['tree'] writes an RNTuple
             else:
                 out['tree'].extend(kept)
-            n_read += len(chunk)
-            n_malformed += len(chunk) - len(rows)
+            drop_report = cut_utils.add_counts(drop_report, chunk_drop_report)
             n_kept += len(kept['run_n'])
             n_candidates += int(ak.sum(keep))
-            print(f'[INFO] events: read {n_read}, kept {n_kept}', file=sys.stderr)
+            print(f"[INFO] events: read {drop_report['read']}, kept {n_kept}", file=sys.stderr)
 
     report = {
         'input_files': paths,
@@ -171,8 +172,7 @@ def main():
         'tos_lines': tos_lines,
         'window': args.window,
         'cuts': [label for label, _ in steps],
-        'events_read': n_read,
-        'events_malformed': n_malformed,
+        'drop_malformed': drop_report,
         'events_kept': n_kept,
         'candidates_kept': n_candidates,
     }
