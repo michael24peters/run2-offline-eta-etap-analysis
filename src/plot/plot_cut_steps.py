@@ -20,7 +20,7 @@ as in the drivers.
 
 Usage:
     python src/plot/plot_cut_steps.py INFILE --outdir OUTDIR
-        [--mass tag_dtf_m|tag_m] [--truth-match PID [PID ...]] [--max-events N]
+        [--mass tag_dtf_m|tag_m] [--truth-match PID [PID ...]] [--max-events N] [--pnn-mu-min X]
         [--fit-xmin 500] [--fit-xmax 600]
         [--xmin 398] [--xmax 1108] [--nbins 142]
 """
@@ -103,6 +103,9 @@ def main():
                         help='Mass branch (default: tag_dtf_m, as driver_mass_fit.py)')
     parser.add_argument('--truth-match', nargs='+', type=int, default=None, metavar='PID',
                         help='Signal MC: first cut is the truth match to eta -> these PIDs')
+    parser.add_argument('--pnn-mu-min', type=float, default=None,
+                        help="ProbNNmu threshold in place of the channel's "
+                             "(selection.MUON_THRESHOLDS or MUON_THRESHOLDS_4MU)")
     parser.add_argument('--max-events', type=int, default=None,
                         help='Only read the first N events (default: all)')
     parser.add_argument('--fit-xmin', type=float, default=500.0,
@@ -117,6 +120,8 @@ def main():
     is_4mu = 'eta2mumumumu' in args.infile.split('/')
     tos_lines = selection.TOS_LINES_4MU if is_4mu else selection.TOS_LINES
     muon_thresholds = selection.MUON_THRESHOLDS_4MU if is_4mu else selection.MUON_THRESHOLDS
+    if args.pnn_mu_min is not None:
+        muon_thresholds = {**muon_thresholds, 'pnn_mu_min': args.pnn_mu_min}
 
     # --- Read, select and histogram one chunk of selection.STEP_SIZE at a time ---
     # Per step: the mass histogram and the candidate count, summed over the chunks. Chunk i picks

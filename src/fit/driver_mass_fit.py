@@ -37,7 +37,7 @@ covariance * TAIL_PRIOR_FACTOR**2), starting from the MC values.
 Usage:
     python src/fit/driver_mass_fit.py INFILE --outdir OUTDIR
         [--truth-match PID [PID ...] | --tail-prior RESULTS_JSON] [--sigma-prior RESULTS_JSON]
-        [--max-events N]
+        [--max-events N] [--pnn-mu-min X]
         [--xmin 500] [--xmax 600] [--nbins 100] [--mean-init 548] [--sigma-init 5]
         [--alphaL-init 1.5] [--nL-init 2] [--alphaR-init 1.5] [--nR-init 2] [--n-max N]
 """
@@ -83,6 +83,9 @@ parser.add_argument('--tail-prior', default=None,
 parser.add_argument('--sigma-prior', default=None,
                     help='results_dcb.json of a --truth-match fit whose sigma is the prior of the '
                          'Gaussian and DCB sigma')
+parser.add_argument('--pnn-mu-min', type=float, default=None,
+                    help="ProbNNmu threshold in place of the channel's "
+                         "(selection.MUON_THRESHOLDS or MUON_THRESHOLDS_4MU)")
 parser.add_argument('--max-events', type=int, default=None,
                     help='Only read the first N events (default: all)')
 parser.add_argument('--xmin', type=float, default=500.0, help='Lower mass bound [MeV]')
@@ -104,6 +107,8 @@ os.makedirs(args.outdir, exist_ok=True)
 is_4mu = 'eta2mumumumu' in args.infile.split('/')
 tos_lines = selection.TOS_LINES_4MU if is_4mu else selection.TOS_LINES
 muon_thresholds = selection.MUON_THRESHOLDS_4MU if is_4mu else selection.MUON_THRESHOLDS
+if args.pnn_mu_min is not None:
+    muon_thresholds = {**muon_thresholds, 'pnn_mu_min': args.pnn_mu_min}
 
 branches = ([MASS_BRANCH, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
             + [line for lines in tos_lines.values() for line in lines]
