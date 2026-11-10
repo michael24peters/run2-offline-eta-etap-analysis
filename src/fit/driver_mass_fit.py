@@ -25,6 +25,10 @@ Gaussian variance * SIGMA_PRIOR_FACTOR**2). Its results_dcb.json is the --tail-p
 fit. The PIDs are -13 13 (eta -> mu+ mu-), -13 13 22 (eta -> mu+ mu- gamma) or -13 -13 13 13
 (eta -> 4mu).
 
+An input path with an eta2mumugamma segment also requires m(mu+ mu-) < --xmin
+(selection.dimuon_mass) after the muon cuts, so that no candidate's kinematic edge
+m(mu+ mu- gamma) >= m(mu+ mu-) falls inside the fit window.
+
 An input path with an eta2mumumumu segment (eta -> 4mu) takes selection.TOS_LINES_4MU and
 selection.MUON_THRESHOLDS_4MU in place of selection.TOS_LINES and selection.MUON_THRESHOLDS.
 
@@ -118,6 +122,7 @@ if args.truth_match and args.sigma_prior:
     parser.error('--truth-match and --sigma-prior are exclusive')
 os.makedirs(args.outdir, exist_ok=True)
 is_4mu = 'eta2mumumumu' in args.infile.split('/')
+is_mumugamma = 'eta2mumugamma' in args.infile.split('/')
 tos_lines = selection.TOS_LINES_4MU if is_4mu else selection.TOS_LINES
 muon_thresholds = selection.MUON_THRESHOLDS_4MU if is_4mu else selection.MUON_THRESHOLDS
 if args.pnn_mu_min is not None:
@@ -129,7 +134,8 @@ if args.sigma_prior_factor is None:
 
 branches = ([MASS_BRANCH, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
             + [line for lines in tos_lines.values() for line in lines]
-            + (selection.TRUTH_BRANCHES if args.truth_match else []))
+            + (selection.TRUTH_BRANCHES if args.truth_match else [])
+            + (selection.DIMUON_MOMENTA if is_mumugamma else []))
 
 # --- Read and select, one chunk of selection.STEP_SIZE at a time ------------
 # Per chunk: drop malformed events, [truth match], TOS per trigger level, then each muon cut
@@ -145,6 +151,10 @@ for i, tree in enumerate(chunks):
     steps, chunk_triggers = selection.cut_steps(tree, MASS_BRANCH, tos_lines,
                                                 truth_pids=args.truth_match,
                                                 muon_thresholds=muon_thresholds)
+    if is_mumugamma:
+        # Every kinematic edge m(mu mu gamma) = m(mu mu) below the window
+        keep = steps[-1][1] & (selection.dimuon_mass(tree, MASS_BRANCH) < args.xmin)
+        steps.append((f'm(mu mu) < {args.xmin:g}', keep))
     picked = cut_utils.random_candidate_mask(steps[-1][1], selection.SEED + i)
     mass_chunks.append(cut_utils.values(tree, MASS_BRANCH, picked))  # <- awkward → numpy
     drop_report = cut_utils.add_counts(drop_report, chunk_drop_report)
