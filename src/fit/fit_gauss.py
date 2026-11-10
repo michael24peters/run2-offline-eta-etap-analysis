@@ -9,6 +9,7 @@ import os
 import sys
 
 import numpy as np
+from iminuit.cost import NormalConstraint
 
 # Ensure src/utils is importable regardless of working directory
 _here = os.path.dirname(os.path.abspath(__file__))
@@ -18,7 +19,7 @@ import kinematics
 
 
 def fit_gauss(values, xmin=500.0, xmax=600.0, nbins=100,
-              mean_init=kinematics.M_ETA, sigma_init=5.0, fixed_params=None):
+              mean_init=kinematics.M_ETA, sigma_init=5.0, sigma_prior=None, fixed_params=None):
     """
     Run the Gaussian + background fit and return (result, m).
 
@@ -27,6 +28,9 @@ def fit_gauss(values, xmin=500.0, xmax=600.0, nbins=100,
     values : 1-D numpy array of values to fit.
     xmin, xmax, nbins : float, float, int : The range and number of bins for the histogram.
     mean_init, sigma_init : float : Initial values for the Gaussian parameters.
+    sigma_prior : optional (values, cov) for sigma -- `values` a length-1 array, `cov` its 1x1
+             covariance. Adds NormalConstraint(('sigma',), values, error=cov) to the cost, as in
+             fit_dcb.
 
     Returns:
     --------
@@ -44,6 +48,8 @@ def fit_gauss(values, xmin=500.0, xmax=600.0, nbins=100,
 
     # Fit
     cost = fit_utils.make_gauss_cost(counts, edges, xmin, xmax)
+    if sigma_prior is not None:
+        cost = cost + NormalConstraint(('sigma',), sigma_prior[0], error=sigma_prior[1])
 
     init = dict(
         mean  = mean_init,
