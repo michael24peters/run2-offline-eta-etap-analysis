@@ -153,6 +153,8 @@ def main():
 
     drop_report = {}
     n_kept = n_candidates = 0
+    if os.path.exists(args.outfile):
+        os.remove(args.outfile)   # uproot.recreate leaves the old file's bytes beyond the new end
     with uproot.recreate(args.outfile) as out:
         chunks = uproot.iterate({path: 'tree' for path in paths}, branches,
                                 step_size=STEP_SIZE, library='ak')
