@@ -45,9 +45,10 @@ TOS_LINES = {
     'HLT2': ['tag_hlt2_tos0'],                    # Hlt2ExoticaPrmptDiMuonTurbo
     # 'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_tos1'],   # Hlt2ExoticaPrmptDiMuonTurbo, Hlt2ExoticaDiMuonNoIPTurbo
 }
-# eta -> 4mu: HLT1 also takes Hlt1MultiDiMuonNoIP (two dimuon pairs), HLT2 Hlt2ExoticaQuadMuonNoIP
-# on its candidates rebuilt offline (a Full-stream line: tag_hlt2_tos4 is -1 in Turbo data)
-TOS_LINES_4MU = {**TOS_LINES,
+# eta -> 4mu: L0 only L0DiMuon, HLT1 also Hlt1MultiDiMuonNoIP (two dimuon pairs), HLT2 also
+# Hlt2ExoticaQuadMuonNoIP on its candidates rebuilt offline (a Full-stream line: tag_hlt2_tos4 is
+# -1 in Turbo data)
+TOS_LINES_4MU = {'L0':   ['tag_l0_tos0'],                            # L0DiMuon
                  'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos2'],          # + Hlt1MultiDiMuonNoIP
                  'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_rebuilt_tos4']}  # + Hlt2ExoticaQuadMuonNoIP
 
