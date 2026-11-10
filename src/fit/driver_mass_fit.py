@@ -34,12 +34,14 @@ MC variance * SIGMA_PRIOR_FACTOR**2), from the 'fit' block of a --truth-match re
 --tail-prior RESULTS_JSON floats the DCB tails under NormalConstraint(TAIL_PARAMS, MC values, MC
 covariance * TAIL_PRIOR_FACTOR**2), starting from the MC values, in data or in a --truth-match fit
 (the tails of one MC sample as the prior of another). --tail-prior-factor and --sigma-prior-factor
-set TAIL_PRIOR_FACTOR and SIGMA_PRIOR_FACTOR for one run.
+set TAIL_PRIOR_FACTOR and SIGMA_PRIOR_FACTOR for one run. The defaults are x5 for eta -> mu mu and
+eta -> mu mu gamma, and x2 (TAIL_PRIOR_FACTOR_4MU, SIGMA_PRIOR_FACTOR_4MU) for an input path with an
+eta2mumumumu segment. No hard limit on n_L, n_R unless --n-max is given.
 
 Usage:
     python src/fit/driver_mass_fit.py INFILE --outdir OUTDIR
         [--truth-match PID [PID ...] | --sigma-prior RESULTS_JSON] [--tail-prior RESULTS_JSON]
-        [--tail-prior-factor 5] [--sigma-prior-factor 5]
+        [--tail-prior-factor F] [--sigma-prior-factor F]
         [--max-events N] [--pnn-mu-min X]
         [--xmin 500] [--xmax 600] [--nbins 100] [--mean-init 548] [--sigma-init 5]
         [--alphaL-init 1.5] [--nL-init 2] [--alphaR-init 1.5] [--nR-init 2] [--n-max N]
@@ -71,6 +73,8 @@ MASS_BRANCH     = 'tag_dtf_m'      # the quantity being fit
 TAIL_PRIOR_FACTOR = 5.0   # --tail-prior: MC tail-fit stdevs times this
 SIGMA_PRIOR_FACTOR = 5.0  # --truth-match: Gaussian sigma stdev times this; --sigma-prior: MC
                           # sigma stdev times this
+TAIL_PRIOR_FACTOR_4MU = 2.0    # eta -> 4mu, in place of TAIL_PRIOR_FACTOR
+SIGMA_PRIOR_FACTOR_4MU = 2.0   # eta -> 4mu, in place of SIGMA_PRIOR_FACTOR
 
 parser = argparse.ArgumentParser(
     description='Gaussian and DCB + Chebyshev mass fits',
@@ -81,10 +85,12 @@ parser.add_argument('--outdir', required=True,
 parser.add_argument('--truth-match', nargs='+', type=int, default=None, metavar='PID',
                     help='Signal MC: keep candidates truth-matched to eta -> these daughter '
                          'PIDs (-13 13, -13 13 22, or -13 -13 13 13) and fit with no background')
-parser.add_argument('--tail-prior-factor', type=float, default=TAIL_PRIOR_FACTOR,
-                    help=f'--tail-prior stdevs times this (default: {TAIL_PRIOR_FACTOR:g})')
-parser.add_argument('--sigma-prior-factor', type=float, default=SIGMA_PRIOR_FACTOR,
-                    help=f'sigma prior stdev times this (default: {SIGMA_PRIOR_FACTOR:g})')
+parser.add_argument('--tail-prior-factor', type=float, default=None,
+                    help=f'--tail-prior stdevs times this (default: {TAIL_PRIOR_FACTOR:g}, '
+                         f'{TAIL_PRIOR_FACTOR_4MU:g} for eta2mumumumu)')
+parser.add_argument('--sigma-prior-factor', type=float, default=None,
+                    help=f'sigma prior stdev times this (default: {SIGMA_PRIOR_FACTOR:g}, '
+                         f'{SIGMA_PRIOR_FACTOR_4MU:g} for eta2mumumumu)')
 parser.add_argument('--tail-prior', default=None,
                     help='results_dcb.json of a --truth-match fit whose tails are the DCB prior')
 parser.add_argument('--sigma-prior', default=None,
@@ -116,6 +122,10 @@ tos_lines = selection.TOS_LINES_4MU if is_4mu else selection.TOS_LINES
 muon_thresholds = selection.MUON_THRESHOLDS_4MU if is_4mu else selection.MUON_THRESHOLDS
 if args.pnn_mu_min is not None:
     muon_thresholds = {**muon_thresholds, 'pnn_mu_min': args.pnn_mu_min}
+if args.tail_prior_factor is None:
+    args.tail_prior_factor = TAIL_PRIOR_FACTOR_4MU if is_4mu else TAIL_PRIOR_FACTOR
+if args.sigma_prior_factor is None:
+    args.sigma_prior_factor = SIGMA_PRIOR_FACTOR_4MU if is_4mu else SIGMA_PRIOR_FACTOR
 
 branches = ([MASS_BRANCH, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
             + [line for lines in tos_lines.values() for line in lines]
