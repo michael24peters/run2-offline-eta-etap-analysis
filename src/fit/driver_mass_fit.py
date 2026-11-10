@@ -32,11 +32,14 @@ selection.MUON_THRESHOLDS_4MU in place of selection.TOS_LINES and selection.MUON
 MC variance * SIGMA_PRIOR_FACTOR**2), from the 'fit' block of a --truth-match results JSON.
 
 --tail-prior RESULTS_JSON floats the DCB tails under NormalConstraint(TAIL_PARAMS, MC values, MC
-covariance * TAIL_PRIOR_FACTOR**2), starting from the MC values.
+covariance * TAIL_PRIOR_FACTOR**2), starting from the MC values, in data or in a --truth-match fit
+(the tails of one MC sample as the prior of another). --tail-prior-factor and --sigma-prior-factor
+set TAIL_PRIOR_FACTOR and SIGMA_PRIOR_FACTOR for one run.
 
 Usage:
     python src/fit/driver_mass_fit.py INFILE --outdir OUTDIR
-        [--truth-match PID [PID ...] | --tail-prior RESULTS_JSON] [--sigma-prior RESULTS_JSON]
+        [--truth-match PID [PID ...] | --sigma-prior RESULTS_JSON] [--tail-prior RESULTS_JSON]
+        [--tail-prior-factor 5] [--sigma-prior-factor 5]
         [--max-events N] [--pnn-mu-min X]
         [--xmin 500] [--xmax 600] [--nbins 100] [--mean-init 548] [--sigma-init 5]
         [--alphaL-init 1.5] [--nL-init 2] [--alphaR-init 1.5] [--nR-init 2] [--n-max N]
@@ -78,6 +81,10 @@ parser.add_argument('--outdir', required=True,
 parser.add_argument('--truth-match', nargs='+', type=int, default=None, metavar='PID',
                     help='Signal MC: keep candidates truth-matched to eta -> these daughter '
                          'PIDs (-13 13, -13 13 22, or -13 -13 13 13) and fit with no background')
+parser.add_argument('--tail-prior-factor', type=float, default=TAIL_PRIOR_FACTOR,
+                    help=f'--tail-prior stdevs times this (default: {TAIL_PRIOR_FACTOR:g})')
+parser.add_argument('--sigma-prior-factor', type=float, default=SIGMA_PRIOR_FACTOR,
+                    help=f'sigma prior stdev times this (default: {SIGMA_PRIOR_FACTOR:g})')
 parser.add_argument('--tail-prior', default=None,
                     help='results_dcb.json of a --truth-match fit whose tails are the DCB prior')
 parser.add_argument('--sigma-prior', default=None,
@@ -101,8 +108,8 @@ parser.add_argument('--nR-init', type=float, default=2.0, help='Initial right ta
 parser.add_argument('--n-max', type=float, default=None,
                     help='Upper limit of the DCB tail exponents n_L and n_R (default: none)')
 args = parser.parse_args()
-if args.truth_match and (args.tail_prior or args.sigma_prior):
-    parser.error('--truth-match is exclusive with --tail-prior and --sigma-prior')
+if args.truth_match and args.sigma_prior:
+    parser.error('--truth-match and --sigma-prior are exclusive')
 os.makedirs(args.outdir, exist_ok=True)
 is_4mu = 'eta2mumumumu' in args.infile.split('/')
 tos_lines = selection.TOS_LINES_4MU if is_4mu else selection.TOS_LINES
@@ -199,8 +206,8 @@ if args.sigma_prior:
     with open(args.sigma_prior) as f:
         mc_sigma_fit = json.load(f)['fit']
     sigma_prior = fit_utils.build_prior_from_result(mc_sigma_fit, ['sigma'],
-                                                    factor=SIGMA_PRIOR_FACTOR)
-    print(f"[INFO] MC sigma (prior, x{SIGMA_PRIOR_FACTOR:.0f} widened stdev): "
+                                                    factor=args.sigma_prior_factor)
+    print(f"[INFO] MC sigma (prior, x{args.sigma_prior_factor:g} widened stdev): "
           f"{mc_sigma_fit['parameters']['sigma']['value']:.4f}"
           f"±{mc_sigma_fit['parameters']['sigma']['error']:.4f}", file=sys.stderr)
 gauss_result, m_gauss = fit_gauss(
@@ -212,8 +219,8 @@ sigma_init = m_gauss.values['sigma']
 fixed_params = None
 if args.truth_match:
     fixed_params = {'n_bkg': 0.0, **fit_utils.BKG_INIT}
-    sigma_prior = fit_utils.build_prior(m_gauss, ['sigma'], factor=SIGMA_PRIOR_FACTOR)
-    print(f"[INFO] Gaussian sigma (prior, x{SIGMA_PRIOR_FACTOR:.0f} widened stdev): "
+    sigma_prior = fit_utils.build_prior(m_gauss, ['sigma'], factor=args.sigma_prior_factor)
+    print(f"[INFO] Gaussian sigma (prior, x{args.sigma_prior_factor:g} widened stdev): "
           f"{m_gauss.values['sigma']:.4f}±{m_gauss.errors['sigma']:.4f}", file=sys.stderr)
 
 # DCB tails: under the MC tail prior widened by TAIL_PRIOR_FACTOR, or free.
@@ -222,9 +229,10 @@ tail_prior = None
 if args.tail_prior:
     with open(args.tail_prior) as f:
         mc_fit = json.load(f)['fit']
-    tail_prior = fit_utils.build_prior_from_result(mc_fit, TAIL_PARAMS, factor=TAIL_PRIOR_FACTOR)
+    tail_prior = fit_utils.build_prior_from_result(mc_fit, TAIL_PARAMS,
+                                                   factor=args.tail_prior_factor)
     tail_init = tail_prior[0]
-    print(f'[INFO] MC tail shape (prior, x{TAIL_PRIOR_FACTOR:.0f} widened stdev): '
+    print(f'[INFO] MC tail shape (prior, x{args.tail_prior_factor:g} widened stdev): '
           + ', '.join(f"{name}={mc_fit['parameters'][name]['value']:.4f}"
                       f"±{mc_fit['parameters'][name]['error']:.4f}" for name in TAIL_PARAMS),
           file=sys.stderr)
@@ -239,15 +247,15 @@ dcb_result, m_dcb = fit_dcb(
 dcb_result['meta']['input_file'] = args.infile
 dcb_result['meta']['n_max'] = args.n_max
 if args.truth_match:
-    dcb_result['meta']['sigma_prior_factor'] = SIGMA_PRIOR_FACTOR
+    dcb_result['meta']['sigma_prior_factor'] = args.sigma_prior_factor
 if args.sigma_prior:
     gauss_result['meta']['sigma_prior_from'] = args.sigma_prior
-    gauss_result['meta']['sigma_prior_factor'] = SIGMA_PRIOR_FACTOR
+    gauss_result['meta']['sigma_prior_factor'] = args.sigma_prior_factor
     dcb_result['meta']['sigma_prior_from'] = args.sigma_prior
-    dcb_result['meta']['sigma_prior_factor'] = SIGMA_PRIOR_FACTOR
+    dcb_result['meta']['sigma_prior_factor'] = args.sigma_prior_factor
 if args.tail_prior:
     dcb_result['meta']['tail_prior_from'] = args.tail_prior
-    dcb_result['meta']['tail_prior_factor'] = TAIL_PRIOR_FACTOR
+    dcb_result['meta']['tail_prior_factor'] = args.tail_prior_factor
 fits.append(('dcb', dcb_result, dcb_text))
 
 # --- Write -------------------------------------------------------------------
