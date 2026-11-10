@@ -25,8 +25,8 @@ Gaussian variance * SIGMA_PRIOR_FACTOR**2). Its results_dcb.json is the --tail-p
 fit. The PIDs are -13 13 (eta -> mu+ mu-), -13 13 22 (eta -> mu+ mu- gamma) or -13 -13 13 13
 (eta -> 4mu).
 
-An input path with an eta2mumumumu segment (eta -> 4mu) takes selection.TOS_LINES_4MU in place of
-selection.TOS_LINES.
+An input path with an eta2mumumumu segment (eta -> 4mu) takes selection.TOS_LINES_4MU and
+selection.MU_PT_MIN_4MU in place of selection.TOS_LINES and selection.MU_PT_MIN.
 
 --tail-prior RESULTS_JSON floats the DCB tails under NormalConstraint(TAIL_PARAMS, MC values, MC
 covariance * TAIL_PRIOR_FACTOR**2), starting from the MC values.
@@ -94,8 +94,9 @@ args = parser.parse_args()
 if args.truth_match and args.tail_prior:
     parser.error('--truth-match and --tail-prior are exclusive')
 os.makedirs(args.outdir, exist_ok=True)
-tos_lines = (selection.TOS_LINES_4MU if 'eta2mumumumu' in args.infile.split('/')
-             else selection.TOS_LINES)
+is_4mu = 'eta2mumumumu' in args.infile.split('/')
+tos_lines = selection.TOS_LINES_4MU if is_4mu else selection.TOS_LINES
+mu_pt_min = selection.MU_PT_MIN_4MU if is_4mu else selection.MU_PT_MIN
 
 branches = ([MASS_BRANCH, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
             + [line for lines in tos_lines.values() for line in lines]
@@ -113,7 +114,7 @@ for i, tree in enumerate(chunks):
     tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
     tree, chunk_drop_report = cut_utils.drop_malformed(tree, tag_ref=MASS_BRANCH)
     steps, chunk_triggers = selection.cut_steps(tree, MASS_BRANCH, tos_lines,
-                                                truth_pids=args.truth_match)
+                                                truth_pids=args.truth_match, mu_pt_min=mu_pt_min)
     picked = cut_utils.random_candidate_mask(steps[-1][1], selection.SEED + i)
     mass_chunks.append(cut_utils.values(tree, MASS_BRANCH, picked))  # <- awkward → numpy
     drop_report = cut_utils.add_counts(drop_report, chunk_drop_report)
@@ -143,7 +144,7 @@ selection_json = {
         'mass_branch': MASS_BRANCH,
         'selection': {
             'tos': tos_lines,
-            'mu_pt_min': selection.MU_PT_MIN,
+            'mu_pt_min': mu_pt_min,
             'mu_p_min': selection.MU_P_MIN,
             'mu_eta_range': selection.MU_ETA_RANGE,
             'pnn_mu_min': selection.PNN_MU_MIN,
