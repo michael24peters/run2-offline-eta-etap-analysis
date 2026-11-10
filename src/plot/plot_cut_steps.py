@@ -12,8 +12,8 @@ Mass before and after each offline selection with no fit, to check the effect of
 The cuts are cumulative, in the order of driver_mass_fit.py: [truth match], TOS per trigger level,
 each muon cut, random candidate, then the fit window [--fit-xmin, --fit-xmax) (driver_mass_fit.py's
 --xmin/--xmax defaults), so the last step is exactly what the mass fit sees. The cuts are
-selection.cut_steps with selection.TOS_LINES, MU_PT_MIN and MU_P_MIN, or selection.TOS_LINES_4MU,
-MU_PT_MIN_4MU and MU_P_MIN_4MU for an input path with an eta2mumumumu segment, as in
+selection.cut_steps with selection.TOS_LINES and MUON_THRESHOLDS, or selection.TOS_LINES_4MU and
+MUON_THRESHOLDS_4MU for an input path with an eta2mumumumu segment, as in
 driver_mass_fit.py. The input is read, selected and histogrammed in chunks of selection.STEP_SIZE
 (cut_utils.iterate_branches), the random candidate of chunk i picked with seed selection.SEED + i,
 as in the drivers.
@@ -48,17 +48,17 @@ def tree_branches(mass_branch, tos_lines, truth_match=None):
             + (selection.TRUTH_BRANCHES if truth_match else []))
 
 
-def cut_steps(tree, mass_branch, tos_lines, mu_pt_min, mu_p_min, fit_window, seed,
+def cut_steps(tree, mass_branch, tos_lines, muon_thresholds, fit_window, seed,
               truth_match=None):
     """
-    selection.cut_steps with `tos_lines`, `mu_pt_min` and `mu_p_min`, then the random candidate
+    selection.cut_steps with `tos_lines` and `muon_thresholds`, then the random candidate
     (`seed`) and the fit window (lo, hi) [MeV] on mass_branch.
 
     Returns [(label, mask), ...]: the per-candidate mask after each step, starting with ('all
     candidates', every candidate).
     """
     steps, _ = selection.cut_steps(tree, mass_branch, tos_lines, truth_pids=truth_match,
-                                   mu_pt_min=mu_pt_min, mu_p_min=mu_p_min)
+                                   muon_thresholds=muon_thresholds)
 
     keep = cut_utils.random_candidate_mask(steps[-1][1], seed)
     steps.append(('random candidate', keep))
@@ -116,8 +116,7 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
     is_4mu = 'eta2mumumumu' in args.infile.split('/')
     tos_lines = selection.TOS_LINES_4MU if is_4mu else selection.TOS_LINES
-    mu_pt_min = selection.MU_PT_MIN_4MU if is_4mu else selection.MU_PT_MIN
-    mu_p_min = selection.MU_P_MIN_4MU if is_4mu else selection.MU_P_MIN
+    muon_thresholds = selection.MUON_THRESHOLDS_4MU if is_4mu else selection.MUON_THRESHOLDS
 
     # --- Read, select and histogram one chunk of selection.STEP_SIZE at a time ---
     # Per step: the mass histogram and the candidate count, summed over the chunks. Chunk i picks
@@ -131,7 +130,7 @@ def main():
         tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
         tree, chunk_drop_report = cut_utils.drop_malformed(tree, tag_ref=args.mass)
         drop_report = cut_utils.add_counts(drop_report, chunk_drop_report)
-        steps = cut_steps(tree, args.mass, tos_lines, mu_pt_min, mu_p_min,
+        steps = cut_steps(tree, args.mass, tos_lines, muon_thresholds,
                           (args.fit_xmin, args.fit_xmax),
                           selection.SEED + i, args.truth_match)
         if not labels:

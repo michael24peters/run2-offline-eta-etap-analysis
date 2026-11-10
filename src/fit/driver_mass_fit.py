@@ -25,9 +25,8 @@ Gaussian variance * SIGMA_PRIOR_FACTOR**2). Its results_dcb.json is the --tail-p
 fit. The PIDs are -13 13 (eta -> mu+ mu-), -13 13 22 (eta -> mu+ mu- gamma) or -13 -13 13 13
 (eta -> 4mu).
 
-An input path with an eta2mumumumu segment (eta -> 4mu) takes selection.TOS_LINES_4MU,
-selection.MU_PT_MIN_4MU and selection.MU_P_MIN_4MU in place of selection.TOS_LINES,
-selection.MU_PT_MIN and selection.MU_P_MIN.
+An input path with an eta2mumumumu segment (eta -> 4mu) takes selection.TOS_LINES_4MU and
+selection.MUON_THRESHOLDS_4MU in place of selection.TOS_LINES and selection.MUON_THRESHOLDS.
 
 --sigma-prior RESULTS_JSON holds the Gaussian and DCB sigma under NormalConstraint(sigma, MC value,
 MC variance * SIGMA_PRIOR_FACTOR**2), from the 'fit' block of a --truth-match results JSON.
@@ -104,8 +103,7 @@ if args.truth_match and (args.tail_prior or args.sigma_prior):
 os.makedirs(args.outdir, exist_ok=True)
 is_4mu = 'eta2mumumumu' in args.infile.split('/')
 tos_lines = selection.TOS_LINES_4MU if is_4mu else selection.TOS_LINES
-mu_pt_min = selection.MU_PT_MIN_4MU if is_4mu else selection.MU_PT_MIN
-mu_p_min = selection.MU_P_MIN_4MU if is_4mu else selection.MU_P_MIN
+muon_thresholds = selection.MUON_THRESHOLDS_4MU if is_4mu else selection.MUON_THRESHOLDS
 
 branches = ([MASS_BRANCH, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
             + [line for lines in tos_lines.values() for line in lines]
@@ -123,8 +121,8 @@ for i, tree in enumerate(chunks):
     tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
     tree, chunk_drop_report = cut_utils.drop_malformed(tree, tag_ref=MASS_BRANCH)
     steps, chunk_triggers = selection.cut_steps(tree, MASS_BRANCH, tos_lines,
-                                                truth_pids=args.truth_match, mu_pt_min=mu_pt_min,
-                                                mu_p_min=mu_p_min)
+                                                truth_pids=args.truth_match,
+                                                muon_thresholds=muon_thresholds)
     picked = cut_utils.random_candidate_mask(steps[-1][1], selection.SEED + i)
     mass_chunks.append(cut_utils.values(tree, MASS_BRANCH, picked))  # <- awkward → numpy
     drop_report = cut_utils.add_counts(drop_report, chunk_drop_report)
@@ -154,10 +152,10 @@ selection_json = {
         'mass_branch': MASS_BRANCH,
         'selection': {
             'tos': tos_lines,
-            'mu_pt_min': mu_pt_min,
-            'mu_p_min': mu_p_min,
+            'mu_pt_min': muon_thresholds['pt_min'],
+            'mu_p_min': muon_thresholds['p_min'],
             'mu_eta_range': selection.MU_ETA_RANGE,
-            'pnn_mu_min': selection.PNN_MU_MIN,
+            'pnn_mu_min': muon_thresholds['pnn_mu_min'],
             'mu_ghost_max': selection.MU_GHOST_MAX,
             'mu_ip_chi2_max': selection.MU_IP_CHI2_MAX,
             'truth_match': args.truth_match,

@@ -25,13 +25,16 @@ MUON_CUT_BRANCHES = ['prt_pid', 'prt_px', 'prt_py', 'prt_pz', 'prt_pnn_mu',
 # Muon requirements of the dark-photon ananote (LHCb-ANA-2017-027, Tables 1 and 3), with p at the
 # 2018 Hlt1DiMuonNoIP threshold. Every muon daughter must pass each; a non-muon daughter passes.
 MU_PT_MIN       = 1000.0           # pT [MeV]
-MU_PT_MIN_4MU   = None             # eta -> 4mu: no pT requirement
 MU_P_MIN        = 10000.0          # p [MeV]
-MU_P_MIN_4MU    = 5000.0           # eta -> 4mu: p [MeV]
 MU_ETA_RANGE    = (2.0, 4.5)       # pseudorapidity
 PNN_MU_MIN      = 0.9              # ProbNNmu
 MU_GHOST_MAX    = 0.2              # ghost probability
 MU_IP_CHI2_MAX  = 6.0              # IP chi2
+
+# The muon thresholds that differ by channel, as muon_cuts takes them ('pt_min' None: no pT cut)
+MUON_THRESHOLDS = {'pt_min': MU_PT_MIN, 'p_min': MU_P_MIN, 'pnn_mu_min': PNN_MU_MIN}
+# eta -> 4mu: no pT cut, p > 5 GeV, ProbNNmu > 0.8
+MUON_THRESHOLDS_4MU = {'pt_min': None, 'p_min': 5000.0, 'pnn_mu_min': 0.8}
 
 # TOS lines per trigger level.
 # TODO: use the commented-out lines again.
@@ -49,23 +52,25 @@ TOS_LINES_4MU = {**TOS_LINES,
                  'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_rebuilt_tos4']}  # + Hlt2ExoticaQuadMuonNoIP
 
 
-def muon_cuts(tree, mu_pt_min=MU_PT_MIN, mu_p_min=MU_P_MIN):
+def muon_cuts(tree, thresholds=MUON_THRESHOLDS):
     """
     {label: daughter-level mask} of each muon requirement above, True for every non-muon daughter,
-    with pT > mu_pt_min [MeV] (no pT requirement for None) and p > mu_p_min [MeV]. Reads
-    MUON_CUT_BRANCHES.
+    with the pT, p and ProbNNmu thresholds of `thresholds` (MUON_THRESHOLDS or
+    MUON_THRESHOLDS_4MU). Reads MUON_CUT_BRANCHES.
     """
+    pt_min, p_min, pnn_mu_min = (thresholds['pt_min'], thresholds['p_min'],
+                                 thresholds['pnn_mu_min'])
     px, py, pz = tree['prt_px'], tree['prt_py'], tree['prt_pz']
     eta = ak.unflatten(kinematics.eta(ak.to_numpy(ak.flatten(px)), ak.to_numpy(ak.flatten(py)),
                                       ak.to_numpy(ak.flatten(pz))), ak.num(px))
     cuts = {}
-    if mu_pt_min is not None:
-        cuts[f'pT > {mu_pt_min:g}'] = kinematics.pt(px, py) > mu_pt_min
+    if pt_min is not None:
+        cuts[f'pT > {pt_min:g}'] = kinematics.pt(px, py) > pt_min
     cuts.update({
-        f'p > {mu_p_min:g}':     kinematics.p(px, py, pz) > mu_p_min,
+        f'p > {p_min:g}':        kinematics.p(px, py, pz) > p_min,
         f'{MU_ETA_RANGE[0]:g} < eta < {MU_ETA_RANGE[1]:g}':
             (eta > MU_ETA_RANGE[0]) & (eta < MU_ETA_RANGE[1]),
-        f'pnn_mu > {PNN_MU_MIN}': tree['prt_pnn_mu'] > PNN_MU_MIN,
+        f'pnn_mu > {pnn_mu_min}': tree['prt_pnn_mu'] > pnn_mu_min,
         f'ghost_prob < {MU_GHOST_MAX}': tree['prt_prb_ghost'] < MU_GHOST_MAX,
         f'ip_chi2 < {MU_IP_CHI2_MAX:g}':   # -1 is stored when there is no PV
             (tree['prt_ip_chi2'] >= 0) & (tree['prt_ip_chi2'] < MU_IP_CHI2_MAX),
@@ -75,8 +80,7 @@ def muon_cuts(tree, mu_pt_min=MU_PT_MIN, mu_p_min=MU_P_MIN):
     return {label: passes | not_muon for label, passes in cuts.items()}
 
 
-def cut_steps(tree, mass_branch, tos_lines, truth_pids=None, mu_pt_min=MU_PT_MIN,
-              mu_p_min=MU_P_MIN):
+def cut_steps(tree, mass_branch, tos_lines, truth_pids=None, muon_thresholds=MUON_THRESHOLDS):
     """
     The selection one cut at a time, each on top of the ones before: the truth match to eta ->
     truth_pids (if given), TOS on at least one line of each level of tos_lines, then each of
@@ -86,8 +90,7 @@ def cut_steps(tree, mass_branch, tos_lines, truth_pids=None, mu_pt_min=MU_PT_MIN
     mass_branch : the tag_* branch defining the candidates
     tos_lines   : {level: [TOS branches]}, e.g. TOS_LINES
     truth_pids  : signal daughter PIDs, e.g. [-13, 13, 22], or None for no truth match
-    mu_pt_min   : muon pT threshold [MeV] of muon_cuts, e.g. MU_PT_MIN_4MU (None: no pT cut)
-    mu_p_min    : muon p threshold [MeV] of muon_cuts, e.g. MU_P_MIN_4MU
+    muon_thresholds : the thresholds of muon_cuts, MUON_THRESHOLDS or MUON_THRESHOLDS_4MU
 
     Returns (steps, triggers):
         steps    : [(label, keep), ...], the per-candidate mask after each cut, starting with
@@ -115,7 +118,7 @@ def cut_steps(tree, mass_branch, tos_lines, truth_pids=None, mu_pt_min=MU_PT_MIN
         steps.append((f'TOS up to {level}', keep))
 
     # Muon cuts, each on every muon daughter
-    for label, muon_ok in muon_cuts(tree, mu_pt_min, mu_p_min).items():
+    for label, muon_ok in muon_cuts(tree, muon_thresholds).items():
         keep = keep & cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all',
                                        target_ref=mass_branch)
         steps.append((label, keep))
