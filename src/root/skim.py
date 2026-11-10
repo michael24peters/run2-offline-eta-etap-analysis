@@ -1,13 +1,14 @@
 """
 skim.py
 
-Skim of an ntuple production for the drivers: the candidates that pass driver_mass_fit's selection
-with MASS_BRANCH in the --window range, their daughters and the events holding them, with only the
-branches the drivers read.
+Skim of an ntuple production for the drivers: per event, one candidate picked at random among
+those that pass driver_mass_fit's selection, kept if MASS_BRANCH is in the --window range, with its
+daughters, and only the branches the drivers read.
 
     read the sorted glob in STEP_SIZE chunks (uproot.iterate)
-      -> candidate_mask: align_muons, drop_malformed, selection.cut_steps, then the window
-      -> keep_candidates: the kept candidates and their daughters, prt_idx_mom renumbered to them,
+      -> candidate_mask: align_muons, drop_malformed, selection.cut_steps, the random candidate
+         (cut_utils.random_candidate_mask, seed selection.SEED + chunk index), then the window
+      -> keep_candidates: the kept candidate and its daughters, prt_idx_mom renumbered to it,
          events with no kept candidate dropped
       -> OUTFILE, TTree 'tree'
       -> OUTFILE with .json for .root: input files, branches, TOS lines, window, cut labels,
@@ -60,16 +61,18 @@ WRITE_BRANCHES = list(dict.fromkeys(
     + ['prt_idx_mom'] + selection.MUON_CUT_BRANCHES + ['run_n', 'evt_n']))
 
 
-def candidate_mask(tree, tos_lines, window):
+def candidate_mask(tree, tos_lines, window, seed):
     """
-    The candidates of `tree` that pass driver_mass_fit's selection (align_muons, drop_malformed,
-    then selection.cut_steps with `tos_lines`) with MASS_BRANCH in `window`, (low, high) [MeV]
-    with both ends included. drop_malformed checks every field of `tree`; `tree` is left unchanged.
+    Per event of `tree`, one candidate picked at random (`seed`) among those that pass
+    driver_mass_fit's selection (align_muons, drop_malformed, then selection.cut_steps with
+    `tos_lines`), kept if MASS_BRANCH is in `window`, (low, high) [MeV] with both ends included.
+    drop_malformed checks every field of `tree`; `tree` is left unchanged.
 
     Returns (rows, keep, steps, drop_report):
         rows        : numpy indices of the events of `tree` that drop_malformed keeps
-        keep        : per-candidate mask of those events, shaped like MASS_BRANCH
-        steps       : [(label, keep), ...] of cut_steps, then the window
+        keep        : per-candidate mask of those events, shaped like MASS_BRANCH, at most one
+                      candidate per event
+        steps       : [(label, keep), ...] of cut_steps, then the random candidate and the window
         drop_report : the report of drop_malformed
     """
     events = tree[tree.fields]   # a new array: the fields set below leave `tree` unchanged
@@ -79,9 +82,11 @@ def candidate_mask(tree, tos_lines, window):
     events, drop_report = cut_utils.drop_malformed(events, tag_ref=MASS_BRANCH)
     steps, _ = selection.cut_steps(events, MASS_BRANCH, tos_lines)
 
+    picked = cut_utils.random_candidate_mask(steps[-1][1], seed)
+    steps.append(('random candidate', picked))
     low, high = window
     mass = events[MASS_BRANCH]
-    keep = steps[-1][1] & (mass >= low) & (mass <= high)
+    keep = picked & (mass >= low) & (mass <= high)
     steps.append((f'{MASS_BRANCH} in {low:g}-{high:g} MeV', keep))
     return ak.to_numpy(events['skim_index']), keep, steps, drop_report
 
@@ -153,7 +158,7 @@ def main():
                                 step_size=STEP_SIZE, library='ak')
         for i, chunk in enumerate(chunks):
             rows, keep, steps, chunk_drop_report = candidate_mask(chunk, selection.TOS_LINES,
-                                                                  args.window)
+                                                                  args.window, selection.SEED + i)
             kept = keep_candidates(chunk[rows], keep)
             if i == 0:
                 out.mktree('tree', kept)   # a TTree; assigning out['tree'] writes an RNTuple
@@ -168,6 +173,7 @@ def main():
         'input_files': paths,
         'branches': branches,
         'tos_lines': selection.TOS_LINES,
+        'random_candidate': {'seed': selection.SEED, 'step_size': STEP_SIZE},
         'window': args.window,
         'cuts': [label for label, _ in steps],
         'drop_malformed': drop_report,

@@ -48,33 +48,62 @@ def mumu_tree():
 
 
 def skim_tree(tree, window):
-    """keep_candidates of candidate_mask with selection.TOS_LINES."""
-    rows, keep, _, _ = skim.candidate_mask(tree, selection.TOS_LINES, window)
+    """keep_candidates of candidate_mask with selection.TOS_LINES and seed selection.SEED."""
+    rows, keep, _, _ = skim.candidate_mask(tree, selection.TOS_LINES, window, selection.SEED)
     return skim.keep_candidates(tree[rows], keep)
 
 
-def test_candidates_pass_the_selection_inside_the_window():
-    rows, keep, steps, _ = skim.candidate_mask(mumu_tree(), selection.TOS_LINES, ETA_WINDOW)
+def test_one_picked_candidate_per_event_inside_the_window():
+    rows, keep, steps, _ = skim.candidate_mask(mumu_tree(), selection.TOS_LINES, ETA_WINDOW,
+                                               selection.SEED)
     assert rows.tolist() == [0, 1, 2, 4]   # event 3 is malformed
-    assert keep.tolist() == [[False, True, True], [False], [False], [False]]
-    assert steps[-1][0] == 'tag_dtf_m in 450-650 MeV'
+    assert keep.tolist()[1:] == [[False], [False], [False]]
+    assert keep.tolist()[0] in ([False, True, False], [False, False, True])
+    assert [label for label, _ in steps[-2:]] == ['random candidate', 'tag_dtf_m in 450-650 MeV']
 
 
 def test_window_includes_its_edges():
-    _, keep, _, _ = skim.candidate_mask(mumu_tree(), selection.TOS_LINES, ETAPRIME_WINDOW)
+    _, keep, _, _ = skim.candidate_mask(mumu_tree(), selection.TOS_LINES, ETAPRIME_WINDOW,
+                                        selection.SEED)
     assert keep.tolist() == [[False, False, False], [True], [False], [False]]
 
 
-def test_kept_candidates_keep_their_daughters_renumbered():
+def test_window_applies_after_the_random_candidate():
+    """200 events with a passing candidate at 550 and one at 750 MeV: the event is kept only when
+    the pick is the 550 MeV candidate."""
+    n_events = 200
+    tree = make_tree(
+        tag_dtf_m=[[550, 750]] * n_events,
+        tag_l0_tos0=[[1, 1]] * n_events,
+        tag_l0_tos1=[[0, 0]] * n_events,
+        tag_hlt1_tos0=[[1, 1]] * n_events,
+        tag_hlt2_tos0=[[1, 1]] * n_events,
+        prt_idx_mom=[[0, 0, 1, 1]] * n_events,
+        prt_pid=[[-13, 13, -13, 13]] * n_events,
+        prt_pnn_mu=[[0.99] * 4] * n_events,
+        prt_prb_ghost=[[0.01] * 4] * n_events,
+        prt_ip_chi2=[[1.0] * 4] * n_events,
+        prt_tight_mu=[[1] * 4] * n_events,
+        prt_px=[[900] * 4] * n_events,
+        prt_py=[[1200] * 4] * n_events,
+        prt_pz=[[15000] * 4] * n_events,
+    )
+    out = skim_tree(tree, ETA_WINDOW)
+    assert 0 < len(out['tag_dtf_m']) < n_events
+    assert set(ak.flatten(out['tag_dtf_m']).tolist()) == {550}
+
+
+def test_kept_candidate_keeps_its_daughters_renumbered():
     out = skim_tree(mumu_tree(), ETA_WINDOW)
-    assert out['tag_dtf_m'].tolist() == [[550, 560]]
-    assert out['prt_idx_mom'].tolist() == [[0, 0, 1, 1]]
-    assert out['prt_px'].tolist() == [[910, 911, 920, 921]]
+    assert out['tag_dtf_m'].tolist() in ([[550]], [[560]])
+    assert out['prt_idx_mom'].tolist() == [[0, 0]]
+    expected_px = [[910, 911]] if out['tag_dtf_m'].tolist() == [[550]] else [[920, 921]]
+    assert out['prt_px'].tolist() == expected_px
     assert out['run_n'].tolist() == [10]
 
 
 def test_tag_branch_empty_in_an_event_stays_empty():
-    assert skim_tree(mumu_tree(), ETA_WINDOW)['tag_hlt2_tos1'].tolist() == [[6, 7]]
+    assert skim_tree(mumu_tree(), ETA_WINDOW)['tag_hlt2_tos1'].tolist() in ([[6]], [[7]])
     assert skim_tree(mumu_tree(), ETAPRIME_WINDOW)['tag_hlt2_tos1'].tolist() == [[]]
 
 
@@ -114,6 +143,7 @@ def test_mumugamma_tight_mu_keeps_one_entry_per_kept_muon():
 def test_skim_of_a_skim_keeps_everything():
     for tree in [mumu_tree(), mumugamma_tree()]:
         skimmed = ak.Array(skim_tree(tree, ETA_WINDOW))
-        rows, keep, _, _ = skim.candidate_mask(skimmed, selection.TOS_LINES, ETA_WINDOW)
+        rows, keep, _, _ = skim.candidate_mask(skimmed, selection.TOS_LINES, ETA_WINDOW,
+                                               selection.SEED)
         assert len(rows) == len(skimmed)
         assert ak.all(keep)
