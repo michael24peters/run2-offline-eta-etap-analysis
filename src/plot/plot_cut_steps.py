@@ -11,8 +11,11 @@ Mass before and after each offline selection with no fit, to check the effect of
 The cuts are cumulative, in the order of driver_mass_fit.py: [truth match], TOS per trigger level,
 each muon cut, random candidate, then the fit window [--fit-xmin, --fit-xmax) (driver_mass_fit.py's
 --xmin/--xmax defaults), so the last step is exactly what the mass fit sees. The cuts are
-selection.cut_steps with selection.TOS_LINES, or selection.TOS_LINES_4MU for an input path with an
-eta2mumumumu segment, as in driver_mass_fit.py.
+selection.cut_steps with selection.TOS_LINES and selection.MU_PT_MIN, or selection.TOS_LINES_4MU
+and selection.MU_PT_MIN_4MU for an input path with an eta2mumumumu segment, as in
+driver_mass_fit.py. The input is read, selected and histogrammed in chunks of selection.STEP_SIZE
+(cut_utils.iterate_branches), the random candidate of chunk i picked with seed selection.SEED + i,
+as in the drivers.
 
 Usage:
     python src/plot/plot_cut_steps.py INFILE --outdir OUTDIR
@@ -26,7 +29,6 @@ import os
 import re
 import sys
 
-import awkward as ak
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -38,31 +40,25 @@ import plot_style
 import plot_utils
 import selection
 
-def read_tree(infile, mass_branch, tos_lines, truth_match=None, max_events=None):
-    """
-    The branches cut_steps reads from `infile` with `tos_lines`, malformed events dropped.
-
-    Returns (tree, drop_report) as cut_utils.drop_malformed.
-    """
-    branches = ([mass_branch, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
-                + [line for lines in tos_lines.values() for line in lines]
-                + (selection.TRUTH_BRANCHES if truth_match else []))
-    tree = cut_utils.read_branches(infile, branches, entry_stop=max_events)
-    tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
-    return cut_utils.drop_malformed(tree, tag_ref=mass_branch)
+def tree_branches(mass_branch, tos_lines, truth_match=None):
+    """The branches cut_steps reads with `tos_lines`."""
+    return ([mass_branch, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
+            + [line for lines in tos_lines.values() for line in lines]
+            + (selection.TRUTH_BRANCHES if truth_match else []))
 
 
-def cut_steps(tree, mass_branch, tos_lines, fit_window, truth_match=None):
+def cut_steps(tree, mass_branch, tos_lines, mu_pt_min, fit_window, seed, truth_match=None):
     """
-    selection.cut_steps with `tos_lines`, then the random candidate and the fit window (lo, hi)
-    [MeV] on mass_branch.
+    selection.cut_steps with `tos_lines` and `mu_pt_min`, then the random candidate (`seed`) and
+    the fit window (lo, hi) [MeV] on mass_branch.
 
     Returns [(label, mask), ...]: the per-candidate mask after each step, starting with ('all
     candidates', every candidate).
     """
-    steps, _ = selection.cut_steps(tree, mass_branch, tos_lines, truth_pids=truth_match)
+    steps, _ = selection.cut_steps(tree, mass_branch, tos_lines, truth_pids=truth_match,
+                                   mu_pt_min=mu_pt_min)
 
-    keep = cut_utils.random_candidate_mask(steps[-1][1], selection.SEED)
+    keep = cut_utils.random_candidate_mask(steps[-1][1], seed)
     steps.append(('random candidate', keep))
 
     # The fit's histogram range: what the mass fit actually sees.
@@ -78,13 +74,13 @@ def slug(label):
 
 
 def plot_pair(ax, edges, before, after, labels, logy=False):
-    """Step histograms of `before` (black) and `after` (blue) on `ax`, with room above the tallest
-    bin for the legend."""
+    """Step histograms of `before` (black) and `after` (blue) on `ax`, each (counts per bin of
+    `edges`, total candidates), with room above the tallest bin for the legend."""
     C = plot_style.COLORS
     top = 0
-    for values, label, color in ((before, labels[0], C['data']), (after, labels[1], C['fit'])):
-        counts, _, _ = ax.hist(values, bins=edges, histtype='step', linewidth=1.5, color=color,
-                               label=f'{label} ({len(values)})')
+    for (counts, total), label, color in ((before, labels[0], C['data']),
+                                          (after, labels[1], C['fit'])):
+        ax.stairs(counts, edges, linewidth=1.5, color=color, label=f'{label} ({total})')
         top = max(top, counts.max())
     if logy:
         ax.set_yscale('log')
@@ -117,30 +113,48 @@ def main():
     parser.add_argument('--logy', action='store_true', help='Log y axis on the mass plots')
     args = parser.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
-    tos_lines = (selection.TOS_LINES_4MU if 'eta2mumumumu' in args.infile.split('/')
-                 else selection.TOS_LINES)
+    is_4mu = 'eta2mumumumu' in args.infile.split('/')
+    tos_lines = selection.TOS_LINES_4MU if is_4mu else selection.TOS_LINES
+    mu_pt_min = selection.MU_PT_MIN_4MU if is_4mu else selection.MU_PT_MIN
 
-    tree, drop_report = read_tree(args.infile, args.mass, tos_lines, args.truth_match,
-                                  args.max_events)
+    # --- Read, select and histogram one chunk of selection.STEP_SIZE at a time ---
+    # Per step: the mass histogram and the candidate count, summed over the chunks. Chunk i picks
+    # the random candidate with seed selection.SEED + i, as the drivers.
+    edges = np.linspace(args.xmin, args.xmax, args.nbins + 1)
+    drop_report, labels, histograms, totals = {}, [], [], []
+    chunks = cut_utils.iterate_branches(args.infile,
+                                        tree_branches(args.mass, tos_lines, args.truth_match),
+                                        selection.STEP_SIZE, entry_stop=args.max_events)
+    for i, tree in enumerate(chunks):
+        tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
+        tree, chunk_drop_report = cut_utils.drop_malformed(tree, tag_ref=args.mass)
+        drop_report = cut_utils.add_counts(drop_report, chunk_drop_report)
+        steps = cut_steps(tree, args.mass, tos_lines, mu_pt_min, (args.fit_xmin, args.fit_xmax),
+                          selection.SEED + i, args.truth_match)
+        if not labels:
+            labels = [label for label, _ in steps]
+            histograms = [np.zeros(args.nbins) for _ in steps]
+            totals = [0 for _ in steps]
+        for step, (_, mask) in enumerate(steps):
+            masses = cut_utils.values(tree, args.mass, mask)
+            histograms[step] += np.histogram(masses, bins=edges)[0]
+            totals[step] += len(masses)
+        print(f"[INFO] chunk {i}: {drop_report['read']} events read", file=sys.stderr)
+
     print(f"[INFO] events: read {drop_report['read']}, kept {drop_report['kept']}",
           file=sys.stderr)
-
-    steps = cut_steps(tree, args.mass, tos_lines, (args.fit_xmin, args.fit_xmax),
-                      args.truth_match)
-    for label, mask in steps:
-        print(f'[INFO]   {label:32s} {int(ak.sum(mask)):9d}', file=sys.stderr)
+    for label, total in zip(labels, totals):
+        print(f'[INFO]   {label:32s} {total:9d}', file=sys.stderr)
 
     plot_utils.apply_font()
     xlabel = f'{args.mass} [MeV]'
 
     # --- Mass: step i-1 vs step i ---
-    edges = np.linspace(args.xmin, args.xmax, args.nbins + 1)
-    for i in range(1, len(steps)):
-        (label_before, before), (label_after, after) = steps[i - 1], steps[i]
+    for i in range(1, len(labels)):
+        label_after = labels[i]
         fig, ax = plt.subplots()
-        plot_pair(ax, edges, cut_utils.values(tree, args.mass, before),
-                  cut_utils.values(tree, args.mass, after),
-                  (label_before if i == 1 else 'previous cuts', f'+ {label_after}'),
+        plot_pair(ax, edges, (histograms[i - 1], totals[i - 1]), (histograms[i], totals[i]),
+                  (labels[0] if i == 1 else 'previous cuts', f'+ {label_after}'),
                   logy=args.logy)
         ax.axvline(kinematics.M_ETA, color=plot_style.COLORS['reference'], linestyle='--')
         ax.set_xlabel(xlabel)
