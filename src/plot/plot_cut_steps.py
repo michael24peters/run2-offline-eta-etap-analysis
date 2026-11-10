@@ -7,12 +7,13 @@ Mass before and after each offline selection with no fit, to check the effect of
                               cut, and after this cut too. Figure 01 is the
                               ntuple vs the first cut, figure 02 the first cut
                               vs the first two, and so on.
+    mass_<NN>_<cut>_log.png   the same with a log y axis.
 
 The cuts are cumulative, in the order of driver_mass_fit.py: [truth match], TOS per trigger level,
 each muon cut, random candidate, then the fit window [--fit-xmin, --fit-xmax) (driver_mass_fit.py's
 --xmin/--xmax defaults), so the last step is exactly what the mass fit sees. The cuts are
-selection.cut_steps with selection.TOS_LINES and selection.MU_PT_MIN, or selection.TOS_LINES_4MU
-and selection.MU_PT_MIN_4MU for an input path with an eta2mumumumu segment, as in
+selection.cut_steps with selection.TOS_LINES, MU_PT_MIN and MU_P_MIN, or selection.TOS_LINES_4MU,
+MU_PT_MIN_4MU and MU_P_MIN_4MU for an input path with an eta2mumumumu segment, as in
 driver_mass_fit.py. The input is read, selected and histogrammed in chunks of selection.STEP_SIZE
 (cut_utils.iterate_branches), the random candidate of chunk i picked with seed selection.SEED + i,
 as in the drivers.
@@ -21,7 +22,7 @@ Usage:
     python src/plot/plot_cut_steps.py INFILE --outdir OUTDIR
         [--mass tag_dtf_m|tag_m] [--truth-match PID [PID ...]] [--max-events N]
         [--fit-xmin 500] [--fit-xmax 600]
-        [--xmin 398] [--xmax 1108] [--nbins 142] [--logy]
+        [--xmin 398] [--xmax 1108] [--nbins 142]
 """
 
 import argparse
@@ -47,16 +48,17 @@ def tree_branches(mass_branch, tos_lines, truth_match=None):
             + (selection.TRUTH_BRANCHES if truth_match else []))
 
 
-def cut_steps(tree, mass_branch, tos_lines, mu_pt_min, fit_window, seed, truth_match=None):
+def cut_steps(tree, mass_branch, tos_lines, mu_pt_min, mu_p_min, fit_window, seed,
+              truth_match=None):
     """
-    selection.cut_steps with `tos_lines` and `mu_pt_min`, then the random candidate (`seed`) and
-    the fit window (lo, hi) [MeV] on mass_branch.
+    selection.cut_steps with `tos_lines`, `mu_pt_min` and `mu_p_min`, then the random candidate
+    (`seed`) and the fit window (lo, hi) [MeV] on mass_branch.
 
     Returns [(label, mask), ...]: the per-candidate mask after each step, starting with ('all
     candidates', every candidate).
     """
     steps, _ = selection.cut_steps(tree, mass_branch, tos_lines, truth_pids=truth_match,
-                                   mu_pt_min=mu_pt_min)
+                                   mu_pt_min=mu_pt_min, mu_p_min=mu_p_min)
 
     keep = cut_utils.random_candidate_mask(steps[-1][1], seed)
     steps.append(('random candidate', keep))
@@ -110,12 +112,12 @@ def main():
     parser.add_argument('--xmin', type=float, default=398.0, help='Lower mass bound [MeV]')
     parser.add_argument('--xmax', type=float, default=1108.0, help='Upper mass bound [MeV]')
     parser.add_argument('--nbins', type=int, default=142, help='Mass histogram bins')
-    parser.add_argument('--logy', action='store_true', help='Log y axis on the mass plots')
     args = parser.parse_args()
     os.makedirs(args.outdir, exist_ok=True)
     is_4mu = 'eta2mumumumu' in args.infile.split('/')
     tos_lines = selection.TOS_LINES_4MU if is_4mu else selection.TOS_LINES
     mu_pt_min = selection.MU_PT_MIN_4MU if is_4mu else selection.MU_PT_MIN
+    mu_p_min = selection.MU_P_MIN_4MU if is_4mu else selection.MU_P_MIN
 
     # --- Read, select and histogram one chunk of selection.STEP_SIZE at a time ---
     # Per step: the mass histogram and the candidate count, summed over the chunks. Chunk i picks
@@ -129,7 +131,8 @@ def main():
         tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
         tree, chunk_drop_report = cut_utils.drop_malformed(tree, tag_ref=args.mass)
         drop_report = cut_utils.add_counts(drop_report, chunk_drop_report)
-        steps = cut_steps(tree, args.mass, tos_lines, mu_pt_min, (args.fit_xmin, args.fit_xmax),
+        steps = cut_steps(tree, args.mass, tos_lines, mu_pt_min, mu_p_min,
+                          (args.fit_xmin, args.fit_xmax),
                           selection.SEED + i, args.truth_match)
         if not labels:
             labels = [label for label, _ in steps]
@@ -152,15 +155,17 @@ def main():
     # --- Mass: step i-1 vs step i ---
     for i in range(1, len(labels)):
         label_after = labels[i]
-        fig, ax = plt.subplots()
-        plot_pair(ax, edges, (histograms[i - 1], totals[i - 1]), (histograms[i], totals[i]),
-                  (labels[0] if i == 1 else 'previous cuts', f'+ {label_after}'),
-                  logy=args.logy)
-        ax.axvline(kinematics.M_ETA, color=plot_style.COLORS['reference'], linestyle='--')
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel('Candidates')
-        plot_style.save_plot(fig, os.path.join(args.outdir, f'mass_{i:02d}_{slug(label_after)}.png'))
-        plt.close(fig)
+        for logy, suffix in ((False, ''), (True, '_log')):
+            fig, ax = plt.subplots()
+            plot_pair(ax, edges, (histograms[i - 1], totals[i - 1]), (histograms[i], totals[i]),
+                      (labels[0] if i == 1 else 'previous cuts', f'+ {label_after}'),
+                      logy=logy)
+            ax.axvline(kinematics.M_ETA, color=plot_style.COLORS['reference'], linestyle='--')
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel('Candidates')
+            name = f'mass_{i:02d}_{slug(label_after)}{suffix}.png'
+            plot_style.save_plot(fig, os.path.join(args.outdir, name))
+            plt.close(fig)
 
 
 if __name__ == '__main__':
