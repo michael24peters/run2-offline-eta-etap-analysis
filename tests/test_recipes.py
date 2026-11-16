@@ -28,12 +28,12 @@ One event, eta -> mu+ mu- gamma, small enough to read by eye.
                                       |    matched the STRAY photon
                                       matched the STRAY pion: a mis-ID
 
-  What DOES vary is truth matching -- which generator particle each track
+  What DOES vary is MC matching -- which generator particle each track
   really was: a reco daughter can match a motherless generator particle, or one
   whose PID disagrees with its own. Candidate 0 here is cleanly matched;
   candidate 1 shares a track and picks up two bad matches.
   That is the distinction the recipes below turn on: composition is guaranteed,
-  truth matching is not.
+  MC matching is not.
 """
 
 import awkward as ak
@@ -140,16 +140,16 @@ def test_signal_daughters_and_strays_do_not_overlap(event):
 # --- crossing to the reco side -----------------------------------------------
 
 def test_what_did_each_reco_daughter_really_match(event):
-    """follow() along prt_idx_gen pulls truth PIDs onto the reco daughters."""
-    truth = cut_utils.follow(event, event['mc_pid'], 'prt_idx_gen')
-    assert truth.tolist() == [[-13.0, 13.0, 22.0, -13.0, -211.0, 22.0]]
+    """follow() along prt_idx_gen pulls MC PIDs onto the reco daughters."""
+    mc_pid = cut_utils.follow(event, event['mc_pid'], 'prt_idx_gen')
+    assert mc_pid.tolist() == [[-13.0, 13.0, 22.0, -13.0, -211.0, 22.0]]
 
 
 def test_which_reco_daughters_are_misidentified(event):
-    """Compare the reco hypothesis against the truth match, elementwise. Daughter 4 was
+    """Compare the reco hypothesis against the MC match, elementwise. Daughter 4 was
     reconstructed as a mu- but really matched a pion."""
-    truth = cut_utils.follow(event, event['mc_pid'], 'prt_idx_gen')
-    assert (truth != event['prt_pid']).tolist() \
+    mc_pid = cut_utils.follow(event, event['mc_pid'], 'prt_idx_gen')
+    assert (mc_pid != event['prt_pid']).tolist() \
         == [[False, False, False, False, True, False]]
 
 

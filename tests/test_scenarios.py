@@ -18,7 +18,7 @@ def test_reco_muon_matched_to_a_generator_pion():
     """A reco track called a muon whose MC match is a pion (211).
 
     Real: 'matched gen pids' on eta2mumu MC comes back as [-13, 13, 211]. The framework must report
-    the TRUTH pid, not the reco hypothesis, when asked through prt_idx_gen.
+    the MC pid, not the reco hypothesis, when asked through prt_idx_gen.
     """
     tree = make_tree(
         mc_pid=[[221, -13, 13, 211]],
@@ -26,10 +26,10 @@ def test_reco_muon_matched_to_a_generator_pion():
         prt_pid=[[-13, 13]],        # both reconstructed as muons
         prt_idx_gen=[[1, 3]],       # ...but track 1 really matched the pion
     )
-    truth = cut_utils.follow(tree, tree['mc_pid'], 'prt_idx_gen')
-    assert truth.tolist() == [[-13.0, 211.0]]
+    mc_pid = cut_utils.follow(tree, tree['mc_pid'], 'prt_idx_gen')
+    assert mc_pid.tolist() == [[-13.0, 211.0]]
 
-    misid = truth != tree['prt_pid']
+    misid = mc_pid != tree['prt_pid']
     assert misid.tolist() == [[False, True]]
 
 
@@ -43,11 +43,11 @@ def test_misidentified_daughter_flags_its_candidate():
         prt_idx_gen=[[1, 2, 1, 3]],
         prt_idx_mom=[[0, 0, 1, 1]],
     )
-    truth = cut_utils.follow(tree, tree['mc_pid'], 'prt_idx_gen')
-    misid = truth != tree['prt_pid']
+    mc_pid = cut_utils.follow(tree, tree['mc_pid'], 'prt_idx_gen')
+    misid = mc_pid != tree['prt_pid']
     bad = cut_utils.reduce(tree, misid, 'prt_idx_mom', how='any',
                            target_ref='tag_dtf_m')
-    # Candidate 0's daughters both match truth; candidate 1 holds the pion.
+    # Candidate 0's daughters both match their MC particles; candidate 1 holds the pion.
     assert bad.tolist() == [[False, True]]
 
 

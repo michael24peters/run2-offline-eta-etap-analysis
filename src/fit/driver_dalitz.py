@@ -3,7 +3,7 @@ driver_dalitz.py
 
 Per-Dalitz-bin mass fits of eta -> mu+ mu- gamma from a ROOT file:
 
-    read ROOT -> drop malformed events -> (truth match) -> TOS -> muon cuts
+    read ROOT -> drop malformed events -> (MC match) -> TOS -> muon cuts
               -> random candidate -> daughter four-vectors -> m12s, m23s, masses
               -> selection.json, raw Dalitz histograms
               -> N_PER_AXIS x N_PER_AXIS grid over M12_RANGE x M23_RANGE
@@ -34,7 +34,7 @@ selection.STEP_SIZE (cut_utils.iterate_branches); the selection report sums the 
 One candidate per event is picked at random among those that pass the cuts
 (cut_utils.random_candidate_mask, seed selection.SEED + chunk index).
 
---truth-match (signal MC only) keeps the candidates with every daughter truth-matched to eta -> mu+
+--mc-match (signal MC only) keeps the candidates with every daughter MC-matched to eta -> mu+
 mu- gamma (bkg_utils.signal_candidate_mask). It is the first cut, before TOS, pnn_mu and the
 candidate pick. The matched candidates are fit with no tail prior and the background fixed to 0
 (fit_dalitz signal_only).
@@ -52,7 +52,7 @@ select_candidates() is the selection on its own, for fit_dalitz.ipynb and plot_p
 
 Usage:
     python src/fit/driver_dalitz.py INFILE --outdir OUTDIR
-        [--truth-match | --tail-prior RESULTS_JSON]
+        [--mc-match | --tail-prior RESULTS_JSON]
         [--factor none|flat|weighted] [--n-max N] [--max-events N]
 """
 
@@ -111,7 +111,7 @@ FACTORS = {
 }
 
 
-def select_candidates(infile, truth_match=False, max_events=None):
+def select_candidates(infile, mc_match=False, max_events=None):
     """
     Read infile, select, and pick one candidate per event at random, one chunk of
     selection.STEP_SIZE at a time.
@@ -125,14 +125,14 @@ def select_candidates(infile, truth_match=False, max_events=None):
     branches = ([mass, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
                 + [b for b in momenta if b not in selection.MUON_CUT_BRANCHES]
                 + [line for lines in selection.TOS_LINES.values() for line in lines]
-                + (selection.TRUTH_BRANCHES if truth_match else []))
+                + (selection.MC_BRANCHES if mc_match else []))
 
     # --- Read and select, one chunk of selection.STEP_SIZE at a time ---
-    # Per chunk: drop malformed events, [truth match to eta -> gamma mu+ mu-], TOS per trigger
+    # Per chunk: drop malformed events, [MC match to eta -> gamma mu+ mu-], TOS per trigger
     # level, then each muon cut; then one candidate per event, picked at random among those kept,
     # and its m12, m23 and mass. The reports sum over the chunks.
 
-    truth_pids = list(DAUGHTERS.values()) if truth_match else None
+    mc_pids = list(DAUGHTERS.values()) if mc_match else None
     drop_report, triggers, cutflow = {}, {}, {}
     m12_chunks, m23_chunks, mass_chunks = [], [], []
     chunks = cut_utils.iterate_branches(infile, branches, selection.STEP_SIZE,
@@ -148,7 +148,7 @@ def select_candidates(infile, truth_match=False, max_events=None):
             assert ak.all(n_of_pid == 1), f'some candidates do not have exactly one {name}'
 
         steps, chunk_triggers = selection.cut_steps(tree, mass, selection.TOS_LINES,
-                                                    truth_pids=truth_pids)
+                                                    mc_pids=mc_pids)
 
         # One candidate per event: picked at random among those kept.
         picked = cut_utils.random_candidate_mask(steps[-1][1], selection.SEED + i)
@@ -218,7 +218,7 @@ def select_candidates(infile, truth_match=False, max_events=None):
                 'pnn_mu_min': selection.PNN_MU_MIN,
                 'mu_ghost_max': selection.MU_GHOST_MAX,
                 'mu_ip_chi2_max': selection.MU_IP_CHI2_MAX,
-                'truth_match': truth_match,
+                'mc_match': mc_match,
                 'random_candidate': {'seed': selection.SEED, 'step_size': selection.STEP_SIZE},
                 'daughters': DAUGHTERS,
                 'max_events': max_events,
@@ -242,8 +242,8 @@ def main():
                         help='Directory for selection.json, dalitz_fit_<factor>.json and plots')
     parser.add_argument('--factor', default='none', choices=list(FACTORS),
                         help='Per-bin factor on the signal and background shapes (default: none)')
-    parser.add_argument('--truth-match', action='store_true',
-                        help='Signal MC: keep only candidates truth-matched to eta -> mu+ mu- '
+    parser.add_argument('--mc-match', action='store_true',
+                        help='Signal MC: keep only candidates MC-matched to eta -> mu+ mu- '
                              'gamma, and fit with no tail prior and no background')
     parser.add_argument('--tail-prior', default=None,
                         help='results_dcb.json or dalitz_fit_<factor>.json whose tails are '
@@ -254,14 +254,14 @@ def main():
     parser.add_argument('--max-events', type=int, default=None,
                         help='Only read the first N events (default: all)')
     args = parser.parse_args()
-    if args.truth_match and args.tail_prior is not None:
-        parser.error('--truth-match and --tail-prior are exclusive')
+    if args.mc_match and args.tail_prior is not None:
+        parser.error('--mc-match and --tail-prior are exclusive')
     os.makedirs(args.outdir, exist_ok=True)
 
     # --- Select ---
 
     m12s, m23s, masses, selection_json = select_candidates(
-        args.infile, truth_match=args.truth_match, max_events=args.max_events)
+        args.infile, mc_match=args.mc_match, max_events=args.max_events)
     selection_path = os.path.join(args.outdir, 'selection.json')
     with open(selection_path, 'w') as f:
         json.dump(selection_json, f, indent=2)
@@ -290,7 +290,7 @@ def main():
                                     signal_prior_factor=SIGNAL_PRIOR_FACTOR,
                                     min_candidates=MIN_CANDIDATES,
                                     signal_factor=signal_factor, bkg_factor=bkg_factor,
-                                    signal_only=args.truth_match,
+                                    signal_only=args.mc_match,
                                     limits={'nL': (0.0, args.n_max), 'nR': (0.0, args.n_max)})
     result['meta']['input_file'] = args.infile
     result['meta']['tail_prior'] = (None if args.tail_prior is None else

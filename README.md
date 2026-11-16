@@ -7,7 +7,7 @@ analysis.
 
 ```
 src/root/   file prep: fiducial cuts, concatenation (PyROOT for TFileMerger; uproot elsewhere)
-src/ana/    MC-truth background classification and diagnostics
+src/ana/    MC background classification and diagnostics
 src/fit/    mass fits (Gaussian, DCB, Dalitz bin-by-bin) -- see src/fit/README.md
 src/plot/   plotting scripts
 src/utils/  shared library code (fit math, plot styling, cuts)

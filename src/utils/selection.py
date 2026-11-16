@@ -5,7 +5,7 @@ Selection constants and per-candidate masks shared by driver_mass_fit.py, driver
 plot_cut_steps.py. The scripts choose what to call and in which order.
 
     muon_cuts(tree)    daughter-level mask of each muon requirement
-    cut_steps(...)     truth match, TOS per level, then each muon cut, one mask per step
+    cut_steps(...)     MC match, TOS per level, then each muon cut, one mask per step
 """
 
 import awkward as ak
@@ -17,8 +17,8 @@ import kinematics
 SEED              = 0                # random candidate pick; the drivers' chunk i takes SEED + i
 STEP_SIZE         = '1 GB'           # chunk size the drivers read and select at a time
 MUON_PID          = 13               # |pid| the muon cuts apply to
-MOTHER_PID        = 221              # eta, for the truth match
-TRUTH_BRANCHES    = ['prt_idx_gen', 'mc_idx_mom', 'mc_pid']   # read for the truth match
+MOTHER_PID        = 221              # eta, for the MC match
+MC_BRANCHES       = ['prt_idx_gen', 'mc_idx_mom', 'mc_pid']   # read for the MC match
 MUON_CUT_BRANCHES = ['prt_pid', 'prt_px', 'prt_py', 'prt_pz', 'prt_pnn_mu',
                      'prt_prb_ghost', 'prt_ip_chi2', 'prt_tight_mu']   # read by muon_cuts
 
@@ -80,32 +80,32 @@ def muon_cuts(tree, thresholds=MUON_THRESHOLDS):
     return {label: passes | not_muon for label, passes in cuts.items()}
 
 
-def cut_steps(tree, mass_branch, tos_lines, truth_pids=None, muon_thresholds=MUON_THRESHOLDS):
+def cut_steps(tree, mass_branch, tos_lines, mc_pids=None, muon_thresholds=MUON_THRESHOLDS):
     """
-    The selection one cut at a time, each on top of the ones before: the truth match to eta ->
-    truth_pids (if given), TOS on at least one line of each level of tos_lines, then each of
+    The selection one cut at a time, each on top of the ones before: the MC match to eta ->
+    mc_pids (if given), TOS on at least one line of each level of tos_lines, then each of
     muon_cuts on every muon daughter.
 
     tree        : awkward event tree
     mass_branch : the tag_* branch defining the candidates
     tos_lines   : {level: [TOS branches]}, e.g. TOS_LINES
-    truth_pids  : signal daughter PIDs, e.g. [-13, 13, 22], or None for no truth match
+    mc_pids     : signal daughter PIDs, e.g. [-13, 13, 22], or None for no MC match
     muon_thresholds : the thresholds of muon_cuts, MUON_THRESHOLDS or MUON_THRESHOLDS_4MU
 
     Returns (steps, triggers):
         steps    : [(label, keep), ...], the per-candidate mask after each cut, starting with
                    ('all candidates', every candidate)
-        triggers : {level: {line: candidates TOS on that line}}, among the truth-matched
-                   candidates (all candidates without a truth match)
+        triggers : {level: {line: candidates TOS on that line}}, among the MC-matched
+                   candidates (all candidates without an MC match)
     """
     keep = ak.ones_like(tree[mass_branch], dtype=bool)
     steps = [('all candidates', keep)]
 
-    # Truth match first: every daughter matches eta -> truth_pids
-    if truth_pids:
-        keep = keep & bkg_utils.signal_candidate_mask(tree, MOTHER_PID, truth_pids,
+    # MC match first: every daughter matches eta -> mc_pids
+    if mc_pids:
+        keep = keep & bkg_utils.signal_candidate_mask(tree, MOTHER_PID, mc_pids,
                                                       target_ref=mass_branch)
-        steps.append(('truth-matched', keep))
+        steps.append(('MC-matched', keep))
 
     # TOS one level at a time; the line counts are among the candidates before any TOS cut
     before_tos = keep

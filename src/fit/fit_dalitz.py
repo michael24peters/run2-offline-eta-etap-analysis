@@ -29,7 +29,7 @@ Per-bin fit:
     With signal_factor 0 at m_eta (a bin the eta cannot reach), n_sig is
     fixed to 0 and mean, sigma to the global fit's values.
 
-signal_only=True (truth-matched signal MC) fixes n_bkg to 0 and c0, c1 to fit_utils.BKG_INIT in the
+signal_only=True (MC-matched signal MC) fixes n_bkg to 0 and c0, c1 to fit_utils.BKG_INIT in the
 global fit and in every bin.
 """
 
@@ -154,7 +154,7 @@ def fit_dalitz(m12s, m23s, masses, m12_edges, m23_edges,
     signal_factor, bkg_factor : f(M, m12_range, m23_range) multiplying the signal / background shape
              in each bin, or None
     signal_only : fix n_bkg to 0 and c0, c1 to fit_utils.BKG_INIT in the global and per-bin fits
-             (truth-matched signal MC)
+             (MC-matched signal MC)
     limits : the global fit's limits; see fit_dcb()
 
     Returns:

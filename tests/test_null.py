@@ -195,7 +195,7 @@ def test_candidate_with_no_daughters():
 # --- 3. one collection empty, another populated ------------------------------
 
 def test_generator_particles_but_no_reco():
-    """MC truth exists, nothing was reconstructed -- the normal case for an event that failed the
+    """MC particles exist, nothing was reconstructed -- the normal case for an event that failed the
     trigger. Crossing gen -> reco must give empty, not raise."""
     tree = make_tree(mc_pid=[[221, -13, 13]], mc_idx_mom=[[-1, 0, 0]],
                      prt_idx_gen=[[]], tag_dtf_m=[[]], prt_idx_mom=[[]])

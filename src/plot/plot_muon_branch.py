@@ -1,7 +1,7 @@
 """
 plot_muon_branch.py
 
-A muon-daughter branch with no cut: data (every candidate) and truth-matched signal MC, each
+A muon-daughter branch with no cut: data (every candidate) and MC-matched signal MC, each
 normalised to unit area, with a cut value marked.
 
     <branch>.png          one entry per muon daughter
@@ -14,7 +14,7 @@ The inputs are read one chunk of selection.STEP_SIZE at a time (cut_utils.iterat
 fraction of data and MC passing a few thresholds (> for min, < for max) is printed.
 
 Usage:
-    python src/plot/plot_muon_branch.py DATA MC --truth-match PID [PID ...] --outdir OUTDIR \
+    python src/plot/plot_muon_branch.py DATA MC --mc-match PID [PID ...] --outdir OUTDIR \
         --branch prt_pnn_mu --how min [--cut 0.9] [--range 0 1] [--nbins 50]
     e.g. --branch prt_ip_chi2 --how max --cut 6 --range 0 30
 """
@@ -55,18 +55,18 @@ def muon_values(tree, keep, branch, how):
     return per_muon, ak.to_numpy(ak.flatten(per_candidate[keep]))
 
 
-def read_values(path, branch, how, truth_match=None):
+def read_values(path, branch, how, mc_match=None):
     """
     The values (per muon, per candidate) of muon_values for the candidates of `path` (the
-    truth-matched ones with `truth_match`), read in chunks, as float32 numpy arrays.
+    MC-matched ones with `mc_match`), read in chunks, as float32 numpy arrays.
     """
     branches = ([MASS_BRANCH, 'prt_idx_mom', 'prt_pid', branch]
-                + (selection.TRUTH_BRANCHES if truth_match else []))
+                + (selection.MC_BRANCHES if mc_match else []))
     per_muon, per_candidate = [], []
     for tree in cut_utils.iterate_branches(path, branches, selection.STEP_SIZE):
         tree, _ = cut_utils.drop_malformed(tree, tag_ref=MASS_BRANCH)
-        if truth_match:
-            keep = bkg_utils.signal_candidate_mask(tree, selection.MOTHER_PID, truth_match,
+        if mc_match:
+            keep = bkg_utils.signal_candidate_mask(tree, selection.MOTHER_PID, mc_match,
                                                    target_ref=MASS_BRANCH)
         else:
             keep = ak.ones_like(tree[MASS_BRANCH], dtype=bool)
@@ -83,7 +83,7 @@ def plot(data, mc, edges, cut, xlabel, path):
         ax.hist(data, bins=edges, density=True, histtype='step', linewidth=1.5,
                 color=plot_style.COLORS['data'], label=f'data ({len(data)})')
         ax.hist(mc, bins=edges, density=True, histtype='step', linewidth=1.5,
-                color=plot_style.COLORS['fit'], label=f'truth-matched MC ({len(mc)})')
+                color=plot_style.COLORS['fit'], label=f'MC-matched MC ({len(mc)})')
         if cut is not None:
             ax.axvline(cut, color=plot_style.COLORS['reference'], linestyle='--')
         if logy:
@@ -98,12 +98,12 @@ def plot(data, mc, edges, cut, xlabel, path):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='A muon-daughter branch in data and truth-matched MC, no cut',
+        description='A muon-daughter branch in data and MC-matched MC, no cut',
         formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     parser.add_argument('data', help='Data ROOT file, or a quoted glob of them')
     parser.add_argument('mc', help='Signal MC ROOT file, or a quoted glob of them')
-    parser.add_argument('--truth-match', nargs='+', type=int, required=True, metavar='PID',
-                        help='MC: keep candidates truth-matched to eta -> these daughter PIDs')
+    parser.add_argument('--mc-match', nargs='+', type=int, required=True, metavar='PID',
+                        help='MC: keep candidates MC-matched to eta -> these daughter PIDs')
     parser.add_argument('--outdir', required=True, help='Directory for the PNGs')
     parser.add_argument('--branch', required=True, help='Muon-daughter branch, e.g. prt_pnn_mu')
     parser.add_argument('--how', choices=['min', 'max'], required=True,
@@ -117,7 +117,7 @@ def main():
     edges = np.linspace(args.range[0], args.range[1], args.nbins + 1)
 
     data_muon, data_candidate = read_values(args.data, args.branch, args.how)
-    mc_muon, mc_candidate = read_values(args.mc, args.branch, args.how, args.truth_match)
+    mc_muon, mc_candidate = read_values(args.mc, args.branch, args.how, args.mc_match)
 
     plot_utils.apply_font()
     plot(data_muon, mc_muon, edges, args.cut, f'{args.branch} (per muon)',

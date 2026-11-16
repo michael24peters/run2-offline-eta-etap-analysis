@@ -3,7 +3,7 @@ trig_eff.py
 
 Trigger efficiency of every line and of each level's TOS selection, per candidate, two ways:
 
-    true     eff = N(TOS) / N                  (with MC truth, the actual efficiency)
+    true     eff = N(TOS) / N                  (MC-matched, the actual efficiency)
     TISTOS   eff = N(TIS & TOS) / N(TIS)       (the data-driven estimate)
 
 TOS selection: TOS on at least one of the level's TOS_LINES. TIS: TIS on at least one line of the
@@ -11,9 +11,9 @@ level (every line in LINES, including the dedicated TIS line). Each level is eva
 candidates that pass the TOS selection of every earlier level (L0 -> HLT1 -> HLT2, as
 cut_utils.tos_mask applies them), so the per-level efficiencies multiply to the total.
 
-With --daughter-pids, the candidates are the MC-truth-matched ones (every daughter matches eta ->
+With --daughter-pids, the candidates are the MC-matched ones (every daughter matches eta ->
 daughter-pids, bkg_utils.signal_candidate_mask) whose generated decay is in the fiducial region
-(fid_reqs.fiducial_candidate_mask); decays outside it are not counted. Truth-matching is the first
+(fid_reqs.fiducial_candidate_mask); decays outside it are not counted. MC matching is the first
 selection, before any trigger level. Without, every candidate.
 
 Errors are binomial: sqrt(eff (1 - eff) / denominator).
@@ -66,7 +66,7 @@ parser = argparse.ArgumentParser(description=__doc__,
 parser.add_argument('input', help='Input ROOT file')
 parser.add_argument('output', nargs='?', default=None, help='Output JSON file (optional)')
 parser.add_argument('--daughter-pids', nargs='+', type=int, default=None,
-                    help='Truth-match candidates to eta -> these daughters in the '
+                    help='MC-match candidates to eta -> these daughters in the '
                          'fiducial region (signal MC), e.g. -13 13 or -13 13 22. '
                          'Default: every candidate')
 parser.add_argument('--max-events', type=int, default=None,
@@ -75,10 +75,10 @@ args = parser.parse_args()
 
 trigger_branches = [branch(level, kind, i) for level, names in LINES.items()
                     for kind in ('tos', 'tis') for i in range(len(names))]
-truth_branches = (['prt_pid', 'prt_idx_gen', 'mc_pid', 'mc_idx_mom',
-                   'mc_px', 'mc_py', 'mc_pz']
-                  if args.daughter_pids else [])
-branches = [TAG_REF, 'prt_idx_mom'] + truth_branches + trigger_branches
+mc_branches = (['prt_pid', 'prt_idx_gen', 'mc_pid', 'mc_idx_mom',
+                'mc_px', 'mc_py', 'mc_pz']
+               if args.daughter_pids else [])
+branches = [TAG_REF, 'prt_idx_mom'] + mc_branches + trigger_branches
 
 print(f'[INFO] Reading from {args.input}.')
 tree, drop_report = cut_utils.drop_malformed(
@@ -92,16 +92,16 @@ if args.daughter_pids:
     fiducial = fiducial_candidate_mask(tree, MOTHER_PID, args.daughter_pids,
                                        target_ref=TAG_REF)
     population = matched & fiducial
-    population_label = f'truth-matched eta -> {args.daughter_pids}, gen decay fiducial'
-    truth_report = {'truth_matched': int(ak.sum(matched)),
-                    'truth_matched_not_fiducial': int(ak.sum(matched & ~fiducial))}
-    print(f"[INFO] {truth_report['truth_matched']} truth-matched candidates, "
-          f"{truth_report['truth_matched_not_fiducial']} of them from decays outside "
+    population_label = f'MC-matched eta -> {args.daughter_pids}, gen decay fiducial'
+    mc_match_report = {'mc_matched': int(ak.sum(matched)),
+                       'mc_matched_not_fiducial': int(ak.sum(matched & ~fiducial))}
+    print(f"[INFO] {mc_match_report['mc_matched']} MC-matched candidates, "
+          f"{mc_match_report['mc_matched_not_fiducial']} of them from decays outside "
           f"the fiducial region (not counted)")
 else:
     population = ak.ones_like(tree[TAG_REF], dtype=bool)
     population_label = 'all candidates'
-    truth_report = None
+    mc_match_report = None
 population = ak.to_numpy(ak.flatten(population))
 print(f'[INFO] {int(population.sum())} candidates ({population_label}) '
       f'of {len(population)}')
@@ -141,7 +141,7 @@ results = {
         'tistos': 'N(TIS & TOS) / N(TIS)',
         'err': 'binomial: sqrt(eff (1 - eff) / den)',
     },
-    'selection_report': {'events': drop_report, 'truth': truth_report},
+    'selection_report': {'events': drop_report, 'mc_match': mc_match_report},
     'levels': {},
 }
 

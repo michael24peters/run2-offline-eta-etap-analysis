@@ -16,11 +16,11 @@ daughters, and only the branches the drivers read.
          including events with no candidate), events kept and candidates kept
 
 The selection is driver_mass_fit's for eta -> mu+ mu- and eta -> mu+ mu- gamma
-(selection.TOS_LINES), without a truth match. drop_malformed checks every branch written.
+(selection.TOS_LINES), without an MC match. drop_malformed checks every branch written.
 
 The branches written are WRITE_BRANCHES (both mass branches of driver_dalitz.MASS_SOURCES and
 their daughter four-momenta, prt_idx_mom, selection.MUON_CUT_BRANCHES, run_n, evt_n), every
-tag_*_tos* branch of the input and, in MC, selection.TRUTH_BRANCHES. prt_tight_mu keeps one entry
+tag_*_tos* branch of the input and, in MC, selection.MC_BRANCHES. prt_tight_mu keeps one entry
 per muon daughter, as stored; the mc_* branches are kept whole. uproot adds a counter branch
 n<branch> per jagged branch.
 
@@ -149,7 +149,7 @@ def main():
     with uproot.open(paths[0]) as f:
         input_branches = f['tree'].keys()
         branches = (WRITE_BRANCHES + f['tree'].keys(filter_name='tag_*_tos*')
-                    + [branch for branch in selection.TRUTH_BRANCHES if branch in input_branches])
+                    + [branch for branch in selection.MC_BRANCHES if branch in input_branches])
 
     drop_report = {}
     n_kept = n_candidates = 0

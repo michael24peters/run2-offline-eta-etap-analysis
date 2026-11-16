@@ -74,7 +74,7 @@ def test_max(reco):
 
 def test_min_equals_max_iff_daughters_agree(reco):
     """The min==max idiom used to check "do all daughters share one value?" -- this is what a
-    truth-matching cut uses to check every daughter's matched generator particle points at the same
+    MC matching cut uses to check every daughter's matched generator particle points at the same
     mother."""
     agreeing = ak.Array([[4.0, 4.0, 6.0, 6.0], [8.0, 8.0]])
     disagreeing = ak.Array([[4.0, 4.0, 6.0, 7.0], [8.0, 9.0]])
@@ -340,11 +340,11 @@ def test_use_daughter_multiplicity_per_candidate(reco):
     assert out.tolist() == [[2.0, 2.0], [2.0]]
 
 
-def test_use_truth_match_daughters_share_one_mc_mother():
+def test_use_mc_match_daughters_share_one_mc_mother():
     """5./6. 'min'/'max' : do all of a candidate's daughters share one MC
     mother? follow() re-indexes mc_idx_mom (gen-particle level) down to daughter level via
     prt_idx_gen, then min == max across each candidate's daughters checks agreement -- the core of
-    an MC truth-match cut."""
+    an MC-match cut."""
     tree = make_tree(
         tag_dtf_m=[[550.0, 549.0]],
         prt_idx_mom=[[0, 0, 1, 1]],
@@ -360,7 +360,7 @@ def test_use_truth_match_daughters_share_one_mc_mother():
 
 
 def test_use_flag_candidates_containing_a_stray_match():
-    """7. 'any' : push a per-daughter truth flag up to condemn its candidate --
+    """7. 'any' : push a per-daughter MC-match flag up to condemn its candidate --
     the background-analysis chain, gen -> reco -> candidate."""
     tree = make_tree(
         tag_dtf_m=[[550.0, 549.0]],

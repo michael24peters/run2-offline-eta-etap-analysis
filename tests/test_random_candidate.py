@@ -125,7 +125,7 @@ def test_same_seed_gives_the_same_mask(eligible):
     assert first.tolist() == again.tolist()
 
 
-# --- truth matching first ----------------------------------------------------
+# --- MC matching first -------------------------------------------------------
 
 def test_cutting_all_but_one_candidate_keeps_the_event():
     """If only the second candidate is matched, the event keeps it for every seed rather than being

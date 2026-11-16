@@ -287,12 +287,12 @@ def test_use_picked_candidate_selects_its_daughters(reco):
     assert kept.tolist() == [[-13.0, 13.0], [-13.0, 13.0]]
 
 
-def test_use_truth_pid_of_each_reco_daughter():
+def test_use_mc_pid_of_each_reco_daughter():
     """3. mc_* -> prt_* : pull a generator-level quantity down onto the reco
-    daughters that matched it. The basis of every MC-truth cross-check."""
+    daughters that matched it. The basis of every MC cross-check."""
     tree = make_tree(mc_pid=[[221, -13, 13, 211]], prt_idx_gen=[[1, 3]])
-    truth = cut_utils.follow(tree, tree['mc_pid'], 'prt_idx_gen')
-    assert truth.tolist() == [[-13.0, 211.0]]
+    mc_pid = cut_utils.follow(tree, tree['mc_pid'], 'prt_idx_gen')
+    assert mc_pid.tolist() == [[-13.0, 211.0]]
 
 
 def test_use_stray_flag_pushed_onto_reco_daughters(gen_with_strays):

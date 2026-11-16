@@ -56,8 +56,8 @@ The typical pipeline, with TOS_LINES = {'L0': [...], 'HLT1': [...], 'HLT2': [...
 one line at every level, see tos_mask):
 
     tree, report = drop_malformed(read_branches(infile, BRANCHES))
-    truth        = bkg_utils.signal_candidate_mask(tree, 221, [-13, 13], 'tag_dtf_m')   # MC only
-    tos, _       = tos_mask(tree, TOS_LINES, base=truth)    # data: tos_mask(tree, TOS_LINES)
+    mc_matched   = bkg_utils.signal_candidate_mask(tree, 221, [-13, 13], 'tag_dtf_m')   # MC only
+    tos, _       = tos_mask(tree, TOS_LINES, base=mc_matched)   # data: tos_mask(tree, TOS_LINES)
     keep         = tos & reduce(tree, muon_ok, 'prt_idx_mom', how='all')
     picked       = random_candidate_mask(keep, seed=0)
     masses       = values(tree, 'tag_dtf_m', picked)   # flat numpy, ready to fit
@@ -339,7 +339,7 @@ def tos_mask(tree, levels, tag_ref='tag_dtf_m', base=None):
                         "branches, e.g. {'L0': [...], 'HLT1': [...], 'HLT2': [...]}")
 
     base = ak.ones_like(tree[tag_ref], dtype=bool) if base is None else base
-    # Start with the base mask (which could be all True, or e.g., the truth-matched candidates)
+    # Start with the base mask (which could be all True, or e.g., the MC-matched candidates)
     mask = base
     report = {}
     for level, triggers in levels.items():

@@ -144,7 +144,7 @@ def test_fit_dcb_sigma_prior_pulls_sigma_towards_its_value():
 
 def test_fit_gauss_fixed_params_stay_fixed():
     """fixed_params holds its parameters at the given values through both stages, as for a
-    signal-only fit of truth-matched MC."""
+    signal-only fit of MC-matched MC."""
     rng = np.random.default_rng(3)
     vals = rng.normal(547.9, 8.0, 1500)
     _, m = fit_gauss(vals, xmin=XMIN, xmax=XMAX, nbins=60,

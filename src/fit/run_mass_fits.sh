@@ -3,7 +3,7 @@
 # by default). The data DCB fit is the end of a chain of two runs of driver_mass_fit.py, the first
 # passing a prior to the second through its results JSON:
 #
-#   1. truth-matched signal MC                                  signal/<date>/truth/
+#   1. MC-matched signal MC                                  signal/<date>/truth/
 #      a. Gaussian + Chebyshev
 #      b. DCB with no background (n_bkg, c0, c1 fixed at 0), sigma under NormalConstraint(sigma of
 #         1a, its stdev times SIGMA_PRIOR_FACTOR) and started there
@@ -54,7 +54,7 @@ run() {
     fi
 }
 
-# Signal daughter PIDs of each channel, for --truth-match
+# Signal daughter PIDs of each channel, for --mc-match
 daughter_pids() {
     case $1 in
         eta2mumu)      echo "-13 13" ;;
@@ -82,7 +82,7 @@ mass_fits() {
     run "$channel no_prior" $PY src/fit/driver_mass_fit.py $data --outdir $turbo/no_prior $window \
         --n-max $N_MAX &
     run "$channel truth" $PY src/fit/driver_mass_fit.py $mc --outdir $signal/truth $window \
-        --truth-match $(daughter_pids $channel)
+        --mc-match $(daughter_pids $channel)
     run "$channel mc_prior" $PY src/fit/driver_mass_fit.py $data --outdir $turbo/mc_prior $window \
         --tail-prior $signal/truth/results_dcb.json --n-max $N_MAX
     wait

@@ -2,8 +2,8 @@
 ana_bkg.py
 
 Vectorized rewrite of bkg.py: classify eta candidates as signal or background by matching reco
-daughters to MC truth, and tabulate error categories. Uses cut_utils (awkward masks) instead of a
-per-event Python loop, and groups daughters by prt_idx_mom instead of assuming a fixed daughter
+daughters to MC particles, and tabulate error categories. Uses cut_utils (awkward masks) instead of
+a per-event Python loop, and groups daughters by prt_idx_mom instead of assuming a fixed daughter
 count per candidate.
 
 Usage:

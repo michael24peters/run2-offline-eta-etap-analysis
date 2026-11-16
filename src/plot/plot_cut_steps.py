@@ -9,7 +9,7 @@ Mass before and after each offline selection with no fit, to check the effect of
                               vs the first two, and so on.
     mass_<NN>_<cut>_log.png   the same with a log y axis.
 
-The cuts are cumulative, in the order of driver_mass_fit.py: [truth match], TOS per trigger level,
+The cuts are cumulative, in the order of driver_mass_fit.py: [MC match], TOS per trigger level,
 each muon cut, random candidate, then the fit window [--fit-xmin, --fit-xmax) (driver_mass_fit.py's
 --xmin/--xmax defaults), so the last step is exactly what the mass fit sees. The cuts are
 selection.cut_steps with selection.TOS_LINES and MUON_THRESHOLDS, or selection.TOS_LINES_4MU and
@@ -20,7 +20,7 @@ as in the drivers.
 
 Usage:
     python src/plot/plot_cut_steps.py INFILE --outdir OUTDIR
-        [--mass tag_dtf_m|tag_m] [--truth-match PID [PID ...]] [--max-events N] [--pnn-mu-min X]
+        [--mass tag_dtf_m|tag_m] [--mc-match PID [PID ...]] [--max-events N] [--pnn-mu-min X]
         [--fit-xmin 500] [--fit-xmax 600]
         [--xmin 398] [--xmax 1108] [--nbins 142]
 """
@@ -41,15 +41,15 @@ import plot_style
 import plot_utils
 import selection
 
-def tree_branches(mass_branch, tos_lines, truth_match=None):
+def tree_branches(mass_branch, tos_lines, mc_match=None):
     """The branches cut_steps reads with `tos_lines`."""
     return ([mass_branch, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
             + [line for lines in tos_lines.values() for line in lines]
-            + (selection.TRUTH_BRANCHES if truth_match else []))
+            + (selection.MC_BRANCHES if mc_match else []))
 
 
 def cut_steps(tree, mass_branch, tos_lines, muon_thresholds, fit_window, seed,
-              truth_match=None):
+              mc_match=None):
     """
     selection.cut_steps with `tos_lines` and `muon_thresholds`, then the random candidate
     (`seed`) and the fit window (lo, hi) [MeV] on mass_branch.
@@ -57,7 +57,7 @@ def cut_steps(tree, mass_branch, tos_lines, muon_thresholds, fit_window, seed,
     Returns [(label, mask), ...]: the per-candidate mask after each step, starting with ('all
     candidates', every candidate).
     """
-    steps, _ = selection.cut_steps(tree, mass_branch, tos_lines, truth_pids=truth_match,
+    steps, _ = selection.cut_steps(tree, mass_branch, tos_lines, mc_pids=mc_match,
                                    muon_thresholds=muon_thresholds)
 
     keep = cut_utils.random_candidate_mask(steps[-1][1], seed)
@@ -101,8 +101,8 @@ def main():
     parser.add_argument('--outdir', required=True, help='Directory for the PNGs')
     parser.add_argument('--mass', choices=['tag_dtf_m', 'tag_m'], default='tag_dtf_m',
                         help='Mass branch (default: tag_dtf_m, as driver_mass_fit.py)')
-    parser.add_argument('--truth-match', nargs='+', type=int, default=None, metavar='PID',
-                        help='Signal MC: first cut is the truth match to eta -> these PIDs')
+    parser.add_argument('--mc-match', nargs='+', type=int, default=None, metavar='PID',
+                        help='Signal MC: first cut is the MC match to eta -> these PIDs')
     parser.add_argument('--pnn-mu-min', type=float, default=None,
                         help="ProbNNmu threshold in place of the channel's "
                              "(selection.MUON_THRESHOLDS or MUON_THRESHOLDS_4MU)")
@@ -129,7 +129,7 @@ def main():
     edges = np.linspace(args.xmin, args.xmax, args.nbins + 1)
     drop_report, labels, histograms, totals = {}, [], [], []
     chunks = cut_utils.iterate_branches(args.infile,
-                                        tree_branches(args.mass, tos_lines, args.truth_match),
+                                        tree_branches(args.mass, tos_lines, args.mc_match),
                                         selection.STEP_SIZE, entry_stop=args.max_events)
     for i, tree in enumerate(chunks):
         tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
@@ -137,7 +137,7 @@ def main():
         drop_report = cut_utils.add_counts(drop_report, chunk_drop_report)
         steps = cut_steps(tree, args.mass, tos_lines, muon_thresholds,
                           (args.fit_xmin, args.fit_xmax),
-                          selection.SEED + i, args.truth_match)
+                          selection.SEED + i, args.mc_match)
         if not labels:
             labels = [label for label, _ in steps]
             histograms = [np.zeros(args.nbins) for _ in steps]

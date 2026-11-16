@@ -1,8 +1,8 @@
 """
 plot_mc_pt.py
 
-MC truth transverse momentum (pT) for the eta and its mu+, mu-, gamma daughters, from a signal eta
--> mu mu gamma ROOT ntuple.
+Generator-level MC transverse momentum (pT) for the eta and its mu+, mu-, gamma daughters, from a
+signal eta -> mu mu gamma ROOT ntuple.
 
 Usage:
     python plot_mc_pt.py input.root [output_dir]
@@ -33,7 +33,7 @@ PARTICLES = [
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='Plot MC truth pT for eta -> mu mu gamma and its daughters')
+        description='Plot generator-level MC pT for eta -> mu mu gamma and its daughters')
     parser.add_argument('input', help='Input ROOT file')
     parser.add_argument('output_dir', nargs='?',
                         default=os.path.join(_here, '..', '..', 'out', 'quick_plots'),

@@ -1,8 +1,8 @@
 """
 bkg_utils.py
 
-MC truth-matching against a signal decay (signal_daughter_mask, signal_candidate_mask). For MC,
-truth-matching is always the first cut.
+MC matching against a signal decay (signal_daughter_mask, signal_candidate_mask). For MC,
+MC matching is always the first cut.
 """
 
 import cut_utils
@@ -10,7 +10,7 @@ import cut_utils
 
 def signal_daughter_mask(tree, mother_pid, daughter_pids):
     """
-    Per-daughter MC truth-matching against a signal decay mother_pid -> daughter_pids.
+    Per-daughter MC matching against a signal decay mother_pid -> daughter_pids.
 
     A daughter is correctly matched iff it has a generator match, that match's PID agrees with the
     daughter's own reco PID, AND that match's mother is the real signal mother (found via
