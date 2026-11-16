@@ -31,8 +31,8 @@ python src/fit/driver_mass_fit.py data.root \
 It writes into `--outdir`:
 
 - `selection.json`: the selection settings, the events dropped as malformed, the candidates TOS on each trigger line, and the cutflow
-- `results_gauss.json`, `gauss_mass_fit.png`
-- `results_dcb.json`, `dcb_mass_fit.png`
+- `results_gauss.json`, `gauss_mass_fit.png` (not with `--sigma-prior`)
+- `results_dcb.json`, `dcb_mass_fit.png` (not with `--gauss-only`)
 
 `--n-max N` puts an upper limit N on the DCB tail exponents n_L and n_R (no limit by default).
 
@@ -71,7 +71,7 @@ Each stage is MIGRAD then HESSE (and MIGRAD and HESSE once more if the fit has n
 | Gaussian | every parameter not fixed floats | none |
 | DCB | alphaL, nL, alphaR, nR fixed at their start values (the MC values with `--tail-prior`); mean, sigma and the parameters not fixed float | every parameter not fixed floats, from the stage-1 values |
 
-With `--mc-match`, n_bkg, c0 and c1 of the DCB stay fixed at 0 through both stages. The priors (sigma with `--mc-match`, tails with `--tail-prior`) are terms of the cost in both stages. The DCB starts sigma at the Gaussian sigma of the same run.
+With `--mc-match`, n_bkg, c0 and c1 are fixed at 0 in every stage of both fits. The priors (`--sigma-prior`, `--tail-prior`) are terms of the DCB cost in both stages; in stage 1 the tails sit at the centre of their prior.
 
 ## Changing the selection
 
