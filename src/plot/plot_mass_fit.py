@@ -12,6 +12,7 @@ import os
 import sys
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'utils'))
@@ -24,18 +25,19 @@ def gauss_text(params, chi2_per_ndof):
     mean, mean_err = plot_utils.val_err(params['mean'])
     sigma, sigma_err = plot_utils.val_err(params['sigma'])
     n_sig, n_sig_err = plot_utils.val_err(params['n_sig'])
-    n_bkg, n_bkg_err = plot_utils.val_err(params['n_bkg'])
-    c0, c0_err       = plot_utils.val_err(params['c0'])
-    c1, c1_err       = plot_utils.val_err(params['c1'])
 
     stats = [
         [(r'\mu', 'μ', mean, mean_err, '.2f', 'MeV')],
         [(r'\sigma', 'σ', sigma, sigma_err, '.2f', 'MeV')],
         [(r'n_{sig}', 'n_sig', n_sig, n_sig_err, '.0f', '')],
-        [(r'n_{bkg}', 'n_bkg', n_bkg, n_bkg_err, '.0f', '')],
-        [('c0', 'c0', c0, c0_err, '.3f', ''),
-         ('c1', 'c1', c1, c1_err, '.3f', '')],
     ]
+    # n_bkg, c0 and c1 are absent from `params` when they are fixed (build_fit_figure)
+    if 'n_bkg' in params:
+        stats.append([(r'n_{bkg}', 'n_bkg', *plot_utils.val_err(params['n_bkg']), '.0f', '')])
+    bkg_row = [(name, name, *plot_utils.val_err(params[name]), '.3f', '')
+               for name in ('c0', 'c1') if name in params]
+    if bkg_row:
+        stats.append(bkg_row)
     extra = (
         fr'$\chi^2/ndof$ = {chi2_per_ndof:.2f}',
         f'χ²/ndof = {chi2_per_ndof:.2f}',
@@ -48,7 +50,6 @@ def dcb_text(params, chi2_per_ndof):
     mean, mean_err   = plot_utils.val_err(params['mean'])
     sigma, sigma_err = plot_utils.val_err(params['sigma'])
     n_sig, n_sig_err = plot_utils.val_err(params['n_sig'])
-    n_bkg, n_bkg_err = plot_utils.val_err(params['n_bkg'])
 
     # DCB tail parameters (asymmetric)
     alphaL, alphaL_err = plot_utils.val_err(params.get('alphaL', {}))
@@ -71,9 +72,12 @@ def dcb_text(params, chi2_per_ndof):
         [(r'\alpha_R', 'α_R', alphaR, alphaR_err, '.2f', ''),
          (r'n_R', 'n_R', nR, nR_err, '.2f', '')],
         [(r'n_{sig}', 'n_sig', n_sig, n_sig_err, '.0f', '')],
-        [(r'n_{bkg}', 'n_bkg', n_bkg, n_bkg_err, '.0f', '')],
-        bkg_row,
     ]
+    # n_bkg, c0 and c1 are absent from `params` when they are fixed (build_fit_figure)
+    if 'n_bkg' in params:
+        stats.append([(r'n_{bkg}', 'n_bkg', *plot_utils.val_err(params['n_bkg']), '.0f', '')])
+    if bkg_row:
+        stats.append(bkg_row)
     # Values which are not a value-error pair (e.g., chi2/ndof). Must provide exact strings for
     # desired LaTeX and terminal output.
     extra = (
@@ -93,6 +97,12 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
 
     x_lim: (xmin, xmax) override; defaults to the data range. title: optional plot title (e.g. to
     identify one page of a multi-page PDF); omitted entirely when not given.
+
+    The stats box starts with plot_style.sample_label of meta['input_file'], all of it in the
+    legend's font size, and the points are labelled 'MC' for an input path with an 'mc' segment
+    ('Data' otherwise). Parameters named in meta['fixed_params'] (e.g. n_bkg, c0, c1 of an
+    MC-matched DCB fit) are left out of the stats box, and with n_bkg among them the background is
+    not drawn.
 
     If `data` has a 'phase_space' entry ({'x': [...], 'f': [...]}, the per-bin phase-space factor
     f(M) the fit multiplied its shapes by), it is drawn in its own panel between the fit and the
@@ -143,11 +153,14 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
         ax.set_title(title)
 
     # Top panel: data + fit
+    meta = data.get('meta', {})
+    input_file = meta.get('input_file', '')
+    fixed = meta.get('fixed_params', {})
     xmin, xmax = x_lim if x_lim is not None else (x.min() - 0.5, x.max() + 0.5)
     ax.set_xlim(xmin, xmax)
     ax.errorbar(x, y, yerr=yerr,
                 fmt='+',
-                label='Data',
+                label='MC' if 'mc' in input_file.split('/') else 'Data',
                 color=plot_style.COLORS['data'],
                 markersize=7,
                 markeredgewidth=1.3,
@@ -156,9 +169,10 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     )
     # Background as a filled region from zero, total fit drawn on top of it -- the gap between the
     # fill's top edge and the fit curve reads as signal.
-    ax.fill_between(x, 0, bkg, label='Background',
-                     color=plot_style.COLORS['background'], alpha=0.35,
-                     linewidth=0.8, edgecolor=plot_style.COLORS['background'])
+    if 'n_bkg' not in fixed:
+        ax.fill_between(x, 0, bkg, label='Background',
+                         color=plot_style.COLORS['background'], alpha=0.35,
+                         linewidth=0.8, edgecolor=plot_style.COLORS['background'])
     ax.plot(x, fit, label='Total fit', color=plot_style.COLORS['fit'], linewidth=1.8)
     ax.axvline(x=547.86, color=plot_style.COLORS['reference'],
                linestyle='--', label='PDG Mass')
@@ -171,13 +185,16 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
 
     legend = ax.legend(loc='upper right', frameon=True, fancybox=False,
                         edgecolor='none', framealpha=1)
-    ax.set_ylabel(f'Candidates / ({bin_width:.1f} MeV/c²)')
+    edges = np.append(x - bin_width / 2, x[-1] + bin_width / 2)
+    ax.set_ylabel(plot_style.count_label('Candidates', edges, 'MeV'))
 
     # Add fit parameters to plot
-    params = data['fit']['parameters']
+    params = {name: value for name, value in data['fit']['parameters'].items()
+              if name not in fixed}
     chi2_per_ndof = data['fit']['chi2_per_ndof']
     plot_text, term_text = build_text(params, chi2_per_ndof)
-    stats_box = plot_style.add_stats_box(ax, plot_text)
+    stats_box = plot_style.add_stats_box(ax, plot_text, sample=plot_style.sample_label(input_file),
+                                         fontsize=legend.get_texts()[0].get_fontsize())
 
     # Reserve headroom above the data/curves for the stats box + legend, sized by actually measuring
     # what was rendered -- not a fixed fraction.
@@ -190,7 +207,7 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     ax_pull.axhline(0, color=plot_style.COLORS['data'], lw=0.8)
     ymin, ymax = int(np.floor(pulls.min())) - 1, int(np.ceil(pulls.max())) + 1
     ax_pull.set_ylim(ymin, ymax)
-    ax_pull.set_yticks(np.arange(ymin, ymax + 1, 1))
+    ax_pull.yaxis.set_major_locator(mticker.MaxNLocator(nbins=6, integer=True))
     plot_style.style_axes(ax_pull, minor_y=False)
     # Labels
     ax_pull.set_ylabel('Pulls')

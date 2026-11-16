@@ -36,7 +36,7 @@ It writes into `--outdir`:
 
 `--n-max N` puts an upper limit N on the DCB tail exponents n_L and n_R (no limit by default).
 
-`--max-events N` reads only the first N events, for quick iteration on large files. The drivers only expose fit hyperparameters as flags. Plot styling (font, colors, ticks, stats box, etc.) is fixed in `plot_mass_fit.py`/`plot_style.py`, and must be changed there manually.
+`--max-events N` reads only the first N events, for quick iteration on large files. The drivers only expose fit hyperparameters as flags. Plot styling (font, colors, ticks, stats box, etc.) is fixed in `plot_mass_fit.py`/`plot_style.py`, and must be changed there manually. Every fit plot starts its stats box with `plot_style.sample_label` of the input path (decay, Data or MC, year), in the legend's font size like the fit parameters below it, labels its points MC for an input under `ntuple/mc/`, and counts `Candidates / (<bin width> MeV)` on its y axis (`plot_style.count_label`; natural units, no factors of c). The `--mc-match` fits record their fixed n_bkg, c0 and c1 in the meta `fixed_params` of `results_gauss.json` and `results_dcb.json`; their plots leave them out of the stats box and draw no background.
 
 ## Fit chain: MC Gaussian, MC DCB, data DCB
 
