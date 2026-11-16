@@ -179,6 +179,8 @@ def fig_decomposition(outdir, results, i, j):
     axes[0].plot(masses, factor, color=C['phase_space'], lw=2, label='$f(M)$')
     axes[0].set_ylim(-0.05, 1.1); axes[0].set_ylabel('$f(M)$')
     axes[0].legend(loc='lower right', fontsize=11)
+    plot_style.add_stats_box(axes[0], '', sample=plot_style.sample_label(
+        results['meta'].get('input_file', '')))
     for ax, (name, color, alone, label, renorm) in zip(axes[1:], shapes, strict=True):
         kept = trapezoid(factor * alone, masses)
         ax.plot(masses, alone, color=color, ls='--', lw=1.6, label=f'{label} alone (area 1)')
@@ -197,9 +199,9 @@ def fig_decomposition(outdir, results, i, j):
     plot_style.save_plot(fig, os.path.join(outdir, f'decomposition_{i}_{j}.png'), dpi=150)
 
 
-def fig_worked_example(outdir, events):
+def fig_worked_example(outdir, events, sample=''):
     """The worked-example Dalitz point against D(M) at six masses, and the masses of the candidates
-    reconstructed near it."""
+    reconstructed near it, with the text `sample` (plot_style.sample_label) in the upper left."""
     x, y = WORKED_POINT
     m_min, m_max = (float(v) for v in kinematics.m123_limits(x, y))
     masses = [kinematics.M_ETA, m_min, 620.0, 680.0, m_max, 760.0]
@@ -233,11 +235,13 @@ def fig_worked_example(outdir, events):
                label=fr'$[M_\mathrm{{min}}, M_\mathrm{{max}}]$ = [{m_min:.1f}, {m_max:.1f}] MeV')
     ax.axvspan(XMAX, hi_axis, fc='none', ec=C['reference'], hatch='//', lw=0,
                label='outside the mass window')
-    ax.hist(Mc[near], bins=np.arange(lo_axis, hi_axis + 1, 5), histtype='step',
+    mass_edges = np.arange(lo_axis, hi_axis + 1, 5)
+    ax.hist(Mc[near], bins=mass_edges, histtype='step',
             color=C['data'], lw=1.8, label=f'{near.sum()} candidates near the point')
     ax.axvline(kinematics.M_ETA, color=C['reference'], ls='--', label=r'$m_\eta$')
     ax.set_xlim(lo_axis, hi_axis)
-    ax.set_xlabel(M_LABEL); ax.set_ylabel('Candidates / 5 MeV')
+    ax.set_xlabel(M_LABEL); ax.set_ylabel(plot_style.count_label('Candidates', mass_edges, 'MeV'))
+    plot_style.add_stats_box(ax, '', sample=sample)
     ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
     ax.legend(loc='upper right', fontsize=11)
     plot_style.style_axes(ax)
@@ -285,9 +289,10 @@ def fig_strips(outdir):
     fig.savefig(out, dpi=150); print(f'[DONE] Plot saved to {out}.')
 
 
-def fig_uniformity(outdir, events, i, j):
+def fig_uniformity(outdir, events, i, j, sample=''):
     """How the bin's candidates are actually spread across it, and f computed from that spread
-    instead of from area."""
+    instead of from area, with the text `sample` (plot_style.sample_label) in the upper left of the
+    right panel."""
     (a, b), (lo, hi) = bin_ranges(i, j)
     sel = ((events['m12s'] >= a) & (events['m12s'] < b)
            & (events['m23s'] >= lo) & (events['m23s'] < hi))
@@ -312,6 +317,7 @@ def fig_uniformity(outdir, events, i, j):
     ax1.set_xlabel(M_LABEL); ax1.set_ylabel('reachable fraction')
     ax1.set_title('Reachable fraction at each M')
     ax1.legend(loc='lower right', fontsize=10)
+    plot_style.add_stats_box(ax1, '', sample=sample)
     plot_style.style_axes(ax1)
     plot_style.save_plot(fig, os.path.join(outdir, f'uniformity_{i}_{j}.png'), dpi=150)
 
@@ -340,8 +346,9 @@ def main():
         import driver_dalitz
         m12s, m23s, masses, _ = driver_dalitz.select_candidates(args.infile)
         events = {'m12s': m12s, 'm23s': m23s, 'masses': masses}
-        fig_worked_example(args.outdir, events)
-        fig_uniformity(args.outdir, events, *UNIFORMITY_BIN)
+        sample = plot_style.sample_label(args.infile)
+        fig_worked_example(args.outdir, events, sample)
+        fig_uniformity(args.outdir, events, *UNIFORMITY_BIN, sample)
     plt.close('all')
     print(f'[DONE] figures in {os.path.abspath(args.outdir)}')
 

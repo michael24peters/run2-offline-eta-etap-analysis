@@ -48,7 +48,8 @@ def mass_binning(meta):
 
 def plot_yield_maps(result, prefix):
     """<prefix>_signal_yield.png and <prefix>_bkg_yield.png: the fitted n_sig and n_bkg of each
-    valid bin on the Dalitz grid, with the eta's Dalitz region. Bins without a valid fit are 0."""
+    valid bin on the Dalitz grid, with the eta's Dalitz region and the sample label of the input.
+    Bins without a valid fit are 0."""
     dalitz = result['dalitz']
     m12_edges = np.array(dalitz['m12_edges'])
     m23_edges = np.array(dalitz['m23_edges'])
@@ -68,6 +69,8 @@ def plot_yield_maps(result, prefix):
         ax.legend(loc='upper right', fontsize=8)
         ax.set_xlabel(r'$m^2_{\gamma\mu^+}$ [GeV$^2$]')
         ax.set_ylabel(r'$m^2_{\mu^+\mu^-}$ [GeV$^2$]')
+        plot_style.add_stats_box(ax, '', sample=plot_style.sample_label(
+            result['meta'].get('input_file', '')))
         plot_style.add_bin_index_axes(ax, m12_edges, m23_edges)
         plot_style.save_plot(fig, f'{prefix}_{name}_yield.png')
         plt.close(fig)
@@ -138,6 +141,7 @@ def bin_page(result, b):
         return fig
 
     # Data-only page in the fit pages' style, with the reason there is no fit
+    input_file = result['meta'].get('input_file', '')
     plot_utils.apply_font()
     plt.rcParams['font.size'] = 19
     fig, (ax, ax_pull) = plt.subplots(2, 1, figsize=(12, 12), sharex=True,
@@ -146,19 +150,22 @@ def bin_page(result, b):
     ax.set_xlim(xmin, xmax)
     ax.errorbar(mass_centers, counts, yerr=np.sqrt(counts), fmt='+',
                 color=C['data'], markersize=7, markeredgewidth=1.3,
-                elinewidth=1.3, capsize=0, label='Data')
+                elinewidth=1.3, capsize=0,
+                label='MC' if 'mc' in input_file.split('/') else 'Data')
     ax.axvline(x=kinematics.M_ETA, color=C['reference'], linestyle='--', label='PDG Mass')
     plot_style.style_axes(ax)
     legend = ax.legend(loc='upper right', frameon=True, fancybox=False,
                        edgecolor='none', framealpha=1)
-    ax.set_ylabel(f'Candidates / ({mass_bin_width:.1f} MeV/c²)')
+    ax.set_ylabel(plot_style.count_label('Candidates', mass_edges, 'MeV'))
     if b['fitted']:
         status = f"FIT DID NOT CONVERGE\nn_cand = {b['n_cand']:.0f}"
     else:
         status = (f"NO FIT ATTEMPTED\n{b['n_cand']:.0f} candidates "
                   f"(threshold is {dalitz['min_candidates']})")
-    status_box = ax.text(0.02, 0.97, status, transform=ax.transAxes, va='top',
-                         ha='left', family='monospace', color='red')
+    status_box = plot_style.add_stats_box(ax, status,
+                                          sample=plot_style.sample_label(input_file),
+                                          textprops={'family': 'monospace', 'color': 'red'},
+                                          fontsize=legend.get_texts()[0].get_fontsize())
     plot_style.reserve_top_margin(ax, max(float(counts.max()), 1.0),
                                   artists=[status_box, legend])
     plot_style.format_y_axis(ax)

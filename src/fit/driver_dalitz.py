@@ -70,6 +70,7 @@ sys.path.insert(0, os.path.join(_here, '..', 'plot'))
 import cut_utils
 import fit_utils
 import kinematics
+import plot_style
 import selection
 from fit_dalitz import fit_dalitz, hole_neighbors
 from fit_dcb import TAIL_PARAMS
@@ -267,7 +268,8 @@ def main():
         json.dump(selection_json, f, indent=2)
     print(f'[DONE] {selection_path}')
     for name, hist_range in HISTOGRAMS:
-        plot_dalitz_hist(m12s, m23s, hist_range, os.path.join(args.outdir, name))
+        plot_dalitz_hist(m12s, m23s, hist_range, os.path.join(args.outdir, name),
+                         sample=plot_style.sample_label(args.infile))
 
     # --- Fit ---
 
