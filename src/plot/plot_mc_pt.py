@@ -23,12 +23,12 @@ import plot_style
 sys.path.insert(0, _here)
 import plot_pt
 
-# (file-name suffix, PID, LaTeX symbol, x-axis max [MeV/c])
+# (file-name suffix, PID, LaTeX symbol, x-axis max [MeV], y-axis entries)
 PARTICLES = [
-    ('eta',      221, r'\eta',    30000),
-    ('mu_plus',  -13, r'\mu^+',   15000),
-    ('mu_minus', 13,  r'\mu^-',   15000),
-    ('gamma',    22,  r'\gamma',  15000),
+    ('eta',      221, r'\eta',    30000, r'$\eta$ mesons'),
+    ('mu_plus',  -13, r'\mu^+',   15000, 'Muons'),
+    ('mu_minus', 13,  r'\mu^-',   15000, 'Muons'),
+    ('gamma',    22,  r'\gamma',  15000, 'Photons'),
 ]
 
 def parse_args():
@@ -62,18 +62,20 @@ if __name__ == '__main__':
         'gamma':    daughter_mask & (tree['mc_pid'] == 22),
     }
 
+    sample = plot_style.sample_label(args.input)
     pts = {}
-    for name, pid, symbol, xmax in PARTICLES:
+    for name, pid, symbol, xmax, entries in PARTICLES:
         pt = ak.to_numpy(ak.flatten(pt_all[masks[name]]))
         pts[name] = pt
         output = os.path.join(args.output_dir, f'mc_pt_{name}.png')
-        plot_pt.plot_pt_hist(pt, fr'$p_T({symbol})$ [MeV/$c$]', output, xmax)
+        plot_pt.plot_pt_hist(pt, fr'$p_T({symbol})$ [MeV]', output, xmax, entries=entries,
+                             sample=sample)
         print(f'[INFO] {name} (PID {pid}): n={len(pt)}, '
-              f'p_T range [{pt.min():.2f}, {pt.max():.2f}] MeV/c')
+              f'p_T range [{pt.min():.2f}, {pt.max():.2f}] MeV')
 
     dimuon_output = os.path.join(args.output_dir, 'mc_pt_dimuon.png')
     plot_pt.plot_pt_overlay(
         [(r'$\mu^+$', pts['mu_plus'], plot_style.COLORS['fit']),
          (r'$\mu^-$', pts['mu_minus'], plot_style.COLORS['pull'])],
-        r'$p_T(\mu)$ [MeV/$c$]', dimuon_output, xmax=15000)
+        r'$p_T(\mu)$ [MeV]', dimuon_output, xmax=15000, entries='Muons', sample=sample)
     print(f'[INFO] dimuon overlay saved to {dimuon_output}')
