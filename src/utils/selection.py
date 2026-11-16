@@ -33,8 +33,8 @@ MU_IP_CHI2_MAX  = 6.0              # IP chi2
 
 # The muon thresholds that differ by channel, as muon_cuts takes them ('pt_min' None: no pT cut)
 MUON_THRESHOLDS = {'pt_min': MU_PT_MIN, 'p_min': MU_P_MIN, 'pnn_mu_min': PNN_MU_MIN}
-# eta -> 4mu: no pT cut, p > 5 GeV, ProbNNmu > 0.8
-MUON_THRESHOLDS_4MU = {'pt_min': None, 'p_min': 5000.0, 'pnn_mu_min': 0.8}
+# eta -> 4mu: no pT cut, p > 5 GeV, ProbNNmu > 0.6
+MUON_THRESHOLDS_4MU = {'pt_min': None, 'p_min': 5000.0, 'pnn_mu_min': 0.6}
 
 # TOS lines per trigger level.
 # TODO: use the commented-out lines again.
