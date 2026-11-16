@@ -58,10 +58,17 @@ def plot_branch(input, branch_name, n_evts=-1, output='branch_plot.png'):
     fig, ax = plt.subplots()
     # Look only at 0.1-99.9 percentiles so outliers don't stretch the axis
     x_range = np.percentile(branch_data, [0.1, 99.9])
-    ax.hist(branch_data, bins=150, range=x_range, histtype='step', color=plot_style.COLORS['data'])
+    counts, _, _ = ax.hist(branch_data, bins=150, range=x_range, histtype='step',
+                           color=plot_style.COLORS['data'])
     ax.set_xlabel(branch_name)
-    ax.set_ylabel('Counts')
+    # The branch's unit is unknown, so the y label has no bin width
+    entries = ('Candidates' if branch_name.startswith('tag_')
+               else 'Daughters' if branch_name.startswith('prt_') else 'Entries')
+    ax.set_ylabel(entries)
     plot_style.style_axes(ax)
+    sample = plot_style.sample_label(input) if isinstance(input, str) else ''
+    sample_box = plot_style.add_stats_box(ax, '', sample=sample)
+    plot_style.reserve_top_margin(ax, max(counts.max(), 1), [sample_box])
     print('[INFO] Saving plot...')
     plot_style.save_plot(fig, output)
     plt.close(fig)

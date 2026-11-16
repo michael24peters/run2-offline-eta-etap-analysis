@@ -93,15 +93,17 @@ ax.plot(x_gauss, y_gauss,
 # Plot configuration Axis labels, legend
 ax.set_xlabel(r'Pull  $(y_{\mathrm{data}} - y_{\mathrm{fit}})\,/\,\sigma_{\mathrm{data}}$',
               fontsize=12)
-ax.set_ylabel('Pull counts')
+ax.set_ylabel(plot_style.count_label('Mass bins', edges))
 ax.set_xlim(xmin, xmax)
 plot_style.style_axes(ax)
 # Legend
-ax.legend(frameon=False, loc='upper right')
+legend = ax.legend(frameon=False, loc='upper right')
 
-# --- Summary text ---
+# --- Summary text, below the sample label of the fit's input ---
 text = f'$\\mu = {mean:+.3f}$\n$\\sigma = {std:.3f}$'
-ax.text(0.025, 0.95, text, transform=ax.transAxes, verticalalignment='top')
+sample = plot_style.sample_label(data.get('meta', {}).get('input_file', ''))
+stats_box = plot_style.add_stats_box(ax, text, sample=sample)
+plot_style.reserve_top_margin(ax, max(counts.max(), y_gauss.max()), [stats_box, legend])
 
 # --- Save plot ---
 os.makedirs(os.path.dirname(args.output) or '.', exist_ok=True)

@@ -11,7 +11,8 @@ normalised to unit area, with a cut value marked.
     *_log.png             the same with a log y axis
 
 The inputs are read one chunk of selection.STEP_SIZE at a time (cut_utils.iterate_branches). The
-fraction of data and MC passing a few thresholds (> for min, < for max) is printed.
+fraction of data and MC passing a few thresholds (> for min, < for max) is printed. Every figure
+carries plot_style.sample_label of DATA, with 'Data and MC' as the sample.
 
 Usage:
     python src/plot/plot_muon_branch.py DATA MC --mc-match PID [PID ...] --outdir OUTDIR \
@@ -76,22 +77,32 @@ def read_values(path, branch, how, mc_match=None):
     return np.concatenate(per_muon), np.concatenate(per_candidate)
 
 
-def plot(data, mc, edges, cut, xlabel, path):
-    """`data` and `mc` normalised over `edges`, `cut` marked; `path` and `path` with _log."""
+def plot(data, mc, edges, cut, xlabel, entries, sample, path):
+    """`data` and `mc` normalised over `edges`, `cut` marked, the text `sample` in the upper
+    left, the y axis the fraction of `entries` ('muons' or 'candidates') per bin; `path` and
+    `path` with _log."""
     for logy, suffix in ((False, ''), (True, '_log')):
         fig, ax = plt.subplots()
-        ax.hist(data, bins=edges, density=True, histtype='step', linewidth=1.5,
-                color=plot_style.COLORS['data'], label=f'data ({len(data)})')
-        ax.hist(mc, bins=edges, density=True, histtype='step', linewidth=1.5,
-                color=plot_style.COLORS['fit'], label=f'MC-matched MC ({len(mc)})')
+        data_density, _, _ = ax.hist(data, bins=edges, density=True, histtype='step',
+                                     linewidth=1.5, color=plot_style.COLORS['data'],
+                                     label=f'data ({len(data)})')
+        mc_density, _, _ = ax.hist(mc, bins=edges, density=True, histtype='step', linewidth=1.5,
+                                   color=plot_style.COLORS['fit'],
+                                   label=f'MC-matched MC ({len(mc)})')
         if cut is not None:
             ax.axvline(cut, color=plot_style.COLORS['reference'], linestyle='--')
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(plot_style.count_label(f'Fraction of {entries}', edges))
+        plot_style.style_axes(ax)
+        legend = ax.legend(frameon=False, loc='upper right')
+        sample_box = plot_style.add_stats_box(ax, '', sample=sample)
+        top = max(data_density.max(), mc_density.max())
         if logy:
             ax.set_yscale('log')
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel('Normalised entries')
-        plot_style.style_axes(ax)
-        ax.legend(frameon=False, loc='upper center')
+            plot_style.reserve_top_margin(ax, top, [sample_box, legend], ymin=ax.get_ylim()[0],
+                                          growth=2.0, max_iter=12)
+        else:
+            plot_style.reserve_top_margin(ax, top, [sample_box, legend])
         plot_style.save_plot(fig, path.replace('.png', f'{suffix}.png'))
         plt.close(fig)
 
@@ -120,9 +131,11 @@ def main():
     mc_muon, mc_candidate = read_values(args.mc, args.branch, args.how, args.mc_match)
 
     plot_utils.apply_font()
-    plot(data_muon, mc_muon, edges, args.cut, f'{args.branch} (per muon)',
+    sample = plot_style.sample_label(args.data, sample='Data and MC')
+    plot(data_muon, mc_muon, edges, args.cut, f'{args.branch} (per muon)', 'muons', sample,
          os.path.join(args.outdir, f'{args.branch}.png'))
     plot(data_candidate, mc_candidate, edges, args.cut, f'{args.how} {args.branch} of the muons',
+         'candidates', sample,
          os.path.join(args.outdir, f'{args.branch}_{args.how}.png'))
     thresholds = np.linspace(args.range[0], args.range[1], N_THRESHOLDS + 2)[1:-1]
     for label, data, mc in (('per muon', data_muon, mc_muon),

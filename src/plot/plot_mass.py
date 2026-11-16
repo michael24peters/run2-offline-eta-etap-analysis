@@ -44,12 +44,15 @@ def main():
     # Plot
     plot_utils.apply_font()
     fig, ax = plt.subplots()
-    ax.hist(masses, bins=np.linspace(args.xmin, args.xmax, args.nbins + 1), histtype='step',
-            linewidth=1.5, color=plot_style.COLORS['data'])
+    edges = np.linspace(args.xmin, args.xmax, args.nbins + 1)
+    counts, _, _ = ax.hist(masses, bins=edges, histtype='step', linewidth=1.5,
+                           color=plot_style.COLORS['data'])
     ax.axvline(kinematics.M_ETA, color=plot_style.COLORS['reference'], linestyle='--')
     ax.set_xlabel(plot_style.decay_label({'input_file': args.infile}))
-    ax.set_ylabel('Candidates')
+    ax.set_ylabel(plot_style.count_label('Candidates', edges, 'MeV'))
     plot_style.style_axes(ax)
+    sample_box = plot_style.add_stats_box(ax, '', sample=plot_style.sample_label(args.infile))
+    plot_style.reserve_top_margin(ax, max(counts.max(), 1), [sample_box])
     plot_style.save_plot(fig, args.output)
 
 

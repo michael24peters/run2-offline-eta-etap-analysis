@@ -89,19 +89,20 @@ plt.rcParams['font.size'] = 12
 fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
 
-axes[0].hist(decay_lengths[~dl_mask], bins=100, histtype='step', color=plot_style.COLORS['data'])
-axes[0].set_xlabel('Decay length [mm]')
-axes[0].set_ylabel('Entries')
-axes[0].set_title(r'$\eta \to \mu\mu\gamma$ decay length')
-axes[0].set_yscale('log')
-
-
-axes[1].hist(pseudo_lifetimes[~pl_mask], bins=100, histtype='step', color=plot_style.COLORS['data'])
-axes[1].set_xlabel('Pseudo-lifetime [s]')
-axes[1].set_ylabel('Entries')
-axes[1].set_title(r'$\eta \to \mu\mu\gamma$ pseudo-lifetime')
-axes[1].set_yscale('log')
-for ax in axes:
+sample = plot_style.sample_label(args.input)
+for ax, values, xlabel, unit, title in (
+        (axes[0], decay_lengths[~dl_mask], 'Decay length [mm]', 'mm',
+         r'$\eta \to \mu\mu\gamma$ decay length'),
+        (axes[1], pseudo_lifetimes[~pl_mask], 'Pseudo-lifetime [s]', 's',
+         r'$\eta \to \mu\mu\gamma$ pseudo-lifetime')):
+    counts, edges, _ = ax.hist(values, bins=100, histtype='step', color=plot_style.COLORS['data'])
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(plot_style.count_label('Candidates', edges, unit))
+    ax.set_title(title)
+    ax.set_yscale('log')
     plot_style.style_axes(ax)
+    sample_box = plot_style.add_stats_box(ax, '', sample=sample)
+    plot_style.reserve_top_margin(ax, max(counts.max(), 1), [sample_box], ymin=0.5, growth=2.0,
+                                  max_iter=12)
 
 plot_style.save_plot(fig, outfile)

@@ -95,10 +95,9 @@ print(f'[INFO] q2 range: [{q2s.min():.4f}, {q2s.max():.4f}]')
 plot_utils.apply_font()
 plt.rcParams['font.size'] = 14
 fig, ax = plt.subplots(figsize=(7, 6))
-ax.hist(q2s, bins=200, range=(0.04, 0.92), histtype='step', color=plot_style.COLORS['data'])
 # Get bin edges and counts
 bin_edges = np.linspace(0.04, 0.92, 201)
-counts = np.histogram(q2s, bins=bin_edges)[0]
+counts, _, _ = ax.hist(q2s, bins=bin_edges, histtype='step', color=plot_style.COLORS['data'])
 # Save to JSON file
 import json
 
@@ -106,11 +105,13 @@ json_outfile = 'out/q2_histogram.json'
 with open(json_outfile, 'w') as f:
     json.dump({
         'bin_edges': bin_edges.tolist(),
-        'counts': counts.tolist()
+        'counts': counts.astype(int).tolist()
     }, f, indent=4)
 print(f'[DONE] q2 histogram data saved to {json_outfile}')
 
 ax.set_xlabel(r'$q^2 (m^2_{\mu^+,\mu^-})$ [GeV$^2$]')
-ax.set_ylabel('Counts')
+ax.set_ylabel(plot_style.count_label('Candidates', bin_edges, 'GeV$^2$'))
 plot_style.style_axes(ax)
+sample_box = plot_style.add_stats_box(ax, '', sample=plot_style.sample_label(args.input))
+plot_style.reserve_top_margin(ax, max(counts.max(), 1), [sample_box])
 plot_style.save_plot(fig, outfile, dpi=150)
