@@ -18,6 +18,10 @@ daughters, and only the branches the drivers read.
 The selection is driver_mass_fit's for eta -> mu+ mu- and eta -> mu+ mu- gamma
 (selection.TOS_LINES), without an MC match. drop_malformed checks every branch written.
 
+An MC skim is never the input of an MC-matched run (--mc-match): the MC match is the first cut of
+every MC-matched run, before TOS, the muon cuts and the candidate pick, and a skim has already
+picked its candidate with no MC match. MC-matched runs read the raw files (mag*/*.root).
+
 The branches written are WRITE_BRANCHES (both mass branches of driver_dalitz.MASS_SOURCES and
 their daughter four-momenta, prt_idx_mom, selection.MUON_CUT_BRANCHES, run_n, evt_n), every
 tag_*_tos* branch of the input and, in MC, selection.MC_BRANCHES. prt_tight_mu keeps one entry

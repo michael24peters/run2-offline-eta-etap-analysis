@@ -36,8 +36,9 @@ One candidate per event is picked at random among those that pass the cuts
 
 --mc-match (signal MC only) keeps the candidates with every daughter MC-matched to eta -> mu+
 mu- gamma (bkg_utils.signal_candidate_mask). It is the first cut, before TOS, pnn_mu and the
-candidate pick. The matched candidates are fit with no tail prior and the background fixed to 0
-(fit_dalitz signal_only).
+candidate pick, so its input is the raw MC files (mag*/*.root), never a skim_eta.root
+(src/root/skim.py), whose candidate was picked with no MC match. The matched candidates are fit with
+no tail prior and the background fixed to 0 (fit_dalitz signal_only).
 
 --tail-prior takes the 'fit' block of a results JSON (results_dcb.json of driver_mass_fit.py, or
 dalitz_fit_<factor>.json): the global fit carries the tail prior of that fit, its stdevs times

@@ -12,7 +12,7 @@ plot_*.py     render
 
 Awkward arrays handle everything jagged (ROOT I/O, event/candidate structure) and live only in `src/utils/cut_utils.py`. Numpy handles everything flat (histogram, PDFs, curves) and lives in `src/utils/fit_utils.py` and the `fit_*` modules. The conversion is `cut_utils.values(tree, branch, mask)`, called in the driver.
 
-For MC, MC matching is always the first cut: it is applied before TOS, pnn_mu and the candidate pick.
+For MC, MC matching is always the first cut: it is applied before TOS, pnn_mu and the candidate pick. Every MC-matched run (`--mc-match`) therefore reads the raw MC files (`mag*/*.root`), never a `skim_eta.root`: a skim has already picked its candidate with no MC match.
 
 Most everything is a library, so the drivers are the only entry point for fitting (`fit_dcb.py` / `fit_gauss.py`, etc.).
 
