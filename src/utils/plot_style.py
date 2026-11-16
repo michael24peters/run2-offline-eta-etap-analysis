@@ -7,7 +7,10 @@ summary statistics both to terminal and matplotlib.
 
 import math
 
+import matplotlib as mpl
 import matplotlib.ticker as mticker
+import numpy as np
+from matplotlib.offsetbox import AnchoredOffsetbox, TextArea, VPacker
 
 # Shared fit-plot palette. fit/background/pull/phase_space colorblind-safe.
 COLORS = {
@@ -36,6 +39,25 @@ CHANNEL_LABELS = {
     'eta2mumumumu':  r'\eta \to \mu^+ \mu^- \mu^+ \mu^-',
 }
 
+DATA_YEAR = 2018   # every ntuple: 2018 Turbo data (Collision18) or 2018-conditions MC
+BOX_FONT_SCALE = 0.75   # add_stats_box text size, relative to the current font size
+
+def sample_label(path, sample=None):
+    """
+    '<decay> <sample> <year>' text of an input path, e.g. '$\\eta \\to \\mu^+ \\mu^-$ MC 2018': the
+    decay from the channel segment of `path`, the sample 'MC' for a path with an 'mc' segment and
+    'Data' for one with an 'lhcb' segment, unless `sample` is given. '' if no known channel is
+    found.
+    """
+    segments = path.split('/')
+    channels = [segment for segment in segments if segment in CHANNEL_LABELS]
+    if not channels:
+        return ''
+    if sample is None:
+        sample = 'MC' if 'mc' in segments else 'Data' if 'lhcb' in segments else ''
+    parts = [f'${CHANNEL_LABELS[channels[0]]}$', sample, str(DATA_YEAR)]
+    return ' '.join(part for part in parts if part)
+
 def decay_label(meta):
     """
     LaTeX x-axis mass label for a fit-result's meta dict, derived from the channel segment of
@@ -44,8 +66,21 @@ def decay_label(meta):
     segments = meta.get('input_file', '').split('/')
     for segment in segments:
         if segment in CHANNEL_LABELS:
-            return fr'$m({CHANNEL_LABELS[segment]})$ [MeV/c$^2$]'
-    return 'Mass [MeV/c²]'
+            return fr'$m({CHANNEL_LABELS[segment]})$ [MeV]'
+    return 'Mass [MeV]'
+
+def count_label(entries, edges, unit=''):
+    """
+    y-axis label of a histogram of `entries` (e.g. 'Candidates', 'Muons') over the bin `edges`:
+    '<entries> / (<bin width> <unit>)' for bins of one width, e.g. 'Candidates / (1 MeV)' or
+    'Muons / (0.5)' for a quantity with no unit, and '<entries>' alone for bins of varying width
+    (e.g. log-spaced). Units are natural units: MeV, GeV, never MeV/c or MeV/c².
+    """
+    widths = np.diff(edges)
+    if not np.allclose(widths, widths[0], rtol=1e-6, atol=0):
+        return entries
+    width = f'{widths[0]:.4g} {unit}'.strip()
+    return f'{entries} / ({width})'
 
 def build_stats_text(stats, extra=None):
     """
@@ -80,20 +115,30 @@ def build_stats_text(stats, extra=None):
         term_lines.append(extra[1])
     return '\n'.join(plot_lines), '\n'.join(term_lines)
 
-def add_stats_box(ax, plot_text):
+def add_stats_box(ax, plot_text, sample='', textprops=None, fontsize=None):
     """
-    Draw a boxed text annotation in `ax`'s upper-left corner. Does nothing and returns None if
-    plot_text is empty. Returns the Text artist otherwise, so the caller can measure it (see
-    reserve_top_margin).
+    Draw a white box in `ax`'s upper-left corner: `sample` (a sample_label) above `plot_text`
+    (with `textprops`, e.g. {'color': 'red'}), both in `fontsize` points (default: BOX_FONT_SCALE
+    times the current font size). Does nothing and returns None if both are empty. Returns the box
+    artist otherwise, so the caller can measure it (see reserve_top_margin).
     """
-    if not plot_text:
+    size = fontsize if fontsize is not None else BOX_FONT_SCALE * mpl.rcParams['font.size']
+    rows = []
+    if sample:
+        rows.append(TextArea(sample, textprops={'fontsize': size}))
+    if plot_text:
+        rows.append(TextArea(plot_text, textprops={'fontsize': size, **(textprops or {})}))
+    if not rows:
         return None
-    return ax.text(0.02, 0.97, plot_text,
-                    transform=ax.transAxes,
-                    horizontalalignment='left',
-                    verticalalignment='top',
-                    bbox=dict(boxstyle='round,pad=0.4', facecolor='none',
-                              edgecolor='none'))
+    box = AnchoredOffsetbox(loc='upper left', child=VPacker(children=rows, align='left', pad=0,
+                                                            sep=0.4 * size),
+                            bbox_to_anchor=(0.02, 0.97), bbox_transform=ax.transAxes,
+                            borderpad=0, pad=0.4, frameon=True)
+    box.patch.set_boxstyle('round,pad=0,rounding_size=0.4')
+    box.patch.set_facecolor('white')
+    box.patch.set_edgecolor('none')
+    ax.add_artist(box)
+    return box
 
 def reserve_top_margin(ax, content_max, artists, ymin=0, growth=1.15, max_iter=8):
     """
