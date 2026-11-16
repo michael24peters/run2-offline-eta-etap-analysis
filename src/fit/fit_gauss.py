@@ -31,6 +31,13 @@ def fit_gauss(values, xmin=500.0, xmax=600.0, nbins=100,
     sigma_prior : optional (values, cov) for sigma -- `values` a length-1 array, `cov` its 1x1
              covariance. Adds NormalConstraint(('sigma',), values, error=cov) to the cost, as in
              fit_dcb.
+    fixed_params : optional dict {param_name: value}, any of mean, sigma, n_sig, n_bkg, c0, c1.
+             Each is seeded at the given value and held fixed, e.g. {'n_bkg': 0, 'c0': 0, 'c1': 0}
+             for no background.
+
+    The fit is one MIGRAD + HESSE stage (fit_utils.run_fit) with every other parameter floating,
+    starting at mean_init, sigma_init, n_sig = n_bkg = half the entries in the window and
+    c0 = c1 = 0.
 
     Returns:
     --------
@@ -66,12 +73,8 @@ def fit_gauss(values, xmin=500.0, xmax=600.0, nbins=100,
         n_bkg=(0.0, None),
     )
 
-    # Stage 1: fit with the background params fixed at their initial values (also anything in
-    # fixed_params). Stage 2: float everything except fixed_params, starting from stage 1's result.
-    stage1_fixed = set(fit_utils.BKG_PARAMS) | set(fixed_params or {})
-    stage1 = fit_utils.run_fit(cost, init, limits, fixed=list(stage1_fixed))
-    m = fit_utils.run_fit(cost, stage1.values.to_dict(), limits,
-                          fixed=list(fixed_params) if fixed_params else None)
+    # One stage: every parameter floats except fixed_params, held at their given values.
+    m = fit_utils.run_fit(cost, init, limits, fixed=list(fixed_params) if fixed_params else None)
     p, e = m.values, m.errors
 
     print(f"[INFO] valid={m.valid}  "

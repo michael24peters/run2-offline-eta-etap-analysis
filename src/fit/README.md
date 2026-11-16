@@ -64,12 +64,12 @@ python src/fit/driver_mass_fit.py ntuple/lhcb/eta2mumugamma/20261006/combined_fi
 
 ### Fit stages
 
-`fit_gauss()` and `fit_dcb()` each fit in two MIGRAD stages, each followed by HESSE (and by MIGRAD and HESSE once more if the fit has not converged, `fit_utils.run_fit`). Stage 2 starts from the stage-1 values.
+Each stage is MIGRAD then HESSE (and MIGRAD and HESSE once more if the fit has not converged, `fit_utils.run_fit`).
 
 | fit | stage 1 | stage 2 |
 |---|---|---|
-| Gaussian | c0, c1 fixed at 0 (flat background); mean, sigma, n_sig, n_bkg float | every parameter floats |
-| DCB | alphaL, nL, alphaR, nR fixed at their start values (the MC values with `--tail-prior`); mean, sigma, yields, c0, c1 float | every parameter floats |
+| Gaussian | every parameter not fixed floats | none |
+| DCB | alphaL, nL, alphaR, nR fixed at their start values (the MC values with `--tail-prior`); mean, sigma and the parameters not fixed float | every parameter not fixed floats, from the stage-1 values |
 
 With `--mc-match`, n_bkg, c0 and c1 of the DCB stay fixed at 0 through both stages. The priors (sigma with `--mc-match`, tails with `--tail-prior`) are terms of the cost in both stages. The DCB starts sigma at the Gaussian sigma of the same run.
 
