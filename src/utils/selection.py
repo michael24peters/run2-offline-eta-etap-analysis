@@ -5,12 +5,10 @@ Selection constants and per-candidate masks shared by driver_mass_fit.py, driver
 plot_cut_steps.py. The scripts choose what to call and in which order.
 
     muon_cuts(tree)    daughter-level mask of each muon requirement
-    dimuon_mass(...)   per-candidate m(mu+ mu-)
     cut_steps(...)     truth match, TOS per level, then each muon cut, one mask per step
 """
 
 import awkward as ak
-import numpy as np
 
 import bkg_utils
 import cut_utils
@@ -37,9 +35,6 @@ MU_IP_CHI2_MAX  = 6.0              # IP chi2
 MUON_THRESHOLDS = {'pt_min': MU_PT_MIN, 'p_min': MU_P_MIN, 'pnn_mu_min': PNN_MU_MIN}
 # eta -> 4mu: no pT cut, p > 5 GeV, ProbNNmu > 0.8
 MUON_THRESHOLDS_4MU = {'pt_min': None, 'p_min': 5000.0, 'pnn_mu_min': 0.8}
-
-# Daughter four-momenta of dimuon_mass, those of the tag_dtf_m mass
-DIMUON_MOMENTA = ['prt_dtf_px', 'prt_dtf_py', 'prt_dtf_pz', 'prt_dtf_e']
 
 # TOS lines per trigger level.
 # TODO: use the commented-out lines again.
@@ -83,18 +78,6 @@ def muon_cuts(tree, thresholds=MUON_THRESHOLDS):
     })
     not_muon = abs(tree['prt_pid']) != MUON_PID
     return {label: passes | not_muon for label, passes in cuts.items()}
-
-
-def dimuon_mass(tree, mass_branch):
-    """
-    Per-candidate m(mu+ mu-) [MeV], shaped like mass_branch: the invariant mass of the candidate's
-    muon daughters from DIMUON_MOMENTA. In eta -> mu+ mu- gamma, m(mu+ mu- gamma) >= m(mu+ mu-).
-    """
-    is_muon = abs(tree['prt_pid']) == MUON_PID
-    px, py, pz, e = [cut_utils.reduce(tree, ak.where(is_muon, tree[branch], 0.0), 'prt_idx_mom',
-                                      how='sum', target_ref=mass_branch)
-                     for branch in DIMUON_MOMENTA]
-    return np.sqrt(np.maximum(e**2 - px**2 - py**2 - pz**2, 0.0))
 
 
 def cut_steps(tree, mass_branch, tos_lines, truth_pids=None, muon_thresholds=MUON_THRESHOLDS):

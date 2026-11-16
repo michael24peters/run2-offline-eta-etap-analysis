@@ -53,19 +53,3 @@ def test_line_counts_are_among_the_candidates_before_any_tos_cut():
     _, triggers = selection.cut_steps(toy_tree(), 'tag_dtf_m', selection.TOS_LINES)
     assert triggers['L0'] == {'tag_l0_tos0': 3, 'tag_l0_tos1': 0}
     assert triggers['HLT1'] == {'tag_hlt1_tos0': 4}   # counts the candidate that is not L0 TOS
-
-
-def test_dimuon_mass_uses_the_muons_only():
-    """Muons of 100 MeV/c back to back along z: m(mu mu) = 2 E; the photon is left out."""
-    muon_e = (100.0**2 + 105.66**2) ** 0.5
-    tree = make_tree(
-        tag_dtf_m=[[548.0]],
-        prt_idx_mom=[[0, 0, 0]],
-        prt_pid=[[-13, 13, 22]],
-        prt_dtf_px=[[0.0, 0.0, 50.0]],
-        prt_dtf_py=[[0.0, 0.0, 0.0]],
-        prt_dtf_pz=[[100.0, -100.0, 0.0]],
-        prt_dtf_e=[[muon_e, muon_e, 50.0]],
-    )
-    masses = selection.dimuon_mass(tree, 'tag_dtf_m').tolist()
-    assert abs(masses[0][0] - 2 * muon_e) < 1e-9
