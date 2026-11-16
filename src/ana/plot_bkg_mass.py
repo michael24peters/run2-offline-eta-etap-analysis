@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import sys
 from collections import defaultdict
 
 import awkward as ak
@@ -27,6 +28,9 @@ import uproot
 # Python auto-adds this script's own directory (src/ana/) to sys.path, so bkg is importable directly
 # when this script is run as `python plot_bkg_mass.py`.
 from bkg import Candidate, ErrorType, classify_candidate
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'utils'))
+import plot_style
 
 # --- Category definitions ---
 # Ordered for legend display: signal first, then mismatch group, error group, then catch-all.
@@ -159,10 +163,10 @@ def run_event_loop(args) -> dict[str, list[float]]:
 
 
 # --- Plot ---
-def plot_masses(masses: dict[str, list[float]], outfile: str) -> None:
+def plot_masses(masses: dict[str, list[float]], outfile: str, sample: str = '') -> None:
     """
-    Overlay eta mass histograms for each category on a single matplotlib figure and save to
-    {outfile}.png.
+    Overlay eta mass histograms for each category on a single matplotlib figure, the text `sample`
+    (plot_style.sample_label) in the upper left, and save to {outfile}.png.
     """
     bins = np.arange(400, 710, 10)  # 400–700 MeV, 10 MeV bins
     colors = plt.get_cmap('tab10').colors  # 10 distinct colours
@@ -185,10 +189,11 @@ def plot_masses(masses: dict[str, list[float]], outfile: str) -> None:
     plt.axvline(x=547.86, color='black', linestyle='--', linewidth=1,
                label='PDG $m_\\eta$ = 547.86 MeV')
     plt.xlabel('Mass [MeV]')
-    plt.ylabel('Candidates')
+    plt.ylabel(plot_style.count_label('Candidates', bins, 'MeV'))
     plt.title('Eta Mass Signal vs Background Categories')
     plt.grid(alpha=0.3)
-    plt.legend(frameon=False, fontsize=11)
+    plt.legend(frameon=False, fontsize=11, loc='upper right')
+    plot_style.add_stats_box(plt.gca(), '', sample=sample)
 
     os.makedirs(os.path.dirname(outfile) or '.', exist_ok=True)
     plt.savefig(outfile + '.png', dpi=300, bbox_inches='tight')
@@ -232,7 +237,7 @@ def main():
             logging.info(f'  {label + ":":<35} {n:6,d}  ({100*n/total:.1f}%)')
 
     # Plot the mass distributions and save to file
-    plot_masses(masses, args.outfile)
+    plot_masses(masses, args.outfile, plot_style.sample_label(args.infile))
     logging.info(f'Plot saved to {args.outfile}.')
 
 

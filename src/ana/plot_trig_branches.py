@@ -8,11 +8,16 @@ Usage:
 """
 
 import argparse
+import os
+import sys
 
 import awkward as ak
 import matplotlib.pyplot as plt
 import numpy as np
 import uproot
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'utils'))
+import plot_style
 
 parser = argparse.ArgumentParser(description='Plot trigger branches from a ROOT file.')
 parser.add_argument('infile', help='Input ROOT file')
@@ -34,7 +39,8 @@ with uproot.open(args.infile) as f:
         ax.hist(flat, bins=50)
         ax.set_title(name)
         ax.set_xlabel('value')
-        ax.set_ylabel('candidates')
+        ax.set_ylabel('Candidates')
+        plot_style.add_stats_box(ax, '', sample=plot_style.sample_label(args.infile))
         fig.savefig(f'{name}.png', dpi=100)
         plt.close(fig)
         print(f'{name}: min={flat.min():.3f} max={flat.max():.3f} mean={flat.mean():.4f} nonzero={np.sum(flat != 0)}')
