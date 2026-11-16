@@ -34,33 +34,41 @@ It writes into `--outdir`:
 - `results_gauss.json`, `gauss_mass_fit.png` (not with `--sigma-prior`)
 - `results_dcb.json`, `dcb_mass_fit.png` (not with `--gauss-only`)
 
-`--n-max N` puts an upper limit N on the DCB tail exponents n_L and n_R (no limit by default).
+`--n-max N` puts an upper limit N on the DCB tail exponents n_L and n_R (no limit by default). The fit chain holds the tails with priors instead, and `run_mass_fits.sh` passes no `--n-max`.
 
 `--max-events N` reads only the first N events, for quick iteration on large files. The drivers only expose fit hyperparameters as flags. Plot styling (font, colors, ticks, stats box, etc.) is fixed in `plot_mass_fit.py`/`plot_style.py`, and must be changed there manually. Every fit plot starts its stats box with `plot_style.sample_label` of the input path (decay, Data or MC, year), in the legend's font size like the fit parameters below it, labels its points MC for an input under `ntuple/mc/`, and counts `Candidates / (<bin width> MeV)` on its y axis (`plot_style.count_label`; natural units, no factors of c). The `--mc-match` fits record their fixed n_bkg, c0 and c1 in the meta `fixed_params` of `results_gauss.json` and `results_dcb.json`; their plots leave them out of the stats box and draw no background.
 
 ## Fit chain: MC Gaussian, MC DCB, data DCB
 
 ```
-MC gauss  -(sigma prior)->  MC dcb  -(tail prior)->  data dcb
+MC gauss  -(sigma start)->  MC dcb  -(sigma and tail start + prior)->  data dcb
 ```
 
-On data the DCB tails are poorly constrained. They come from MC-matched signal MC instead: a `NormalConstraint` prior on (alphaL, nL, alphaR, nR) centred on the MC values, with the MC covariance widened by `TAIL_PRIOR_FACTOR` standard deviations (`--tail-prior`). With `--mc-match`, the MC DCB takes its sigma from the Gaussian of the same run: a `NormalConstraint` prior on sigma centred on the Gaussian sigma, with its variance widened by `SIGMA_PRIOR_FACTOR` standard deviations:
+The MC fits use MC-matched signal MC (`--mc-match`). It is signal only, so the Gaussian and the DCB both run with no background (n_bkg, c0, c1 fixed at 0). A Gaussian does not describe the tails of the signal; its sigma is only the start value of the MC DCB sigma, with no prior. On data the DCB sigma and tails come from the MC DCB: they start at the MC values and are under a `NormalConstraint` prior centred on them, with the MC covariance widened by `SIGMA_PRIOR_FACTOR` (`--sigma-prior`) and `TAIL_PRIOR_FACTOR` (`--tail-prior`) standard deviations, x5 for eta2mumu and eta2mumugamma, x2 for eta2mumumumu. The data run with `--sigma-prior` fits no Gaussian.
+
+eta2mumumumu has one more link: its MC-matched DCB (358 candidates of the 20261109 MC with ProbNNmu > 0.6, 192 with 0.8) takes the tails of the eta2mumu MC-matched DCB as `--tail-prior` (x2). With its own free tails, the MC n_R (9.9 ± 10.8 at ProbNNmu > 0.6) leaves the data DCB n_R free to fall to 0 and the tail to absorb the background (n_sig 170 ± 97); with the eta2mumu tails, n_sig = 91.3 ± 12.8 (0.6) and 44.9 ± 9.1 (0.8), close to the data Gaussian (82 ± 12, 40 ± 8). Fits of 2026-11-12: `out/eta2mumumumu/{signal,turbo}/20261112/mumu_tails/pnn_mu_<0.6|0.8>/` and `free_tails/pnn_mu_0.6/`.
 
 ```
-# 1. MC-matched signal MC: Gaussian, then DCB with no background (n_bkg = 0, c0 = c1 = 0) and
-#    sigma under the prior of the Gaussian
-python src/fit/driver_mass_fit.py ntuple/mc/eta2mumugamma/signal_20261006/combined_files.root \
-    --outdir out/eta2mumugamma/signal/$(date +%Y%m%d)/truth --mc-match -13 13 22 \
-    --xmin 450 --xmax 650 --nbins 200
-# 2. data, tails under the MC prior of 1
-python src/fit/driver_mass_fit.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
+# 1. MC-matched signal MC: Gaussian, then DCB, both with no background (n_bkg = 0, c0 = c1 = 0);
+#    the DCB starts sigma at the Gaussian sigma
+python src/fit/driver_mass_fit.py 'ntuple/mc/eta2mumugamma/signal_20261109/pi0_dalitz/mag*/*.root' \
+    --outdir out/eta2mumugamma/signal/$(date +%Y%m%d)/mc_matched --mc-match -13 13 22 \
+    --xmin 450 --xmax 650 --nbins 200 --sigma-init 13
+# 2. data DCB, sigma and tails started at and held near those of 1
+python src/fit/driver_mass_fit.py ntuple/lhcb/eta2mumugamma/20261109/skim_eta.root \
     --outdir out/eta2mumugamma/turbo/$(date +%Y%m%d)/mc_prior --xmin 450 --xmax 650 --nbins 200 \
-    --tail-prior out/eta2mumugamma/signal/$(date +%Y%m%d)/truth/results_dcb.json
+    --sigma-prior out/eta2mumugamma/signal/$(date +%Y%m%d)/mc_matched/results_dcb.json \
+    --tail-prior out/eta2mumugamma/signal/$(date +%Y%m%d)/mc_matched/results_dcb.json
 ```
 
-`--mc-match` takes the signal daughter PIDs: `-13 13` for eta -> mu+ mu-, `-13 13 22` for eta -> mu+ mu- gamma, `-13 -13 13 13` for eta -> 4mu. For an `eta2mumumumu` input path, HLT1 TOS also accepts Hlt1MultiDiMuonNoIP (`TOS_LINES_4MU`); every muon cut applies to all four muons. The Gaussian fit keeps its Chebyshev background floating: with no background, a Gaussian has no stable minimum on the radiative tail of the MC. The DCB fit runs with no background.
+Other runs of the same driver:
 
-`src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma"]` runs the chain for each channel on the 20261006 ntuples, into `out/<channel>/<turbo|signal>/<today>/`: the MC-matched MC (`signal/<today>/truth/`) and data with its tail prior (`turbo/<today>/mc_prior/`). Data with no prior (`turbo/<today>/no_prior/`) is the comparison run. Every job fits 500-600 MeV in 100 bins for eta2mumu and 450-650 MeV in 200 bins for eta2mumugamma, whose peak is wider (`mass_window` in the script). The data jobs pass `--n-max 50` (`N_MAX` in the script). The header of `run_mass_fits.sh` lists every run and fit in order.
+- data Gaussian: `driver_mass_fit.py DATA --gauss-only`, no prior
+- MC Gaussian, MC DCB: `--mc-match PID... [--gauss-only]`; without `--mc-match` the MC has candidates not matched to the signal decay, and the fits keep their Chebyshev background floating, as on data
+
+`--mc-match` takes the signal daughter PIDs: `-13 13` for eta -> mu+ mu-, `-13 13 22` for eta -> mu+ mu- gamma, `-13 -13 13 13` for eta -> 4mu. For an `eta2mumumumu` input path, HLT1 TOS also accepts Hlt1MultiDiMuonNoIP (`TOS_LINES_4MU`); every muon cut applies to all four muons. The MC-matched eta2mumugamma Gaussian needs a sigma start near the resolution: from 5 MeV it runs off to a flat shape (sigma ~ 1e6 MeV), from 10-15 MeV it converges to the same minimum.
+
+`src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma eta2mumumumu"]` runs the chain for each channel on the 20261109 ntuples (data: the `skim_eta.root` of eta2mumu and eta2mumugamma, the raw files of eta2mumumumu; MC: the raw files of every channel, MC match first; eta2mumugamma MC: `pi0_dalitz`), into `out/<channel>/<turbo|signal>/<today>/`: the MC-matched MC (`signal/<today>/mc_matched/`) and the data DCB with its sigma and tail priors (`turbo/<today>/mc_prior/`). The eta2mumumumu MC-matched fit runs after the eta2mumu one, whose tails it takes, so eta2mumumumu needs eta2mumu in the same run. Every job fits 500-600 MeV in 100 bins for eta2mumu and 450-650 MeV in 200 bins for eta2mumugamma, whose peak is wider (`mass_window` in the script), with the Gaussian sigma started at 5 MeV, 13 MeV for eta2mumugamma (`sigma_init`). The skim windows equal `mass_window`: a wider fit window needs a new skim. The header of `run_mass_fits.sh` lists every run and fit in order.
 
 ### Fit stages
 

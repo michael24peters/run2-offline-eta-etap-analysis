@@ -1,42 +1,45 @@
 #!/usr/bin/env bash
-# Mass fits of the NTUPLE ntuples into out/<channel>/<turbo|signal>/<today>/, for each channel (both
-# by default). The data DCB fit is the end of a chain of two runs of driver_mass_fit.py, the first
-# passing a prior to the second through its results JSON:
+# Mass fits of the NTUPLE ntuples into out/<channel>/<turbo|signal>/<today>/, for each channel (all
+# three by default). The data DCB fit is the end of a chain of two runs of driver_mass_fit.py, the
+# first passing a prior to the second through its results JSON:
 #
-#   1. MC-matched signal MC                                  signal/<date>/truth/
-#      a. Gaussian + Chebyshev
-#      b. DCB with no background (n_bkg, c0, c1 fixed at 0), sigma under NormalConstraint(sigma of
-#         1a, its stdev times SIGMA_PRIOR_FACTOR) and started there
-#   2. data, --tail-prior 1b                                    turbo/<date>/mc_prior/
-#      a. Gaussian + Chebyshev
-#      b. DCB + Chebyshev, sigma started at the sigma of 2a, the tails alphaL, nL, alphaR, nR
-#         under NormalConstraint(tails of 1b, their covariance with stdevs times TAIL_PRIOR_FACTOR)
-#         and started there
+#   1. MC-matched signal MC                                     signal/<date>/mc_matched/
+#      a. Gaussian with no background (n_bkg, c0, c1 fixed at 0), sigma started at sigma_init
+#      b. DCB with no background (n_bkg, c0, c1 fixed at 0), sigma started at the sigma of 1a.
+#         eta2mumumumu: the tails under NormalConstraint(tails of the eta2mumu 1b, their covariance
+#         with stdevs times TAIL_PRIOR_FACTOR_4MU) and started there; its 1b runs after eta2mumu's
+#   2. data, --sigma-prior 1b --tail-prior 1b                   turbo/<date>/mc_prior/
+#      DCB + Chebyshev only: sigma and the tails alphaL, nL, alphaR, nR started at the values of 1b
+#      and under NormalConstraint(1b values, 1b covariance with stdevs times SIGMA_PRIOR_FACTOR /
+#      TAIL_PRIOR_FACTOR, x2 for eta2mumumumu)
 #
-# Every fit runs MIGRAD in two stages, each followed by HESSE; stage 2 starts from the stage-1
-# values:
+# Each MIGRAD stage is followed by HESSE; a DCB's stage 2 starts from its stage-1 values:
 #
-#   Gaussian   stage 1: c0, c1 fixed at 0 (flat background)     stage 2: every parameter floats
-#   DCB        stage 1: tails fixed at their start values        stage 2: every parameter floats
+#   Gaussian   one stage: every parameter not fixed floats
+#   DCB        stage 1: tails fixed at their start values        stage 2: every parameter not fixed
+#                                                                 floats
 #
-# with n_bkg, c0, c1 of the MC DCB fixed at 0 in both, and the priors in the cost of both.
+# with the priors in the cost of both DCB stages. No fit has a hard limit on n_L, n_R. Every job of
+# a channel fits the window of mass_window.
 #
-# Comparison, with no prior: 3. data, Gaussian then DCB with the tails free
-# (turbo/<date>/no_prior/). The data jobs (2, 3) pass --n-max N_MAX, the upper limit of the DCB tail
-# exponents n_L, n_R. Every job of a channel fits the window of mass_window.
+# Inputs: data, the skim_eta.root of eta2mumu and eta2mumugamma (src/root/skim.py, its window equal
+# to mass_window: a wider fit window needs a new skim) and the raw files of eta2mumumumu (not
+# skimmed); MC, the raw files of every channel (eta2mumugamma: pi0_dalitz), never a skim. The MC
+# match is the first cut of every MC-matched run, before TOS, the muon cuts and the candidate pick;
+# a skim has already picked its candidate with no MC match.
 #
 # Every job prints to the terminal with its lines prefixed [job]; failed jobs are listed at the end.
 #
 # Usage:
-#   src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma"]
+#   src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma eta2mumumumu"]
+#   (eta2mumumumu needs eta2mumu in the same run)
 
 set -o pipefail
 cd "$(dirname "$0")/../.."
 PY=.venv/bin/python
-NTUPLE=20261006
-N_MAX=50
+NTUPLE=20261109
 DATE=$(date +%Y%m%d)
-CHANNELS="eta2mumu eta2mumugamma"
+CHANNELS="eta2mumu eta2mumugamma eta2mumumumu"
 while [ $# -gt 0 ]; do
     case $1 in
         --channel) CHANNELS=$2; shift 2 ;;
@@ -52,6 +55,22 @@ run() {
     if ! "$@" 2>&1 | sed -u "s|^|[$label] |"; then
         echo "$label: $*" >> "$FAILED"
     fi
+}
+
+# Data input of each channel (a quoted glob for eta2mumumumu)
+data_input() {
+    case $1 in
+        eta2mumumumu) echo "ntuple/lhcb/$1/$NTUPLE/mag*/*.root" ;;
+        *)            echo "ntuple/lhcb/$1/$NTUPLE/skim_eta.root" ;;
+    esac
+}
+
+# Signal MC input of each channel: the raw files (a quoted glob), MC match first
+mc_input() {
+    case $1 in
+        eta2mumugamma) echo "ntuple/mc/$1/signal_$NTUPLE/pi0_dalitz/mag*/*.root" ;;
+        *)             echo "ntuple/mc/$1/signal_$NTUPLE/mag*/*.root" ;;
+    esac
 }
 
 # Signal daughter PIDs of each channel, for --mc-match
@@ -71,25 +90,55 @@ mass_window() {
     esac
 }
 
-# mass_fits CHANNEL: steps 1-3 for one channel
-mass_fits() {
-    local channel=$1
-    local data=ntuple/lhcb/$channel/$NTUPLE/combined_files.root
-    local mc=ntuple/mc/$channel/signal_$NTUPLE/combined_files.root
-    local turbo=out/$channel/turbo/$DATE
-    local signal=out/$channel/signal/$DATE
-    local window=$(mass_window $channel)
-    run "$channel no_prior" $PY src/fit/driver_mass_fit.py $data --outdir $turbo/no_prior $window \
-        --n-max $N_MAX &
-    run "$channel truth" $PY src/fit/driver_mass_fit.py $mc --outdir $signal/truth $window \
-        --mc-match $(daughter_pids $channel)
-    run "$channel mc_prior" $PY src/fit/driver_mass_fit.py $data --outdir $turbo/mc_prior $window \
-        --tail-prior $signal/truth/results_dcb.json --n-max $N_MAX
-    wait
+# Gaussian sigma start of each channel [MeV], near its mass resolution. From 5 MeV the MC-matched
+# eta2mumugamma Gaussian runs off to a flat shape.
+sigma_init() {
+    case $1 in
+        eta2mumugamma) echo "--sigma-init 13" ;;
+        *)             echo "--sigma-init 5" ;;
+    esac
 }
 
+# Tail prior of the MC-matched DCB: eta2mumumumu (358 MC-matched candidates) takes the tails of the
+# eta2mumu MC-matched DCB; with free tails its n_R lets the data DCB tail absorb the background
+mc_tail_prior() {
+    case $1 in
+        eta2mumumumu) echo "--tail-prior out/eta2mumu/signal/$DATE/mc_matched/results_dcb.json" ;;
+    esac
+}
+
+# mc_matched CHANNEL: step 1 for one channel
+mc_matched() {
+    local channel=$1
+    run "$channel mc_matched" $PY src/fit/driver_mass_fit.py "$(mc_input $channel)" \
+        --outdir out/$channel/signal/$DATE/mc_matched $(mass_window $channel) \
+        $(sigma_init $channel) --mc-match $(daughter_pids $channel) $(mc_tail_prior $channel)
+}
+
+# data_dcb CHANNEL: step 2 for one channel
+data_dcb() {
+    local channel=$1
+    local prior=out/$channel/signal/$DATE/mc_matched/results_dcb.json
+    run "$channel mc_prior" $PY src/fit/driver_mass_fit.py "$(data_input $channel)" \
+        --outdir out/$channel/turbo/$DATE/mc_prior $(mass_window $channel) \
+        --sigma-prior $prior --tail-prior $prior
+}
+
+# Step 1 for every channel, eta2mumumumu after the others (it takes the eta2mumu tails), then
+# step 2 for every channel
 for channel in $CHANNELS; do
-    mass_fits $channel &
+    if [ "$channel" != eta2mumumumu ]; then
+        mc_matched $channel &
+    fi
+done
+wait
+for channel in $CHANNELS; do
+    if [ "$channel" = eta2mumumumu ]; then
+        mc_matched $channel
+    fi
+done
+for channel in $CHANNELS; do
+    data_dcb $channel &
 done
 wait
 
