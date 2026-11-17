@@ -8,6 +8,7 @@ stats box of the fit model:
     plot_fit(result, output, dcb_text)     DCB + Chebyshev
 """
 
+import math
 import os
 import sys
 
@@ -16,6 +17,7 @@ import matplotlib.ticker as mticker
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'utils'))
+import kinematics
 import plot_style
 import plot_utils
 
@@ -98,8 +100,9 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     x_lim: (xmin, xmax) override; defaults to the data range. title: optional plot title (e.g. to
     identify one page of a multi-page PDF); omitted entirely when not given.
 
-    The stats box starts with plot_style.sample_label of meta['input_file'], all of it in the
-    legend's font size, and the points are labelled 'MC' for an input path with an 'mc' segment
+    The stats box starts with plot_style.sample_label of meta['input_file'] (with η′ in place of η
+    when the fit window meta['xmin']–meta['xmax'] holds the η′ mass), all of it in the legend's
+    font size, and the points are labelled 'MC' for an input path with an 'mc' segment
     ('Data' otherwise). Parameters named in meta['fixed_params'] (e.g. n_bkg, c0, c1 of an
     MC-matched DCB fit) are left out of the stats box, and with n_bkg among them the background is
     not drawn.
@@ -193,7 +196,10 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
               if name not in fixed}
     chi2_per_ndof = data['fit']['chi2_per_ndof']
     plot_text, term_text = build_text(params, chi2_per_ndof)
-    stats_box = plot_style.add_stats_box(ax, plot_text, sample=plot_style.sample_label(input_file),
+    sample = plot_style.sample_label(input_file)
+    if meta.get('xmin', math.inf) <= kinematics.M_ETA_PRIME <= meta.get('xmax', -math.inf):
+        sample = sample.replace(r'\eta', r"\eta'", 1)
+    stats_box = plot_style.add_stats_box(ax, plot_text, sample=sample,
                                          fontsize=legend.get_texts()[0].get_fontsize())
 
     # Reserve headroom above the data/curves for the stats box + legend, sized by actually measuring

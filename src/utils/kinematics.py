@@ -10,6 +10,7 @@ import numpy as np
 # variables.
 M_MU  = 105.6583755
 M_ETA = 547.862
+M_ETA_PRIME = 957.78
 
 # Pole parameter [GeV] of the eta transition form factor F(s) = 1 / (1 - s / FF_LAMBDA^2), from NA60
 # 2016 (arXiv:1608.07898): Lambda^-2 = 1.934 GeV^-2.

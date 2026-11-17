@@ -12,6 +12,8 @@ import matplotlib.ticker as mticker
 import numpy as np
 from matplotlib.offsetbox import AnchoredOffsetbox, TextArea, VPacker
 
+import kinematics
+
 # Shared fit-plot palette. fit/background/pull/phase_space colorblind-safe.
 COLORS = {
     'data':        '#000000',
@@ -61,12 +63,17 @@ def sample_label(path, sample=None):
 def decay_label(meta):
     """
     LaTeX x-axis mass label for a fit-result's meta dict, derived from the channel segment of
-    meta['input_file']. Falls back to a bare 'Mass' label if no known channel is found.
+    meta['input_file'], with η′ in place of η when the fit window meta['xmin']–meta['xmax'] holds
+    the η′ mass (e.g. an η′ → μ⁺μ⁻μ⁺μ⁻ fit on the eta2mumumumu ntuple). Falls back to a bare
+    'Mass' label if no known channel is found.
     """
     segments = meta.get('input_file', '').split('/')
     for segment in segments:
         if segment in CHANNEL_LABELS:
-            return fr'$m({CHANNEL_LABELS[segment]})$ [MeV]'
+            decay = CHANNEL_LABELS[segment]
+            if meta.get('xmin', math.inf) <= kinematics.M_ETA_PRIME <= meta.get('xmax', -math.inf):
+                decay = decay.replace(r'\eta', r"\eta'", 1)
+            return fr'$m({decay})$ [MeV]'
     return 'Mass [MeV]'
 
 def count_label(entries, edges, unit=''):
