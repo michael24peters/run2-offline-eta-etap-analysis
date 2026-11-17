@@ -148,9 +148,7 @@ if args.tail_prior_factor is None:
 if args.sigma_prior_factor is None:
     args.sigma_prior_factor = SIGMA_PRIOR_FACTOR_4MU if is_4mu else SIGMA_PRIOR_FACTOR
 
-branches = ([MASS_BRANCH, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
-            + [line for lines in tos_lines.values() for line in lines]
-            + (selection.MC_BRANCHES if args.mc_match else []))
+branches = selection.branches(MASS_BRANCH, tos_lines, mc_match=args.mc_match)
 
 # --- Read and select, one chunk of selection.STEP_SIZE at a time ------------
 # Per chunk: drop malformed events, [MC match], TOS per trigger level, then each muon cut

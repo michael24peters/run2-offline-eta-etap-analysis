@@ -45,13 +45,6 @@ import plot_style
 import plot_utils
 import selection
 
-def tree_branches(mass_branch, tos_lines, mc_match=None):
-    """The branches cut_steps reads with `tos_lines`."""
-    return ([mass_branch, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
-            + [line for lines in tos_lines.values() for line in lines]
-            + (selection.MC_BRANCHES if mc_match else []))
-
-
 def cut_steps(tree, mass_branch, tos_lines, muon_thresholds, seed, mc_match=None):
     """
     selection.cut_steps with `tos_lines` and `muon_thresholds`, then the random candidate
@@ -148,7 +141,7 @@ def main():
     full_all, full_window, n_all = np.zeros(args.nbins), np.zeros(args.nbins), 0
     drop_report, labels, histograms, totals = {}, [], [], []
     chunks = cut_utils.iterate_branches(args.infile,
-                                        tree_branches(args.mass, tos_lines, args.mc_match),
+                                        selection.branches(args.mass, tos_lines, args.mc_match),
                                         selection.STEP_SIZE, entry_stop=args.max_events)
     for i, tree in enumerate(chunks):
         tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only

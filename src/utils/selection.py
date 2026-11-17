@@ -56,6 +56,16 @@ TOS_LINES_DISPLACED = {**TOS_LINES,
                        'HLT2': ['tag_hlt2_rebuilt_tos3']}   # Hlt2ExoticaDisplDiMuon
 
 
+def branches(mass_branch, tos_lines, mc_match=False):
+    """
+    The branches cut_steps reads: mass_branch, prt_idx_mom, MUON_CUT_BRANCHES, every TOS branch of
+    tos_lines and, with mc_match, MC_BRANCHES.
+    """
+    return ([mass_branch, 'prt_idx_mom'] + MUON_CUT_BRANCHES
+            + [line for lines in tos_lines.values() for line in lines]
+            + (MC_BRANCHES if mc_match else []))
+
+
 def muon_cuts(tree, thresholds=MUON_THRESHOLDS):
     """
     {label: daughter-level mask} of each muon requirement above, True for every non-muon daughter,

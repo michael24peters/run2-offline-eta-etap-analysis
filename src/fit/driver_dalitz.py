@@ -124,10 +124,8 @@ def select_candidates(infile, mc_match=False, max_events=None):
     """
     mass = MASS_BRANCH
     momenta = MASS_SOURCES[mass]
-    branches = ([mass, 'prt_idx_mom'] + selection.MUON_CUT_BRANCHES
-                + [b for b in momenta if b not in selection.MUON_CUT_BRANCHES]
-                + [line for lines in selection.TOS_LINES.values() for line in lines]
-                + (selection.MC_BRANCHES if mc_match else []))
+    branches = (selection.branches(mass, selection.TOS_LINES, mc_match=mc_match)
+                + [b for b in momenta if b not in selection.MUON_CUT_BRANCHES])
 
     # --- Read and select, one chunk of selection.STEP_SIZE at a time ---
     # Per chunk: drop malformed events, [MC match to eta -> gamma mu+ mu-], TOS per trigger
