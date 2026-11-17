@@ -4,8 +4,8 @@
 # TAIL_PRIOR as prior.
 #
 # TAIL_PRIOR is the data DCB fit of run_mass_fits.sh on the same ntuples. No job has a hard limit on
-# the DCB tail exponents n_L, n_R. The input is the eta2mumugamma skim_eta.root (src/root/skim.py,
-# 450-650 MeV, the window of driver_dalitz.py).
+# the DCB tail exponents n_L, n_R. The input is the eta2mumugamma raw files (mag*/*.root), fit in
+# 450-650 MeV, the window of driver_dalitz.py.
 #
 # Every job prints to the terminal with its lines prefixed [job]; failed jobs are listed at the end.
 # Jobs start READ_PAUSE seconds apart, so that only one holds a full ROOT read at a time.
@@ -30,7 +30,7 @@ done
 FAILED=$(mktemp)
 trap 'rm -f "$FAILED"' EXIT
 
-DATA=ntuple/lhcb/eta2mumugamma/$NTUPLE/skim_eta.root
+DATA="ntuple/lhcb/eta2mumugamma/$NTUPLE/mag*/*.root"
 
 # run LABEL CMD...: run CMD with its output prefixed [LABEL]; list LABEL in FAILED if it fails
 run() {
@@ -43,7 +43,7 @@ run() {
 TURBO=out/eta2mumugamma/turbo/$DATE/dalitz
 
 for factor in $FACTORS; do
-    run "$factor turbo" $PY src/fit/driver_dalitz.py $DATA --outdir $TURBO \
+    run "$factor turbo" $PY src/fit/driver_dalitz.py "$DATA" --outdir $TURBO \
         --factor $factor --tail-prior $TAIL_PRIOR &
     sleep $READ_PAUSE
 done

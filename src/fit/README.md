@@ -55,7 +55,7 @@ python src/fit/driver_mass_fit.py 'ntuple/mc/eta2mumugamma/signal_20261109/pi0_d
     --outdir out/eta2mumugamma/signal/$(date +%Y%m%d)/mc_matched --mc-match -13 13 22 \
     --xmin 450 --xmax 650 --nbins 200 --sigma-init 13
 # 2. data DCB, sigma and tails started at and held near those of 1
-python src/fit/driver_mass_fit.py ntuple/lhcb/eta2mumugamma/20261109/skim_eta.root \
+python src/fit/driver_mass_fit.py 'ntuple/lhcb/eta2mumugamma/20261109/mag*/*.root' \
     --outdir out/eta2mumugamma/turbo/$(date +%Y%m%d)/mc_prior --xmin 450 --xmax 650 --nbins 200 \
     --sigma-prior out/eta2mumugamma/signal/$(date +%Y%m%d)/mc_matched/results_dcb.json \
     --tail-prior out/eta2mumugamma/signal/$(date +%Y%m%d)/mc_matched/results_dcb.json
@@ -68,7 +68,7 @@ Other runs of the same driver:
 
 `--mc-match` takes the signal daughter PIDs: `-13 13` for eta -> mu+ mu-, `-13 13 22` for eta -> mu+ mu- gamma, `-13 -13 13 13` for eta -> 4mu. For an `eta2mumumumu` input path, HLT1 TOS also accepts Hlt1MultiDiMuonNoIP (`TOS_LINES_4MU`); every muon cut applies to all four muons. The MC-matched eta2mumugamma Gaussian needs a sigma start near the resolution: from 5 MeV it runs off to a flat shape (sigma ~ 1e6 MeV), from 10-15 MeV it converges to the same minimum.
 
-`src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma eta2mumumumu"]` runs the chain for each channel on the 20261109 ntuples (data: the `skim_eta.root` of eta2mumu and eta2mumugamma, the raw files of eta2mumumumu; MC: the raw files of every channel, MC match first; eta2mumugamma MC: `pi0_dalitz`), into `out/<channel>/<turbo|signal>/<today>/`: the MC-matched MC (`signal/<today>/mc_matched/`) and the data DCB with its sigma and tail priors (`turbo/<today>/mc_prior/`). The eta2mumumumu MC-matched fit runs after the eta2mumu one, whose tails it takes, so eta2mumumumu needs eta2mumu in the same run. Every job fits 500-600 MeV in 100 bins for eta2mumu and 450-650 MeV in 200 bins for eta2mumugamma, whose peak is wider (`mass_window` in the script), with the Gaussian sigma started at 5 MeV, 13 MeV for eta2mumugamma (`sigma_init`). The skim windows equal `mass_window`: a wider fit window needs a new skim. The header of `run_mass_fits.sh` lists every run and fit in order.
+`src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma eta2mumumumu"]` runs the chain for each channel on the 20261109 ntuples (data and MC: the raw files `mag*/*.root` of every channel, no skim; MC match first; eta2mumugamma MC: `pi0_dalitz`), into `out/<channel>/<turbo|signal>/<today>/`: the MC-matched MC (`signal/<today>/mc_matched/`) and the data DCB with its sigma and tail priors (`turbo/<today>/mc_prior/`). The eta2mumumumu MC-matched fit runs after the eta2mumu one, whose tails it takes, so eta2mumumumu needs eta2mumu in the same run. The MC-matched jobs fit 500-600 MeV in 100 bins for eta2mumu and eta2mumumumu and 450-650 MeV in 200 bins for eta2mumugamma, whose peak is wider (`mass_window` in the script); the data jobs fit the same windows except eta2mumu, 535-560 MeV in 25 bins (`data_window`), with the Gaussian sigma started at 5 MeV, 13 MeV for eta2mumugamma (`sigma_init`). The header of `run_mass_fits.sh` lists every run and fit in order.
 
 ### Fit stages
 
@@ -207,7 +207,7 @@ python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_<factor>.json   # re-plot onl
 
 `fit_dalitz.ipynb` runs the same selection (`driver_dalitz.select_candidates`) and fit interactively on one ROOT file.
 
-`src/fit/run_dalitz.sh [--factor "none flat weighted"]` runs the data fit for each factor on the 20261109 eta2mumugamma `skim_eta.root`, with the tails of the `run_mass_fits.sh` data DCB fit of the same ntuples (`turbo/20261112/mc_prior/results_dcb.json`, `TAIL_PRIOR`) as prior and no `--n-max`, into `out/eta2mumugamma/turbo/<today>/dalitz`.
+`src/fit/run_dalitz.sh [--factor "none flat weighted"]` runs the data fit for each factor on the 20261109 eta2mumugamma raw files (`mag*/*.root`), with the tails of the `run_mass_fits.sh` data DCB fit of the same ntuples (`turbo/20261112/mc_prior/results_dcb.json`, `TAIL_PRIOR`) as prior and no `--n-max`, into `out/eta2mumugamma/turbo/<today>/dalitz`.
 
 
 ## Fitting an arbitrary array

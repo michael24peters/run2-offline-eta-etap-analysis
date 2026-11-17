@@ -19,14 +19,12 @@
 #   DCB        stage 1: tails fixed at their start values        stage 2: every parameter not fixed
 #                                                                 floats
 #
-# with the priors in the cost of both DCB stages. No fit has a hard limit on n_L, n_R. Every job of
-# a channel fits the window of mass_window.
+# with the priors in the cost of both DCB stages. No fit has a hard limit on n_L, n_R. The
+# MC-matched jobs fit the window of mass_window, the data jobs that of data_window.
 #
-# Inputs: data, the skim_eta.root of eta2mumu and eta2mumugamma (src/root/skim.py, its window equal
-# to mass_window: a wider fit window needs a new skim) and the raw files of eta2mumumumu (not
-# skimmed); MC, the raw files of every channel (eta2mumugamma: pi0_dalitz), never a skim. The MC
-# match is the first cut of every MC-matched run, before TOS, the muon cuts and the candidate pick;
-# a skim has already picked its candidate with no MC match.
+# Inputs: the raw files (mag*/*.root) of every channel, data and MC (eta2mumugamma MC:
+# pi0_dalitz), no skim. The MC match is the first cut of every MC-matched run, before TOS, the muon
+# cuts and the candidate pick.
 #
 # Every job prints to the terminal with its lines prefixed [job]; failed jobs are listed at the end.
 #
@@ -57,12 +55,9 @@ run() {
     fi
 }
 
-# Data input of each channel (a quoted glob for eta2mumumumu)
+# Data input of each channel: the raw files (a quoted glob)
 data_input() {
-    case $1 in
-        eta2mumumumu) echo "ntuple/lhcb/$1/$NTUPLE/mag*/*.root" ;;
-        *)            echo "ntuple/lhcb/$1/$NTUPLE/skim_eta.root" ;;
-    esac
+    echo "ntuple/lhcb/$1/$NTUPLE/mag*/*.root"
 }
 
 # Signal MC input of each channel: the raw files (a quoted glob), MC match first
@@ -87,6 +82,14 @@ mass_window() {
     case $1 in
         eta2mumugamma) echo "--xmin 450 --xmax 650 --nbins 200" ;;
         *)             echo "--xmin 500 --xmax 600 --nbins 100" ;;
+    esac
+}
+
+# Data fit window of each channel, 1 MeV bins: eta2mumu 535-560 MeV, the others mass_window
+data_window() {
+    case $1 in
+        eta2mumu) echo "--xmin 535 --xmax 560 --nbins 25" ;;
+        *)        mass_window $1 ;;
     esac
 }
 
@@ -120,7 +123,7 @@ data_dcb() {
     local channel=$1
     local prior=out/$channel/signal/$DATE/mc_matched/results_dcb.json
     run "$channel mc_prior" $PY src/fit/driver_mass_fit.py "$(data_input $channel)" \
-        --outdir out/$channel/turbo/$DATE/mc_prior $(mass_window $channel) \
+        --outdir out/$channel/turbo/$DATE/mc_prior $(data_window $channel) \
         --sigma-prior $prior --tail-prior $prior
 }
 
