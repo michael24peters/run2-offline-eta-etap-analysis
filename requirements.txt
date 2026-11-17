@@ -1,8 +1,4 @@
 # uv venv && source .venv/bin/activate && uv pip install -r requirements.txt
-#
-# PyROOT is NOT listed here since it isn't pip-installable, it comes from the
-# LbEnv/lb-conda stack. It's only needed for src/root/concat_roots.py; every
-# other script only needs the packages below.
 uproot
 awkward
 numpy
