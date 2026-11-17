@@ -223,7 +223,11 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     # collides with it -- drop it.
     xticklabels = ax_pull.get_xticklabels()
     if xticklabels:
-        min(xticklabels, key=lambda t: t.get_position()[0]).set_visible(False)
+        leftmost = xticklabels[0]
+        for label in xticklabels:
+            if label.get_position()[0] < leftmost.get_position()[0]:
+                leftmost = label
+        leftmost.set_visible(False)
 
     return fig, term_text
 

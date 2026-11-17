@@ -20,11 +20,13 @@ sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 import cut_utils
 import kinematics
 
-# LHCb fiducial requirements.
+# LHCb fiducial requirements: 2 < eta < 4.5 for every particle, and per |pid| the pT and p minima
+# [MeV] (p_min None: no p requirement). A PID not listed fails.
+FIDUCIAL_ETA_RANGE = (2.0, 4.5)
 FIDUCIAL_REQS = {
-    13: lambda pt, p, eta: (2.0 < eta) & (eta < 4.5) & (pt > 500) & (p > 3000),
-    11: lambda pt, p, eta: (2.0 < eta) & (eta < 4.5) & (pt > 500) & (p > 3000),
-    22: lambda pt, p, eta: (2.0 < eta) & (eta < 4.5) & (pt > 500),
+    13: (500.0, 3000.0),   # muons
+    11: (500.0, 3000.0),   # electrons
+    22: (500.0, None),     # photons
 }
 
 
@@ -40,13 +42,17 @@ def fiducial_mask(tree):
 
     # [False, False, ...]
     ok = np.zeros(len(pid), dtype=bool)
+    in_eta = (FIDUCIAL_ETA_RANGE[0] < eta) & (eta < FIDUCIAL_ETA_RANGE[1])
     # Apply fiducial requirements to each particle type (PID).
-    for ptype, reqs in FIDUCIAL_REQS.items():
+    for abs_pid, (pt_min, p_min) in FIDUCIAL_REQS.items():
         # True for all particles of this PID [13, -13, 22, ...] -> [True, True, False, ...] for
-        # ptype=13
-        mask = np.abs(pid) == ptype
+        # abs_pid=13
+        mask = np.abs(pid) == abs_pid
         # For each particle of this PID, check if it passes the fiducial reqs.
-        if mask.any(): ok[mask] = reqs(pt[mask], p[mask], eta[mask])
+        passes = in_eta & (pt > pt_min)
+        if p_min is not None:
+            passes = passes & (p > p_min)
+        ok[mask] = passes[mask]
     # Unflatten back to per-event structure, also require momentum > 0 to avoid divison by zero and
     # unphysical momenta, just in case.
     return ak.unflatten(ok & (p > 0), ak.num(tree['mc_pid']))

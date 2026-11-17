@@ -182,8 +182,11 @@ def test_unit_factor_reproduces_the_unweighted_shapes():
 
 def test_weighted_background_is_zero_where_forbidden():
     m12_range, m23_range = (0.015, 0.030), (0.2879, 0.3100)
-    factor_grid = fit_utils.sample_factor(
-        lambda M: kinematics.phase_space_factor(M, m12_range, m23_range), XMIN, XMAX)
+
+    def factor_of_mass(M):
+        return kinematics.phase_space_factor(M, m12_range, m23_range)
+
+    factor_grid = fit_utils.sample_factor(factor_of_mass, XMIN, XMAX)
     weighted_cdf = fit_utils.weighted_cheb_cdf(factor_grid)
     weighted_pdf = fit_utils.weighted_cheb_pdf(factor_grid)
     # f = 0 below ~541 MeV in this bin, so no background probability there, even for a Chebyshev
@@ -201,8 +204,11 @@ def test_weighted_fit_recovers_background_toy():
     component."""
     rng = np.random.default_rng(3)
     m12_range, m23_range = (0.015, 0.030), (0.0886, 0.1107)
-    factor_grid = fit_utils.sample_factor(
-        lambda M: kinematics.phase_space_factor(M, m12_range, m23_range), XMIN, XMAX)
+
+    def factor_of_mass(M):
+        return kinematics.phase_space_factor(M, m12_range, m23_range)
+
+    factor_grid = fit_utils.sample_factor(factor_of_mass, XMIN, XMAX)
     masses, factor = factor_grid
     shape = fit_utils.cheb_bkg_unnorm(masses, XMIN, XMAX, -0.5, 0.1) * factor
     cdf = np.concatenate([[0], np.cumsum(0.5 * (shape[1:] + shape[:-1]) * np.diff(masses))])

@@ -147,7 +147,10 @@ def fig_decomposition(outdir, results, i, j):
     g = results['fit']['parameters']
     entry = next(b for b in results['dalitz']['bins'] if (b['i'], b['j']) == (i, j))
     dcb = [g[p]['value'] for p in ('mean', 'sigma', 'alphaL', 'nL', 'alphaR', 'nR')]
-    factor_grid = fit_utils.sample_factor(lambda M: f_of(M, i, j), XMIN, XMAX)
+    def factor_of_mass(M):
+        return f_of(M, i, j)
+
+    factor_grid = fit_utils.sample_factor(factor_of_mass, XMIN, XMAX)
     masses, factor = factor_grid
     c = (entry['c0'], entry['c1'])
 

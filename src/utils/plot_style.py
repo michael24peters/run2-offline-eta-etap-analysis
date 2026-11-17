@@ -186,15 +186,26 @@ def add_bin_index_axes(ax, x_edges, y_edges, x_label='bin i', y_label='bin j'):
     x0, dx = x_edges[0], (x_edges[-1] - x_edges[0]) / nx
     y0, dy = y_edges[0], (y_edges[-1] - y_edges[0]) / ny
 
-    top = ax.secondary_xaxis('top', functions=(lambda x: (x - x0) / dx,
-                                                lambda i: x0 + i * dx))
+    # Physical value <-> bin index on each axis
+    def x_to_index(x):
+        return (x - x0) / dx
+
+    def index_to_x(i):
+        return x0 + i * dx
+
+    def y_to_index(y):
+        return (y - y0) / dy
+
+    def index_to_y(j):
+        return y0 + j * dy
+
+    top = ax.secondary_xaxis('top', functions=(x_to_index, index_to_x))
     top.set_xticks([i + 0.5 for i in range(nx)])
     top.set_xticklabels([str(i) for i in range(nx)], fontsize=8)
     top.set_xlabel(x_label, fontsize=9)
     top.tick_params(length=3)
 
-    right = ax.secondary_yaxis('right', functions=(lambda y: (y - y0) / dy,
-                                                     lambda j: y0 + j * dy))
+    right = ax.secondary_yaxis('right', functions=(y_to_index, index_to_y))
     right.set_yticks([j + 0.5 for j in range(ny)])
     right.set_yticklabels([str(j) for j in range(ny)], fontsize=8)
     right.set_ylabel(y_label, fontsize=9)
@@ -203,11 +214,11 @@ def add_bin_index_axes(ax, x_edges, y_edges, x_label='bin i', y_label='bin j'):
 
 def format_y_axis(ax):
     """
-    Plain integer y-tick labels, offset by whatever power of ten keeps the mantissa a short integer
-    (e.g. 0, 100, 200, 300 with a x10^2 marker) instead of matplotlib's default
-    single-digit-plus-decimal mantissa (0.0, 0.5, ..., 3.0 x10^4). Values under 1000 need no offset
-    at all. Reads ax's current y-limit, so call this after the axis range is final (i.e. after
-    reserve_top_margin).
+    y-tick labels of the LHCb style (lhcbStyle.C, which keeps ROOT's default of 5 digits): plain
+    integers up to 99,999; above, the values divided by 10^N, N a multiple of 3 that leaves 2 to 4
+    digits, with a x10^N marker above the axis (400,000 -> 400 x10^3, 4,000,000 -> 4000 x10^3,
+    40,000,000 -> 40 x10^6). Reads ax's current y-limit, so call this after the axis range is
+    final (i.e. after reserve_top_margin).
     """
     # Candidate counts are always non-negative integers, so tick positions should be too --
     # otherwise adjacent fractional ticks can round to the same displayed integer (e.g. a near-empty
