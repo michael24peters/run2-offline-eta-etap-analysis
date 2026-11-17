@@ -1,9 +1,12 @@
 """
 bkg_utils.py
 
-MC matching against a signal decay (signal_daughter_mask, signal_candidate_mask). For MC,
-MC matching is always the first cut.
+MC matching against a signal decay (signal_daughter_mask, signal_candidate_mask) and the background
+source of each candidate (candidate_categories). For MC, MC matching is always the first cut.
 """
+
+import awkward as ak
+import numpy as np
 
 import cut_utils
 
@@ -64,3 +67,56 @@ def signal_candidate_mask(tree, mother_pid, daughter_pids, target_ref):
     m = signal_daughter_mask(tree, mother_pid, daughter_pids)
     return cut_utils.reduce(tree, m['is_signal_dtr'], 'prt_idx_mom',
                             how='all', target_ref=target_ref)
+
+
+def candidate_categories(tree, mother_pid, daughter_pids, target_ref):
+    """
+    Per-candidate masks of the background source of each candidate against the signal decay
+    mother_pid -> daughter_pids (see signal_daughter_mask). A daughter that is not a signal
+    daughter has one reason:
+
+        unmatched        no generator match
+        misid            the generator match has a different PID
+        not_from_signal  the right PID, but not a daughter of the signal mother
+
+    with misid and not_from_signal split by the daughter's reco species, muon (|pid| 13) or photon
+    (pid 22).
+
+    target_ref : any branch whose per-event length defines the candidate collection, passed through
+                 to cut_utils.reduce.
+
+    Returns {category: per-candidate mask}, in this order:
+        mc_matched              every daughter is a signal daughter (signal_candidate_mask)
+        unmatched, muon_misid, photon_misid, muon_not_from_signal, photon_not_from_signal
+                                the one reason found among the candidate's daughters
+        several                 two or more different reasons
+    For candidates whose daughters are muons and photons, every candidate is in exactly one.
+    """
+    m = signal_daughter_mask(tree, mother_pid, daughter_pids)
+    is_muon = abs(tree['prt_pid']) == 13
+    is_photon = tree['prt_pid'] == 22
+    misid = m['has_gen_match'] & ~m['pid_match']
+    not_from_signal = m['pid_match'] & ~m['is_child_of_signal_mother']
+    daughter_reasons = {
+        'unmatched':              ~m['has_gen_match'],
+        'muon_misid':             misid & is_muon,
+        'photon_misid':           misid & is_photon,
+        'muon_not_from_signal':   not_from_signal & is_muon,
+        'photon_not_from_signal': not_from_signal & is_photon,
+    }
+
+    # Each reason onto the candidates (True if any daughter has it), and the number of different
+    # reasons per candidate
+    reasons = {}
+    n_reasons = ak.zeros_like(tree[target_ref], dtype=np.int64)
+    for name, daughter_has_reason in daughter_reasons.items():
+        reasons[name] = cut_utils.reduce(tree, daughter_has_reason, 'prt_idx_mom', how='any',
+                                         target_ref=target_ref)
+        n_reasons = n_reasons + reasons[name]
+
+    categories = {'mc_matched': cut_utils.reduce(tree, m['is_signal_dtr'], 'prt_idx_mom',
+                                                 how='all', target_ref=target_ref)}
+    for name, has_reason in reasons.items():
+        categories[name] = has_reason & (n_reasons == 1)
+    categories['several'] = n_reasons > 1
+    return categories
