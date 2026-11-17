@@ -1,7 +1,6 @@
 # anaroot
 
-LHCb analysis of η → μμ(γ): background classification, mass fits, and Dalitz
-analysis.
+LHCb analysis of η → μμ(γ)(μμ): background classification, mass fits, and Dalitz analysis.
 
 ## Layout
 
