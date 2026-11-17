@@ -7,9 +7,8 @@ a per-event Python loop, and groups daughters by prt_idx_mom instead of assuming
 count per candidate.
 
 Usage:
-    python ana_bkg.py input.root [outfile out/output.txt] [--verbose]
-                      [--pnnmu_cut 0.5] [--mother_pid 221]
-                      [--daughter_pids -13 13]
+    python src/ana/ana_bkg.py INFILE OUTFILE [--verbose] [--pnnmu_cut X] [--mother_pid 221]
+        [--daughter_pids -13 13]
 """
 
 import argparse
@@ -33,8 +32,7 @@ BRANCHES = ['tag_pid', 'prt_pid', 'prt_idx_gen', 'prt_idx_mom', 'prt_pnn_mu',
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('infile', help='Input ROOT file')
-    parser.add_argument('outfile', default='out/output.txt',
-                        help='Output file prefix, writes .txt')
+    parser.add_argument('outfile', help='Output file prefix, writes .txt')
     parser.add_argument('-v', '--verbose', action='store_true', default=False,
                         help='Include a per-candidate, per-daughter dump of '
                              'background candidates')

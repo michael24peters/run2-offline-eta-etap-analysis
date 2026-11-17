@@ -36,7 +36,6 @@ with open(args.input) as f:
     data = json.load(f)
 
 # --- Extract pull values ---
-print('Extracting pull values...')
 hist = data['histogram']
 x = np.array(hist['bin_centers'])
 pulls = np.array(hist['bin_pulls'])
@@ -55,7 +54,7 @@ std = np.std(pulls, ddof=1)
 # x range for the plot
 xmin = min(-4.0, mean - 3.5 * std)
 xmax = max( 4.0, mean + 3.5 * std)
-nbins = 20  # Placeholder value
+nbins = 20  # pull histogram bins
 
 # Histogram the pulls to get bin counts for the Gaussian amplitude seed
 # Returns the counts in each bin and the edges of the bins
@@ -110,13 +109,8 @@ os.makedirs(os.path.dirname(args.output) or '.', exist_ok=True)
 plot_style.save_plot(fig, args.output)
 
 # --- Print summary ---
-W = 48
-print()
-print('─' * W)
-print(f"  {'Pull distribution summary':^{W-4}}")
-print('─' * W)
-print(f'  N bins            : {n_pulls}')
-print(f'  Bin width         : {bin_width:.4f}')
-print(f'  Sample mean       : {mean:+.4f}')
-print(f'  Sample std        : {std:.4f}')
-print('─' * W)
+plot_style.print_summary(f'  N bins            : {n_pulls}\n'
+                         f'  Bin width         : {bin_width:.4f}\n'
+                         f'  Sample mean       : {mean:+.4f}\n'
+                         f'  Sample std        : {std:.4f}',
+                         title='Pull distribution summary')

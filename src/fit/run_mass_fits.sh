@@ -35,6 +35,7 @@
 set -o pipefail
 cd "$(dirname "$0")/../.."
 PY=.venv/bin/python
+export MPLBACKEND=Agg   # figures are only saved
 NTUPLE=20261109
 DATE=$(date +%Y%m%d)
 CHANNELS="eta2mumu eta2mumugamma eta2mumumumu"
