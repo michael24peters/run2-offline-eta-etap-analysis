@@ -1,24 +1,18 @@
 """
 fid_reqs.py
 
-Script to apply fiducial requirements to generator-level particles in a ROOT file. Uses uproot +
-awkward for I/O (no PyROOT/ROOT dependency).
+LHCb fiducial requirements on generator-level particles, as masks:
 
-Usage:
-    python fid_reqs.py input.root mother_pid daughter_pid1 daughter_pid2 ...
-
-Examples:
-    python fid_reqs.py input.root 221 13 -13  |  (eta -> mu+ mu-)
-    python fid_reqs.py input.root 221 13 -13 22  |  (eta -> mu+ mu- gamma)
+    fiducial_mask(tree)                         per generator particle
+    fiducial_masks(tree, mother, daughters)     per generator particle, by decay and failure
+    fiducial_candidate_mask(tree, mother, daughters, target_ref)   per reco candidate
 """
 
-import argparse
 import os
 import sys
 
 import awkward as ak
 import numpy as np
-import uproot
 
 # Ensure utils/fit_utils.py is importable
 _here = os.path.dirname(os.path.abspath(__file__))
@@ -120,39 +114,3 @@ def fiducial_candidate_mask(tree, mother_pid, daughter_pids, target_ref):
                   & cut_utils.follow(tree, child_of_acc, 'prt_idx_gen'))
     return cut_utils.reduce(tree, dtr_of_acc, 'prt_idx_mom', how='all',
                             target_ref=target_ref)
-
-
-# -------------------------------------------------------------------------------
-
-if __name__ == '__main__':
-    # Parse command line arguments
-    parser = argparse.ArgumentParser()
-    parser.add_argument('infile', help='Input ROOT file')
-    parser.add_argument('mother_pid', type=int, help='Mother PID for the decay')
-    parser.add_argument('daughter_pids', nargs='+', type=int,
-                        help='Daughter PIDs for the decay, space separated')
-    args = parser.parse_args()
-
-    # Define output path based on input path, file name always the same
-    outfile = os.path.join(os.path.dirname(args.infile), 'fiducial_requirements.root')
-
-    with uproot.open(args.infile) as fin:
-        events = fin['tree'].arrays(library='ak')
-
-    masks = fiducial_masks(events, args.mother_pid, args.daughter_pids)
-
-    # One boolean per event. `ak.any` = "the event has at least one fully fiducial mother"; swap for
-    # ak.all over `signal` if every mother must pass instead.
-    mask = ak.to_numpy(ak.any(masks['in_acceptance'], axis=1))
-
-    for name, m in masks.items():
-        print(f'{name:14s}: {int(ak.sum(m)):9d} particles '
-              f'{int(ak.sum(ak.any(m, axis=1))):9d} events')
-    print(f'Kept {int(mask.sum())} / {len(mask)} events '
-          f'({100.0 * mask.sum() / len(mask):.1f}%)')
-
-    kept = events[mask]
-    with uproot.recreate(outfile) as fout:
-        fout['tree'] = kept
-
-    print(f'Wrote {len(kept)} events to {outfile}')

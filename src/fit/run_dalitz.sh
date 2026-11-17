@@ -8,7 +8,6 @@
 # 450-650 MeV, the window of driver_dalitz.py.
 #
 # Every job prints to the terminal with its lines prefixed [job]; failed jobs are listed at the end.
-# Jobs start READ_PAUSE seconds apart, so that only one holds a full ROOT read at a time.
 #
 # Usage:
 #   src/fit/run_dalitz.sh [--factor "none flat weighted"]
@@ -19,7 +18,6 @@ PY=.venv/bin/python
 NTUPLE=20261109
 TAIL_PRIOR=out/eta2mumugamma/turbo/20261112/mc_prior/results_dcb.json
 DATE=$(date +%Y%m%d)
-READ_PAUSE=20
 FACTORS="none flat weighted"
 while [ $# -gt 0 ]; do
     case $1 in
@@ -45,7 +43,6 @@ TURBO=out/eta2mumugamma/turbo/$DATE/dalitz
 for factor in $FACTORS; do
     run "$factor turbo" $PY src/fit/driver_dalitz.py "$DATA" --outdir $TURBO \
         --factor $factor --tail-prior $TAIL_PRIOR &
-    sleep $READ_PAUSE
 done
 wait
 

@@ -16,9 +16,6 @@ ntuple/
 # out/ directory
 out/
 
-# old/ directory
-old/*
-
 # Temporary files
 *.log
 *.tmp
