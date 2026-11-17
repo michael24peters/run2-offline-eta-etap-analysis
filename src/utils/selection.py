@@ -50,6 +50,10 @@ TOS_LINES = {
 TOS_LINES_4MU = {**TOS_LINES,
                  'HLT1': ['tag_hlt1_tos0', 'tag_hlt1_tos2'],          # + Hlt1MultiDiMuonNoIP
                  'HLT2': ['tag_hlt2_tos0', 'tag_hlt2_rebuilt_tos4']}  # + Hlt2ExoticaQuadMuonNoIP
+# Displaced: HLT2 Hlt2ExoticaDisplDiMuon on its candidates rebuilt offline (a Full-stream line:
+# tag_hlt2_tos3 is -1 in Turbo data) in place of the prompt line
+TOS_LINES_DISPLACED = {**TOS_LINES,
+                       'HLT2': ['tag_hlt2_rebuilt_tos3']}   # Hlt2ExoticaDisplDiMuon
 
 
 def muon_cuts(tree, thresholds=MUON_THRESHOLDS):
