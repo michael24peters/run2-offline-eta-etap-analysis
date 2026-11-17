@@ -17,7 +17,6 @@ sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 import kinematics
 import plot_style
 import plot_utils
-from plot_phase_space import dalitz_boundary
 
 # (file name, [[m12_lo, m12_hi], [m23_lo, m23_hi]]) [GeV^2] of each histogram
 HISTOGRAMS = [
@@ -33,9 +32,9 @@ def plot_dalitz_hist(m12s, m23s, hist_range, output, bins=N_BINS, sample=''):
     plot_utils.apply_font()
     plt.rcParams['font.size'] = 11
     fig, ax = plt.subplots(figsize=(8, 6))
-    *_, mesh = ax.hist2d(m12s, m23s, bins=bins, cmap='viridis', range=hist_range)
+    *_, mesh = ax.hist2d(m12s, m23s, bins=bins, cmap='Purples', range=hist_range)
     fig.colorbar(mesh, ax=ax, label='Candidates')
-    boundary12, boundary23 = dalitz_boundary(kinematics.M_ETA)
+    boundary12, boundary23 = kinematics.dalitz_boundary(kinematics.M_ETA)
     ax.plot(boundary12, boundary23, color='red', lw=1, label=r'Dalitz region at $m_\eta$')
     ax.legend(loc='upper right', fontsize=8)
     ax.set_xlabel(r'$m^2_{\gamma\mu^+}$ [GeV$^2$]')

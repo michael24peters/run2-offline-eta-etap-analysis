@@ -105,6 +105,18 @@ def m12_limits(M, m23s):
     return m12_min, m12_max
 
 
+def dalitz_boundary(M, n=3000):
+    """
+    Closed boundary (m12s, m23s) [GeV^2] of the Dalitz region of a gamma mu+ mu- system of mass M
+    [MeV], for plotting: m12_limits at n values of m23s from 4 m_mu^2 to M^2, the lower edge
+    followed by the upper edge in reverse.
+    """
+    m_mu2 = (M_MU / 1000.0)**2
+    m23s = np.linspace(4.0 * m_mu2, (M / 1000.0)**2, n)
+    m12_min, m12_max = m12_limits(M, m23s)
+    return np.concatenate([m12_min, m12_max[::-1]]), np.concatenate([m23s, m23s[::-1]])
+
+
 def phase_space_factor(M, m12_range, m23_range, n_m23=400):
     """
     Fraction of the Dalitz bin m12_range x m23_range (GeV^2, m12 = m^2(gamma mu+), m23 =

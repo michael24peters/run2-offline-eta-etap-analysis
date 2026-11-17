@@ -76,16 +76,6 @@ def inside_region(m12, m23, M):
     return ok & (m12 >= MMU2 + half * (1 - beta)) & (m12 <= MMU2 + half * (1 + beta))
 
 
-def dalitz_boundary(M, n=3000):
-    """Closed (m12, m23) boundary [GeV^2] of the Dalitz region at mass M."""
-    M2 = (M / 1000.0)**2
-    s = np.linspace(4 * MMU2, M2, n)
-    beta = np.sqrt(np.clip(1 - 4 * MMU2 / s, 0, None))
-    lo = MMU2 + (M2 - s) * (1 - beta) / 2
-    hi = MMU2 + (M2 - s) * (1 + beta) / 2
-    return np.concatenate([lo, hi[::-1]]), np.concatenate([s, s[::-1]])
-
-
 def draw_bin_at_mass(ax, i, j, M, margin=0.6, n=400):
     """Zoom on bin (i, j): the Dalitz region at mass M in light grey, the part of the bin inside it
     in violet, the bin outline in black."""
@@ -101,7 +91,7 @@ def draw_bin_at_mass(ax, i, j, M, margin=0.6, n=400):
     img[inside & in_bin] = matplotlib.colors.to_rgba(C['phase_space'], 0.75)
     ax.imshow(img, origin='lower', extent=(x0, x1, y0, y1), aspect='auto',
               interpolation='nearest')
-    bx, by = dalitz_boundary(M)
+    bx, by = kinematics.dalitz_boundary(M)
     ax.plot(bx, by, color=C['data'], lw=1.2)
     ax.add_patch(Rectangle((a, lo), w, h, fill=False, ec=C['data'], lw=1.6))
     ax.set_xlim(x0, x1); ax.set_ylim(y0, y1)
@@ -115,7 +105,7 @@ def fig_f_at_meta_map(outdir):
     mesh = ax.pcolormesh(M12_EDGES, M23_EDGES, f_eta.T, cmap='Purples',
                          vmin=0, vmax=1, edgecolors='white', linewidth=0.3)
     fig.colorbar(mesh, ax=ax, label=r'$f(m_\eta)$', pad=0.13)
-    bx, by = dalitz_boundary(kinematics.M_ETA)
+    bx, by = kinematics.dalitz_boundary(kinematics.M_ETA)
     ax.plot(bx, by, color=C['data'], lw=1.4, label=r'$\eta$ Dalitz boundary')
     ax.set_xlabel(M12_LABEL); ax.set_ylabel(M23_LABEL)
     ax.legend(loc='upper right', fontsize=10)
@@ -216,7 +206,7 @@ def fig_worked_example(outdir, events, sample=''):
         img[inside_region(X, Y, M)] = matplotlib.colors.to_rgba('#e4e3df')
         ax.imshow(img, origin='lower', extent=(x0, x1, y0, y1), aspect='auto',
                   interpolation='nearest')
-        ax.plot(*dalitz_boundary(M), color=C['data'], lw=1.2)
+        ax.plot(*kinematics.dalitz_boundary(M), color=C['data'], lw=1.2)
         ax.plot(x, y, 'o', color=C['pull'], ms=8, mec=C['data'], mew=0.8)
         ax.set_xlim(x0, x1); ax.set_ylim(y0, y1)
         ax.set_xticks([0.01, 0.02, 0.03])

@@ -33,7 +33,6 @@ import kinematics
 import plot_style
 import plot_utils
 from plot_mass_fit import build_fit_figure, dcb_text, plot_fit
-from plot_phase_space import dalitz_boundary
 
 SIGNAL_KEYS = {'mean', 'sigma', 'n_sig', 'n_bkg'}
 C = plot_style.COLORS
@@ -53,7 +52,7 @@ def plot_yield_maps(result, prefix):
     dalitz = result['dalitz']
     m12_edges = np.array(dalitz['m12_edges'])
     m23_edges = np.array(dalitz['m23_edges'])
-    boundary12, boundary23 = dalitz_boundary(kinematics.M_ETA)
+    boundary12, boundary23 = kinematics.dalitz_boundary(kinematics.M_ETA)
     plot_utils.apply_font()
     plt.rcParams['font.size'] = 11
     for key, name, label in [('n_sig', 'signal', 'Fitted signal yield'),
@@ -63,7 +62,7 @@ def plot_yield_maps(result, prefix):
             if b['valid']:
                 yields[b['i'], b['j']] = b[key]
         fig, ax = plt.subplots(figsize=(7, 6))
-        mesh = ax.pcolormesh(m12_edges, m23_edges, yields.T, cmap='viridis', shading='auto')
+        mesh = ax.pcolormesh(m12_edges, m23_edges, yields.T, cmap='Purples', shading='auto')
         fig.colorbar(mesh, ax=ax, label=label, pad=0.13)
         ax.plot(boundary12, boundary23, color='red', lw=1, label=r'Dalitz region at $m_\eta$')
         ax.legend(loc='upper right', fontsize=8)
