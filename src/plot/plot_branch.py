@@ -1,4 +1,4 @@
-'''
+"""
 plot_branch.py
 
 Rough plot of a branch from a ROOT file, using uproot and matplotlib. Useful for quick checks of
@@ -6,48 +6,34 @@ distributions.
 
 Usage:
     python plot_branch.py input.root branch_name [output.png] [--n-evts N]
-'''
+"""
 
 import argparse
 import os
 import sys
 
+import awkward as ak
 import matplotlib.pyplot as plt
 import numpy as np
-import uproot
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'utils'))
+import cut_utils
 import plot_style
 import plot_utils
 
 
-def plot_branch(input, branch_name, n_evts=-1, output='branch_plot.png'):
+def plot_branch(path, branch_name, n_evts=None, output='branch_plot.png'):
     # Create output directory if it doesn't exist
     output_dir = os.path.dirname(output)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
         print(f'[INFO] Output directory created: {output_dir}')
 
-    # Check if input is a ROOT file or just an array of numbers
-    if input.endswith('.root'):
-        # Open the ROOT file and get the branch data from the tree
-        print('[INFO] Opening ROOT file...')
-        tree = uproot.open(input)['tree']
-        # Load the branch as a numpy array
-        print(f'[INFO] Loading branch {branch_name}...')
-        branch_data = tree[branch_name].array(library='np')
-        print(f'[INFO] Loaded {len(branch_data)} entries for branch {branch_name}.')
-    else:
-        # Assume input is just an array of numbers, which needs to be converted to numpy if not
-        # already
-        branch_data = input if isinstance(input, np.ndarray) else np.array(input)
-        print(f'[INFO] Loaded {len(branch_data)} entries from {input}.')
-    if n_evts > 0:
-        branch_data = branch_data[:n_evts]
-        print(f'[INFO] Using first {n_evts} entries for plotting.')
-    # Flatten array (only if the branch is a jagged array)
-    if branch_data.dtype == object:
-        branch_data = np.concatenate(branch_data)
+    # Read the branch from the first n_evts events (all if None), flattened to one value per entry
+    print(f'[INFO] Loading branch {branch_name}...')
+    tree = cut_utils.read_branches(path, [branch_name], entry_stop=n_evts)
+    branch_data = ak.to_numpy(ak.flatten(tree[branch_name], axis=None))
+    print(f'[INFO] Loaded {len(branch_data)} entries of {branch_name} from {len(tree)} events.')
     print('[INFO] Plotting histogram...')
     # Provide warning if the branch_data is probably too large to plot
     if len(branch_data) > 1e6:
@@ -66,8 +52,7 @@ def plot_branch(input, branch_name, n_evts=-1, output='branch_plot.png'):
                else 'Daughters' if branch_name.startswith('prt_') else 'Entries')
     ax.set_ylabel(entries)
     plot_style.style_axes(ax)
-    sample = plot_style.sample_label(input) if isinstance(input, str) else ''
-    sample_box = plot_style.add_stats_box(ax, '', sample=sample)
+    sample_box = plot_style.add_stats_box(ax, '', sample=plot_style.sample_label(path))
     plot_style.reserve_top_margin(ax, max(counts.max(), 1), [sample_box])
     print('[INFO] Saving plot...')
     plot_style.save_plot(fig, output)
@@ -76,9 +61,9 @@ def plot_branch(input, branch_name, n_evts=-1, output='branch_plot.png'):
 # Main method to run this directly as a script
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Plot a branch from a ROOT file')
-    parser.add_argument('input', help='Input ROOT file or data file')
+    parser.add_argument('input', help='Input ROOT file, or a quoted glob of them')
     parser.add_argument('branch_name', help='Branch name to plot')
-    parser.add_argument('--n-evts', '-n', type=int, default=-1,
+    parser.add_argument('--n-evts', '-n', type=int, default=None,
                             help='Number of events to plot (default: all)')
     parser.add_argument('output', nargs='?', default='branch_plot.png',
                     help='Output PNG file (default: branch_plot.png)')
