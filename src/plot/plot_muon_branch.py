@@ -94,7 +94,8 @@ def plot(data, mc, edges, cut, xlabel, entries, sample, path):
         ax.set_xlabel(xlabel)
         ax.set_ylabel(plot_style.count_label(f'Fraction of {entries}', edges))
         plot_style.style_axes(ax)
-        legend = ax.legend(frameon=False, loc='upper right')
+        legend = ax.legend(loc='upper right', frameon=True, fancybox=False, edgecolor='none',
+                           framealpha=1)
         sample_box = plot_style.add_stats_box(ax, '', sample=sample)
         top = max(data_density.max(), mc_density.max())
         if logy:

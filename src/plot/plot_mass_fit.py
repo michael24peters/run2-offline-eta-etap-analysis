@@ -146,7 +146,8 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
             ax_f.plot(phase_space['x'], phase_space['f_sig'],
                       color=plot_style.COLORS['phase_space'], linewidth=1.8,
                       linestyle='--', label='signal (Dalitz decay)')
-            ax_f.legend(loc='center right', fontsize=12, frameon=False)
+            ax_f.legend(loc='center right', fontsize=12, frameon=True, fancybox=False,
+                        edgecolor='none', framealpha=1)
         ax_f.axvline(x=547.86, color=plot_style.COLORS['reference'], linestyle='--')
         ax_f.set_ylim(-0.05, 1.1)
         ax_f.set_yticks([0, 0.5, 1])

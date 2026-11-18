@@ -37,7 +37,8 @@ def plot_dalitz_hist(m12s, m23s, hist_range, output, bins=N_BINS, sample=''):
     fig.colorbar(mesh, ax=ax, label='Candidates')
     boundary12, boundary23 = kinematics.dalitz_boundary(kinematics.M_ETA)
     ax.plot(boundary12, boundary23, color='red', lw=1, label=r'Dalitz region at $m_\eta$')
-    ax.legend(loc='upper right', fontsize=8)
+    ax.legend(loc='upper right', fontsize=8, frameon=True, fancybox=False, edgecolor='none',
+              framealpha=1)
     ax.set_xlabel(r'$m^2_{\gamma\mu^+}$ [GeV$^2$]')
     ax.set_ylabel(r'$m^2_{\mu^+\mu^-}$ [GeV$^2$]')
     plot_style.add_stats_box(ax, '', sample=sample)

@@ -65,7 +65,8 @@ def plot_yield_maps(result, prefix):
         mesh = ax.pcolormesh(m12_edges, m23_edges, yields.T, cmap='Purples', shading='auto')
         fig.colorbar(mesh, ax=ax, label=label, pad=0.13)
         ax.plot(boundary12, boundary23, color='red', lw=1, label=r'Dalitz region at $m_\eta$')
-        ax.legend(loc='upper right', fontsize=8)
+        ax.legend(loc='upper right', fontsize=8, frameon=True, fancybox=False, edgecolor='none',
+                  framealpha=1)
         ax.set_xlabel(r'$m^2_{\gamma\mu^+}$ [GeV$^2$]')
         ax.set_ylabel(r'$m^2_{\mu^+\mu^-}$ [GeV$^2$]')
         plot_style.add_stats_box(ax, '', sample=plot_style.sample_label(

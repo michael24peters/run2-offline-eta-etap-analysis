@@ -108,7 +108,8 @@ def fig_f_at_meta_map(outdir):
     bx, by = kinematics.dalitz_boundary(kinematics.M_ETA)
     ax.plot(bx, by, color=C['data'], lw=1.4, label=r'$\eta$ Dalitz boundary')
     ax.set_xlabel(M12_LABEL); ax.set_ylabel(M23_LABEL)
-    ax.legend(loc='upper right', fontsize=10)
+    ax.legend(loc='upper right', fontsize=10, frameon=True, fancybox=False, edgecolor='none',
+              framealpha=1)
     plot_style.style_axes(ax)
     plot_style.add_bin_index_axes(ax, M12_EDGES, M23_EDGES)
     plot_style.save_plot(fig, os.path.join(outdir, 'f_at_meta_map.png'), dpi=150)
@@ -134,7 +135,8 @@ def fig_construction(outdir):
     ax.axvline(kinematics.M_ETA, color=C['reference'], ls='--', label=r'$m_\eta$')
     ax.set_xlim(XMIN, XMAX); ax.set_ylim(-0.05, 1.08)
     ax.set_xlabel(M_LABEL); ax.set_ylabel('f(M)')
-    ax.legend(loc='lower right', fontsize=11)
+    ax.legend(loc='lower right', fontsize=11, frameon=True, fancybox=False, edgecolor='none',
+              framealpha=1)
     plot_style.style_axes(ax)
     fig.tight_layout()
     out = os.path.join(outdir, f'f_construction_{i}_{j}.png')
@@ -171,7 +173,8 @@ def fig_decomposition(outdir, results, i, j):
                              sharex=True, gridspec_kw={'height_ratios': [1] + [2] * len(shapes)})
     axes[0].plot(masses, factor, color=C['phase_space'], lw=2, label='$f(M)$')
     axes[0].set_ylim(-0.05, 1.1); axes[0].set_ylabel('$f(M)$')
-    axes[0].legend(loc='lower right', fontsize=11)
+    axes[0].legend(loc='lower right', fontsize=11, frameon=True, fancybox=False, edgecolor='none',
+                   framealpha=1)
     plot_style.add_stats_box(axes[0], '', sample=plot_style.sample_label(
         results['meta'].get('input_file', '')))
     for ax, (name, color, alone, label, renorm) in zip(axes[1:], shapes, strict=True):
@@ -184,7 +187,7 @@ def fig_decomposition(outdir, results, i, j):
         ax.set_ylabel(f'{name} pdf [1/MeV]')
         ax.set_ylim(0, 1.45 * max(alone.max(), renorm.max()))   # headroom for the legend
         ax.legend(loc='upper left' if masses[np.argmax(renorm)] > 560 else 'upper right',
-                  fontsize=10)
+                  fontsize=10, frameon=True, fancybox=False, edgecolor='none', framealpha=1)
     for ax in axes:
         ax.axvline(kinematics.M_ETA, color=C['reference'], ls='--', lw=1)
         plot_style.style_axes(ax)
@@ -236,7 +239,8 @@ def fig_worked_example(outdir, events, sample=''):
     ax.set_xlabel(M_LABEL); ax.set_ylabel(plot_style.count_label('Candidates', mass_edges, 'MeV'))
     plot_style.add_stats_box(ax, '', sample=sample)
     ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
-    ax.legend(loc='upper right', fontsize=11)
+    ax.legend(loc='upper right', fontsize=11, frameon=True, fancybox=False, edgecolor='none',
+              framealpha=1)
     plot_style.style_axes(ax)
     fig.tight_layout()
     out = os.path.join(outdir, 'worked_example.png')
@@ -275,7 +279,8 @@ def fig_strips(outdir):
                 label=f'mean over strips = {frac.mean():.2f}')
     ax1.set_xlim(0, 1.05)
     ax1.set_xlabel('covered fraction of the strip')
-    ax1.legend(loc='upper right', fontsize=11)
+    ax1.legend(loc='upper right', fontsize=11, frameon=True, fancybox=False, edgecolor='none',
+               framealpha=1)
     plot_style.style_axes(ax1)
     fig.tight_layout()
     out = os.path.join(outdir, f'f_strips_{i}_{j}.png')
@@ -309,7 +314,8 @@ def fig_uniformity(outdir, events, i, j, sample=''):
     ax1.set_xlim(XMIN, XMAX); ax1.set_ylim(-0.05, 1.08)
     ax1.set_xlabel(M_LABEL); ax1.set_ylabel('reachable fraction')
     ax1.set_title('Reachable fraction at each M')
-    ax1.legend(loc='lower right', fontsize=10)
+    ax1.legend(loc='lower right', fontsize=10, frameon=True, fancybox=False, edgecolor='none',
+               framealpha=1)
     plot_style.add_stats_box(ax1, '', sample=sample)
     plot_style.style_axes(ax1)
     plot_style.save_plot(fig, os.path.join(outdir, f'uniformity_{i}_{j}.png'), dpi=150)

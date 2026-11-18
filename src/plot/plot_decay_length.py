@@ -83,7 +83,8 @@ def plot(values, edges, xlabel, unit, box_text, sample, outdir, name):
         entries = 'Fraction of candidates' if scale == 'fraction' else 'Candidates'
         ax.set_ylabel(plot_style.count_label(entries, edges, unit))
         plot_style.style_axes(ax)
-        legend = ax.legend(frameon=False, loc='upper right')
+        legend = ax.legend(loc='upper right', frameon=True, fancybox=False, edgecolor='none',
+                           framealpha=1)
         sample_box = plot_style.add_stats_box(ax, box_text, sample=sample)
         if scale == 'counts':
             ax.set_yscale('log')

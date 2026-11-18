@@ -77,7 +77,8 @@ def plot_pair(ax, edges, before, after, labels, sample, logy=False):
         ax.stairs(counts, edges, linewidth=1.5, color=color, label=f'{label} ({total})')
         top = max(top, counts.max())
     plot_style.style_axes(ax)
-    legend = ax.legend(frameon=False, loc='upper right')
+    legend = ax.legend(loc='upper right', frameon=True, fancybox=False, edgecolor='none',
+                       framealpha=1)
     sample_box = plot_style.add_stats_box(ax, '', sample=sample)
     if logy:
         ax.set_yscale('log')

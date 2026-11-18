@@ -96,7 +96,8 @@ ax.set_ylabel(plot_style.count_label('Mass bins', edges))
 ax.set_xlim(xmin, xmax)
 plot_style.style_axes(ax)
 # Legend
-legend = ax.legend(frameon=False, loc='upper right')
+legend = ax.legend(loc='upper right', frameon=True, fancybox=False, edgecolor='none',
+                   framealpha=1)
 
 # --- Summary text, below the sample label of the fit's input ---
 text = f'$\\mu = {mean:+.3f}$\n$\\sigma = {std:.3f}$'

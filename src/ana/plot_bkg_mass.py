@@ -59,7 +59,8 @@ def plot_categories(ax, edges, histograms, counts, sample, logy=False):
                   label=f'{label} ({counts[name]})')
         top = max(top, histograms[name].max())
     plot_style.style_axes(ax)
-    legend = ax.legend(frameon=False, loc='upper right', fontsize='small')
+    legend = ax.legend(loc='upper right', fontsize='small', frameon=True, fancybox=False,
+                       edgecolor='none', framealpha=1)
     sample_box = plot_style.add_stats_box(ax, '', sample=sample)
     if logy:
         ax.set_yscale('log')
