@@ -112,21 +112,19 @@ When following `mc_idx_mom`, AND in `cut_utils.valid(tree, 'mc_idx_mom')` first.
 
 Properties of the ntuple productions that the selection depends on.
 
-**Trigger branch numbering depends on the production.** `tag_<level>_tos<i>` is the i-th line of `l0Trgs` / `hlt1Trgs` / `hlt2Trgs` in the `../ana/src/ntuple.py` that wrote the file, and that order has changed. `TOS_LINES` assumes the July 2026 order or later:
+**Trigger branch numbering depends on the production.** `tag_<level>_tos<i>` is the i-th line of `l0Trgs` / `hlt1Trgs` / `hlt2Trgs` in the `../ana/src/ntuple.py` that wrote the file. `TOS_LINES` assumes the order of the 20261109 data and MC:
 
-| ntuple | `tag_hlt2_tos0` | `tag_hlt2_tos1` | `tag_hlt2_tos2` |
-|---|---|---|---|
-| data 20260507, 20260608 | Hlt2ExoticaPrmptDiMuonTurbo | Hlt2ExoticaDisplDiMuon | Hlt2ExoticaDiMuonNoIPTurbo |
-| data and MC 20260716 | Hlt2ExoticaPrmptDiMuonTurbo | Hlt2ExoticaDiMuonNoIPTurbo | Hlt2ExoticaDisplDiMuon |
-| `ntuple.py` since 2026-08-05 | Hlt2ExoticaPrmptDiMuonTurbo | Hlt2ExoticaDiMuonNoIPTurbo | -- |
-| `ntuple.py` since 2026-10-05 (MC 20261006) | Hlt2ExoticaPrmptDiMuonTurbo | Hlt2ExoticaDiMuonNoIPTurbo | Hlt2Topo (TIS line) |
-| data and MC 20261109 | Hlt2ExoticaPrmptDiMuonTurbo | Hlt2ExoticaDiMuonNoIPTurbo | Hlt2Topo (TIS line) |
+| level | `tos0` | `tos1` | `tos2` | `tos3` | `tos4` |
+|---|---|---|---|---|---|
+| L0 | L0DiMuon | L0Muon | L0Hadron (TIS line) | | |
+| HLT1 | Hlt1DiMuonNoIP | Hlt1DiMuonLowMass | Hlt1MultiDiMuonNoIP | Hlt1TrackMVA (TIS line) | |
+| HLT2 | Hlt2ExoticaPrmptDiMuonTurbo | Hlt2ExoticaDiMuonNoIPTurbo | Hlt2Topo (TIS line) | Hlt2ExoticaDisplDiMuon | Hlt2ExoticaQuadMuonNoIP |
 
-L0 (`tos0` L0DiMuon, `tos1` L0Muon) and HLT1 (`tos0` Hlt1DiMuonNoIP, `tos1` Hlt1DiMuonLowMass) keep the same order in all of them. Since 2026-10-05 each level has further lines after those: L0 `tos2` L0Hadron (TIS line), HLT1 `tos2` Hlt1MultiDiMuonNoIP and `tos3` Hlt1TrackMVA (TIS line). 20261109 adds HLT2 `tos3` Hlt2ExoticaDisplDiMuon and `tos4` Hlt2ExoticaQuadMuonNoIP, Full-stream lines that are -1 in Turbo data; `tag_hlt2_rebuilt_tos3` and `tag_hlt2_rebuilt_tos4` hold their TOS on the candidates rebuilt offline.
+HLT2 `tos3` and `tos4` are Full-stream lines that are -1 in Turbo data; `tag_hlt2_rebuilt_tos3` and `tag_hlt2_rebuilt_tos4` hold their TOS on the candidates rebuilt offline.
 
 **`prt_mu`, `prt_loose_mu` and `prt_tight_mu` hold one entry per muon.** In `eta2mumugamma` an event with two candidates has `prt_pid` = [-13, 13, 22, -13, 13, 22] and `prt_tight_mu` = [1, 1, 1, 1]: the photon has no entry, so the branch does not line up with `prt_pid` by position, and `drop_malformed()` drops every event for a daughter-length mismatch if it is read as is. `cut_utils.align_muons()` expands it to one entry per daughter (0 for the photon); it runs between `read_branches()` and `drop_malformed()`. In `eta2mumu` every daughter is a muon and the branch is unchanged.
 
-**Candidates cannot be ranked by `tag_dtf_chi2`.** In the 20261006 `eta2mumugamma` ntuples it is the same for every candidate of most multi-candidate events, up to floating-point rounding. The drivers pick one candidate per event at random (`random_candidate_mask()`, seed `selection.SEED` plus the chunk index).
+**Candidates cannot be ranked by `tag_dtf_chi2`.** In the 20261109 `eta2mumugamma` ntuples it is the same for every candidate of most multi-candidate events, up to floating-point rounding. The drivers pick one candidate per event at random (`random_candidate_mask()`, seed `selection.SEED` plus the chunk index).
 
 
 ## Per-Dalitz-bin fits: the phase-space factor
