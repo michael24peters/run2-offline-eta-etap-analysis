@@ -1,4 +1,4 @@
-# README
+# Fits
 
 ## Pipeline
 
@@ -10,15 +10,15 @@ fit_*.py      fit the numbers. Blind to files, cuts, candidates.
 plot_*.py     render
 ```
 
-Awkward arrays handle everything jagged (ROOT I/O, event/candidate structure) and live only in `src/utils/cut_utils.py`. Numpy handles everything flat (histogram, PDFs, curves) and lives in `src/utils/fit_utils.py` and the `fit_*` modules. The conversion is `cut_utils.values(tree, branch, mask)`, called in the driver.
+Awkward arrays hold everything jagged (ROOT I/O, event/candidate structure) up to `cut_utils.values(tree, branch, mask)`, which the drivers call. Numpy holds everything flat after it (histograms, PDFs, curves: `src/utils/fit_utils.py` and the `fit_*` modules).
 
 For MC, MC matching is always the first cut: it is applied before TOS, pnn_mu and the candidate pick. Every MC-matched run (`--mc-match`) therefore reads the raw MC files (`mag*/*.root`), never a `skim_eta.root`: a skim has already picked its candidate with no MC match.
 
-Most everything is a library, so the drivers are the only entry point for fitting (`fit_dcb.py` / `fit_gauss.py`, etc.).
+`fit_*.py` are libraries; `driver_*.py` are the entry points.
 
 ## Usage
 
-`driver_mass_fit.py` reads a ROOT file in chunks of `selection.STEP_SIZE`, selects and picks one candidate per event at random in each chunk, and runs the Gaussian fit, then the DCB fit seeded with the Gaussian sigma. The flag values below are the defaults.
+`driver_mass_fit.py` reads a ROOT file, or a quoted glob of them, in chunks of `selection.STEP_SIZE`, selects and picks one candidate per event at random in each chunk, and runs the Gaussian fit, then the DCB fit seeded with the Gaussian sigma. The flag values below are the defaults.
 
 ```
 python src/fit/driver_mass_fit.py data.root \
@@ -36,7 +36,9 @@ It writes into `--outdir`:
 
 `--n-max N` puts an upper limit N on the DCB tail exponents n_L and n_R (no limit by default). The fit chain holds the tails with priors instead, and `run_mass_fits.sh` passes no `--n-max`.
 
-`--max-events N` reads only the first N events, for quick iteration on large files. The drivers only expose fit hyperparameters as flags. Plot styling (font, colors, ticks, stats box, etc.) is fixed in `plot_mass_fit.py`/`plot_style.py`, and must be changed there manually. Every fit plot starts its stats box with `plot_style.sample_label` of the input path (decay, Data or MC, year), in the legend's font size like the fit parameters below it, labels its points MC for an input under `ntuple/mc/`, and counts `Candidates / (<bin width> MeV)` on its y axis (`plot_style.count_label`; natural units, no factors of c). The `--mc-match` fits record their fixed n_bkg, c0 and c1 in the meta `fixed_params` of `results_gauss.json` and `results_dcb.json`; their plots leave them out of the stats box and draw no background.
+`--max-events N` reads only the first N events.
+
+Plot styling (font, colors, ticks, stats box) is set in `plot_mass_fit.py` and `plot_style.py`, not by flags. Every fit plot starts its stats box with `plot_style.sample_label` of the input path (decay, Data or MC, year), labels its points Data or MC, and counts `Candidates / (<bin width> MeV)` on its y axis (`plot_style.count_label`). The `--mc-match` fits record their fixed n_bkg, c0 and c1 in the meta `fixed_params` of `results_gauss.json` and `results_dcb.json`; their plots leave them out of the stats box and draw no background.
 
 ## Fit chain: MC Gaussian, MC DCB, data DCB
 
@@ -44,9 +46,9 @@ It writes into `--outdir`:
 MC gauss  -(sigma start)->  MC dcb  -(sigma and tail start + prior)->  data dcb
 ```
 
-The MC fits use MC-matched signal MC (`--mc-match`). It is signal only, so the Gaussian and the DCB both run with no background (n_bkg, c0, c1 fixed at 0). A Gaussian does not describe the tails of the signal; its sigma is only the start value of the MC DCB sigma, with no prior. On data the DCB sigma and tails come from the MC DCB: they start at the MC values and are under a `NormalConstraint` prior centred on them, with the MC covariance widened by `SIGMA_PRIOR_FACTOR` (`--sigma-prior`) and `TAIL_PRIOR_FACTOR` (`--tail-prior`) standard deviations, x5 for eta2mumu and eta2mumugamma, x2 for eta2mumumumu. The data run with `--sigma-prior` fits no Gaussian.
+The MC fits use MC-matched signal MC (`--mc-match`). It is signal only, so the Gaussian and the DCB both run with no background (n_bkg, c0, c1 fixed at 0). The Gaussian sigma is only the start value of the MC DCB sigma, with no prior. On data the DCB sigma and tails come from the MC DCB: they start at the MC values and are under a `NormalConstraint` prior centred on them, with the MC covariance widened by `SIGMA_PRIOR_FACTOR` (`--sigma-prior`) and `TAIL_PRIOR_FACTOR` (`--tail-prior`) standard deviations, x5 for eta2mumu and eta2mumugamma, x2 for eta2mumumumu. The data run with `--sigma-prior` fits no Gaussian.
 
-eta2mumumumu has one more link: its MC-matched DCB (358 candidates of the 20261109 MC with ProbNNmu > 0.6, 192 with 0.8) takes the tails of the eta2mumu MC-matched DCB as `--tail-prior` (x2). With its own free tails, the MC n_R (9.9 ± 10.8 at ProbNNmu > 0.6) leaves the data DCB n_R free to fall to 0 and the tail to absorb the background (n_sig 170 ± 97); with the eta2mumu tails, n_sig = 91.3 ± 12.8 (0.6) and 44.9 ± 9.1 (0.8), close to the data Gaussian (82 ± 12, 40 ± 8). Fits of 2026-11-12: `out/eta2mumumumu/{signal,turbo}/20261112/mumu_tails/pnn_mu_<0.6|0.8>/` and `free_tails/pnn_mu_0.6/`.
+eta2mumumumu has one more link: its MC-matched DCB takes the tails of the eta2mumu MC-matched DCB as `--tail-prior` (x2; `mc_tail_prior` in `run_mass_fits.sh`).
 
 ```
 # 1. MC-matched signal MC: Gaussian, then DCB, both with no background (n_bkg = 0, c0 = c1 = 0);
@@ -66,9 +68,9 @@ Other runs of the same driver:
 - data Gaussian: `driver_mass_fit.py DATA --gauss-only`, no prior
 - MC Gaussian, MC DCB: `--mc-match PID... [--gauss-only]`; without `--mc-match` the MC has candidates not matched to the signal decay, and the fits keep their Chebyshev background floating, as on data
 
-`--mc-match` takes the signal daughter PIDs: `-13 13` for eta -> mu+ mu-, `-13 13 22` for eta -> mu+ mu- gamma, `-13 -13 13 13` for eta -> 4mu. For an `eta2mumumumu` input path, HLT1 TOS also accepts Hlt1MultiDiMuonNoIP (`TOS_LINES_4MU`); every muon cut applies to all four muons. The MC-matched eta2mumugamma Gaussian needs a sigma start near the resolution: from 5 MeV it runs off to a flat shape (sigma ~ 1e6 MeV), from 10-15 MeV it converges to the same minimum.
+`--mc-match` takes the signal daughter PIDs: `-13 13` for eta -> mu+ mu-, `-13 13 22` for eta -> mu+ mu- gamma, `-13 -13 13 13` for eta -> 4mu. For an `eta2mumumumu` input path, the drivers use `selection.TOS_LINES_4MU` (HLT1 also Hlt1MultiDiMuonNoIP, HLT2 also the rebuilt Hlt2ExoticaQuadMuonNoIP) and `selection.MUON_THRESHOLDS_4MU`; every muon cut applies to all four muons. The MC-matched eta2mumugamma Gaussian starts at `--sigma-init 13`.
 
-`src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma eta2mumumumu"]` runs the chain for each channel on the 20261109 ntuples (data and MC: the raw files `mag*/*.root` of every channel, no skim; MC match first; eta2mumugamma MC: `pi0_dalitz`), into `out/<channel>/<turbo|signal>/<today>/`: the MC-matched MC (`signal/<today>/mc_matched/`) and the data DCB with its sigma and tail priors (`turbo/<today>/mc_prior/`). The eta2mumumumu MC-matched fit runs after the eta2mumu one, whose tails it takes, so eta2mumumumu needs eta2mumu in the same run. The MC-matched jobs fit 500-600 MeV in 100 bins for eta2mumu and eta2mumumumu and 450-650 MeV in 200 bins for eta2mumugamma, whose peak is wider (`mass_window` in the script); the data jobs fit the same windows except eta2mumu, 535-560 MeV in 25 bins (`data_window`), with the Gaussian sigma started at 5 MeV, 13 MeV for eta2mumugamma (`sigma_init`). The header of `run_mass_fits.sh` lists every run and fit in order.
+`src/fit/run_mass_fits.sh [--channel "eta2mumu eta2mumugamma eta2mumumumu"]` runs the chain for each channel on the 20261109 ntuples into `out/<channel>/<turbo|signal>/<today>/`: the MC-matched MC (`signal/<today>/mc_matched/`) and the data DCB with its sigma and tail priors (`turbo/<today>/mc_prior/`). eta2mumumumu needs eta2mumu in the same run. The script header lists every run, input and fit; `mass_window`, `data_window` and `sigma_init` in the script set the windows and sigma starts per channel.
 
 ### Fit stages
 
@@ -83,63 +85,24 @@ With `--mc-match`, n_bkg, c0 and c1 are fixed at 0 in every stage of both fits. 
 
 ## Changing the selection
 
-The selection constants (`SEED`, `STEP_SIZE`, the muon cuts `MU_*` and `PNN_MU_MIN`, `TOS_LINES`, `TOS_LINES_4MU`) and the functions that apply them (`muon_cuts`, `cut_steps`) are in `src/utils/selection.py`, shared by `driver_mass_fit.py`, `driver_dalitz.py` and `plot_cut_steps.py`; the mass branch (`MASS_BRANCH`) is set in each driver. Each driver calls `selection.cut_steps` (MC match, TOS per trigger level, then each muon cut, each its own `selection.json` cutflow line), then picks the random candidate, one chunk of `STEP_SIZE` at a time (`cut_utils.iterate_branches`), and sums the reports of the chunks (`cut_utils.add_counts`).
+The selection constants (`SEED`, `STEP_SIZE`, `MUON_PID`, `MOTHER_PID`, the branch lists `MC_BRANCHES` and `MUON_CUT_BRANCHES`, the muon cuts `MU_*` and `PNN_MU_MIN`, `MUON_THRESHOLDS`, `MUON_THRESHOLDS_4MU`, `TOS_LINES`, `TOS_LINES_4MU`, `TOS_LINES_DISPLACED`) and the functions that apply them (`branches`, `muon_cuts`, `cut_steps`) are in `src/utils/selection.py`; the mass branch (`MASS_BRANCH`) is set in each driver. Each driver calls `selection.cut_steps` (MC match, TOS per trigger level, then each muon cut, each its own `selection.json` cutflow line), then picks the random candidate, one chunk of `STEP_SIZE` at a time (`cut_utils.iterate_branches`), and sums the reports of the chunks (`cut_utils.add_counts`).
 
-The muon cuts are the muon requirements of the dark-photon ananote (LHCb-ANA-2017-027, Tables 1 and 3) that the existing ntuples can apply, plus `IsMuonTight`, with p > 10 GeV (the 2018 Hlt1DiMuonNoIP threshold) in place of the ananote's 20 GeV. They are constants, not flags.
+The muon cuts are the muon requirements of the dark-photon ananote (LHCb-ANA-2017-027, Tables 1 and 3) that the existing ntuples can apply, plus `IsMuonTight`, with p > 10 GeV (the 2018 Hlt1DiMuonNoIP threshold) in place of the ananote's 20 GeV. They are constants; `driver_mass_fit.py --pnn-mu-min` overrides the ProbNNmu threshold.
 
 Every cut is structured as a per-candidate boolean mask shaped like `tag_dtf_m`, so they combine with a plain `&` and adding one is a line or two.
 
-TOS means the candidate is TOS on at least one line at every trigger level (AND across levels, OR within a level). `TOS_LINES` maps each level to its TOS branches, and `tos_mask()` takes that dict; a flat list of branches raises a `TypeError`. Both drivers, and the notebook through `select_candidates`, use `selection.TOS_LINES`:
+TOS means the candidate is TOS on at least one line at every trigger level (AND across levels, OR within a level). `TOS_LINES` maps each level to its TOS branches, and `tos_mask()` takes that dict; a flat list of branches raises a `TypeError`. The drivers use `selection.TOS_LINES`, or `selection.TOS_LINES_4MU` for an `eta2mumumumu` input path (`driver_mass_fit.py`); `src/utils/selection.py` lists their lines.
 
-```python
-TOS_LINES = {
-    'L0':   ['tag_l0_tos0', 'tag_l0_tos1'],       # L0DiMuon, L0Muon
-    'HLT1': ['tag_hlt1_tos0'],                    # Hlt1DiMuonNoIP
-    'HLT2': ['tag_hlt2_tos0'],                    # Hlt2ExoticaPrmptDiMuonTurbo
-}
-```
+Cuts on daughters are reduced onto candidates with `cut_utils.reduce()`; its docstring has examples.
 
-Most selection criteria (i.e., kinematic cuts) can be applied with `reduce()`:
-
-```python
-tos, tos_report = cut_utils.tos_mask(tree, TOS_LINES)
-
-# every muon daughter passes the PID cut ("passes OR isn't a muon", so a
-# candidate with no muon daughters passes rather than fails)
-muon_ok = (tree['prt_pnn_mu'] > PNN_MU_MIN) | (abs(tree['prt_pid']) != MUON_PID)
-pnn = cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all')
-
-# every daughter has pT > 500 MeV
-fast = cut_utils.reduce(tree, kinematics.pt(tree['prt_px'],
-                        tree['prt_py']) > 500, 'prt_idx_mom', how='all')
-
-# candidate has exactly one photon daughter
-one_gamma = cut_utils.reduce(tree, tree['prt_pid'] == 22, 'prt_idx_mom',
-                             how='sum') == 1
-
-keep = tos & pnn & fast & one_gamma
-```
-
-The full pipeline:
-
-```python
-tree, drop_report = cut_utils.drop_malformed(cut_utils.read_branches(infile, BRANCHES))
-keep   = ...                                                   # as above
-picked = cut_utils.random_candidate_mask(keep, SEED)
-masses = cut_utils.values(tree, MASS_BRANCH, picked)           # flat numpy
-result = fit_gauss(masses, ...)
-```
-
-`values()` is where awkward is converted to numpy: everything upstream is jagged and per-event, everything downstream is a flat array of numbers.
-
-Two things to know before editing that block:
+Two things to know when writing a cut:
 
 - **Never index the whole tree with a per-candidate mask.** `tree[mask]` silently truncates the `prt_*` fields -- a 3-candidate / 9-daughter event comes back with 3 candidates and 3 daughters, no error. Mask individual `tag_*` branches instead, which is what the drivers do.
 - **No need to drop empty events before the candidate pick.** `random_candidate_mask()` selects nothing in an event with no eligible candidate (its final `& eligible` removes the phantom `argmax` winner of an all `-inf` event) and returns a plain boolean mask, so `values()` gives a plain ndarray rather than a masked one.
 
 Cuts are applied *before* the random pick, so the pick is made among the candidates that passed rather than an event being discarded because its arbitrarily-picked candidate failed. For MC, MC matching comes before every other cut. Reordering is a matter of moving lines in `selection.cut_steps`.
 
-`drop_malformed()` removes events with no candidates and events whose `prt_*` branches are inconsistent with `prt_idx_mom`. It works out which branches live at which level from their name prefixes, so **every** `prt_*` branch read is checked as a daughter field and every `tag_*` branch as a candidate field — forgetting to list one is how a ragged event survives to blow up inside `reduce()` much later.
+`drop_malformed()` removes events with no candidates and events whose `prt_*` branches are inconsistent with `prt_idx_mom`. It works out which branches live at which level from their name prefixes, so **every** `prt_*` branch read is checked as a daughter field and every `tag_*` branch as a candidate field.
 
 Nothing in `cut_utils` prints. `drop_malformed()` and `tos_mask()` return their diagnostics as a second return value, and the driver decides what to log and what to write into `selection.json` under `selection_report`.
 
@@ -157,8 +120,9 @@ Properties of the ntuple productions that the selection depends on.
 | data and MC 20260716 | Hlt2ExoticaPrmptDiMuonTurbo | Hlt2ExoticaDiMuonNoIPTurbo | Hlt2ExoticaDisplDiMuon |
 | `ntuple.py` since 2026-08-05 | Hlt2ExoticaPrmptDiMuonTurbo | Hlt2ExoticaDiMuonNoIPTurbo | -- |
 | `ntuple.py` since 2026-10-05 (MC 20261006) | Hlt2ExoticaPrmptDiMuonTurbo | Hlt2ExoticaDiMuonNoIPTurbo | Hlt2Topo (TIS line) |
+| data and MC 20261109 | Hlt2ExoticaPrmptDiMuonTurbo | Hlt2ExoticaDiMuonNoIPTurbo | Hlt2Topo (TIS line) |
 
-L0 (`tos0` L0DiMuon, `tos1` L0Muon) and HLT1 (`tos0` Hlt1DiMuonNoIP, `tos1` Hlt1DiMuonLowMass) keep the same order in all of them. Since 2026-10-05 each level has further lines after those: L0 `tos2` L0Hadron (TIS line), HLT1 `tos2` Hlt1MultiDiMuonNoIP and `tos3` Hlt1TrackMVA (TIS line).
+L0 (`tos0` L0DiMuon, `tos1` L0Muon) and HLT1 (`tos0` Hlt1DiMuonNoIP, `tos1` Hlt1DiMuonLowMass) keep the same order in all of them. Since 2026-10-05 each level has further lines after those: L0 `tos2` L0Hadron (TIS line), HLT1 `tos2` Hlt1MultiDiMuonNoIP and `tos3` Hlt1TrackMVA (TIS line). 20261109 adds HLT2 `tos3` Hlt2ExoticaDisplDiMuon and `tos4` Hlt2ExoticaQuadMuonNoIP, Full-stream lines that are -1 in Turbo data; `tag_hlt2_rebuilt_tos3` and `tag_hlt2_rebuilt_tos4` hold their TOS on the candidates rebuilt offline.
 
 **`prt_mu`, `prt_loose_mu` and `prt_tight_mu` hold one entry per muon.** In `eta2mumugamma` an event with two candidates has `prt_pid` = [-13, 13, 22, -13, 13, 22] and `prt_tight_mu` = [1, 1, 1, 1]: the photon has no entry, so the branch does not line up with `prt_pid` by position, and `drop_malformed()` drops every event for a daughter-length mismatch if it is read as is. `cut_utils.align_muons()` expands it to one entry per daughter (0 for the photon); it runs between `read_branches()` and `drop_malformed()`. In `eta2mumu` every daughter is a muon and the branch is unchanged.
 
@@ -166,8 +130,6 @@ L0 (`tos0` L0DiMuon, `tos1` L0Muon) and HLT1 (`tos0` Hlt1DiMuonNoIP, `tos1` Hlt1
 
 
 ## Per-Dalitz-bin fits: the phase-space factor
-
-Full write-up, with derivation, figures and a code walkthrough: `docs/phase-space-factor.md`.
 
 In a Dalitz bin, only part of the m(gamma mu+ mu-) window is kinematically reachable. In the mu+ mu- rest frame, with theta* the mu+ angle and beta = sqrt(1 - 4 m_mu^2 / m23),
 
@@ -179,7 +141,7 @@ In a Dalitz bin, only part of the m(gamma mu+ mu-) window is kinematically reach
 
 The limits are an identity on the four-vectors, so the fitted mass must come from the same daughter momenta as m12/m23. `MASS_BRANCH` in `driver_dalitz.py` picks the mass, and `MASS_SOURCES` the daughters with it: `tag_dtf_m` (the default) with `prt_dtf_px/py/pz/e`, or `tag_m` with `prt_px/py/pz/e`. The driver prints how many candidates fall outside the limits of their own m12, m23.
 
-Per bin, the Chebyshev's [-1, 1] variable spans the bin's reachable mass range (where f > 0), not [xmin, xmax]: fit on only a slice of its range, its coefficients are near-degenerate and MIGRAD runs them off to infinity. So per-bin c0/c1 are not comparable to the global fit's. The plain Chebyshev can still go negative inside the reachable region; the fit floors it at `fit_utils.BKG_FLOOR`, and `bkg_goes_negative` flags any bin where that happened.
+Per bin, the Chebyshev's [-1, 1] variable spans the bin's reachable mass range (where f > 0), not [xmin, xmax], so per-bin c0/c1 are not comparable to the global fit's. The plain Chebyshev can still go negative inside the reachable region; the fit floors it at `fit_utils.BKG_FLOOR`, and `bkg_goes_negative` flags any bin where that happened.
 
 The global fit carries a widened tail prior (`--tail-prior`). The prior is the `fit` block of any results JSON: the data DCB fit of `driver_mass_fit.py` (`results_dcb.json`), or the global fit of a `driver_dalitz.py --mc-match` run (`dalitz_fit_<factor>.json`). `--n-max` caps n_L and n_R of the global fit.
 
@@ -188,7 +150,7 @@ Known limitation: f assumes background is uniform across the bin, which does not
 ### Pipeline
 
 ```
-python src/fit/driver_dalitz.py ntuple/lhcb/eta2mumugamma/20261006/combined_files.root \
+python src/fit/driver_dalitz.py 'ntuple/lhcb/eta2mumugamma/20261109/mag*/*.root' \
     --outdir OUT [--mc-match | --tail-prior RESULTS_JSON] \
     [--factor none|flat|weighted] [--n-max N] [--max-events N]
 python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_<factor>.json   # re-plot only
@@ -205,19 +167,19 @@ python src/plot/plot_dalitz_bins.py OUT/dalitz_fit_<factor>.json   # re-plot onl
 
 `--mc-match` (signal MC) keeps the candidates MC-matched to eta -> mu+ mu- gamma, before TOS, the muon cuts and the candidate pick, and fits with the background fixed to 0 and no prior. Without `--mc-match` or `--tail-prior` the tails float free.
 
-`fit_dalitz.ipynb` runs the same selection (`driver_dalitz.select_candidates`) and fit interactively on one ROOT file.
+`fit_dalitz.ipynb` runs the same selection (`driver_dalitz.select_candidates`) and fit interactively on one input.
 
-`src/fit/run_dalitz.sh [--factor "none flat weighted"]` runs the data fit for each factor on the 20261109 eta2mumugamma raw files (`mag*/*.root`), with the tails of the `run_mass_fits.sh` data DCB fit of the same ntuples (`turbo/20261112/mc_prior/results_dcb.json`, `TAIL_PRIOR`) as prior and no `--n-max`, into `out/eta2mumugamma/turbo/<today>/dalitz`.
+`src/fit/run_dalitz.sh [--factor "none flat weighted"]` runs the data fit for each factor on the 20261109 eta2mumugamma raw files (`mag*/*.root`), with the tails of the `run_mass_fits.sh` data DCB fit of the same ntuples (`TAIL_PRIOR` in the script) as prior and no `--n-max`, into `out/eta2mumugamma/turbo/<today>/dalitz`.
 
 
 ## Fitting an arbitrary array
 
-The fit modules were written in a generic way so as to fit any numpy array of values:
+`fit_*.py` fit any numpy array and return `(result, m)`:
 
 ```python
 import sys
 sys.path.insert(0, "src/fit")
 from fit_dcb import fit_dcb
 
-result = fit_dcb(array, xmin=500, xmax=600, nbins=100)   # array: numpy array of values
+result, m = fit_dcb(array, xmin=500, xmax=600, nbins=100)   # array: numpy array of values
 ```

@@ -6,10 +6,11 @@ LHCb analysis of η → μμ(γ)(μμ): background classification, mass fits, an
 
 ```
 src/root/   fiducial requirements (fid_reqs.py), skims (skim.py)
-src/ana/    MC background classification and diagnostics
+src/ana/    MC background sources (ana_bkg.py, plot_bkg_mass.py), trigger efficiencies (trig_eff.py)
 src/fit/    mass fits (Gaussian, DCB, Dalitz bin-by-bin) -- see src/fit/README.md
 src/plot/   plotting scripts
 src/utils/  shared library code (fit math, plot styling, cuts)
+tests/      pytest suite on toy trees -- see tests/README.md
 ntuple/     input ROOT files
 out/        generated plots, JSON fit results
 ```
