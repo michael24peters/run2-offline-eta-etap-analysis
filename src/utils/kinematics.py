@@ -1,7 +1,14 @@
 """
 kinematics.py
 
-Four-vector arithmetic. Elementwise, so it works on plain numpy arrays and on awkward arrays.
+Masses in MeV, Dalitz variables m12 = m^2(gamma mu+) and m23 = m^2(mu+ mu-) in GeV^2.
+
+    M_MU, M_ETA, M_ETA_PRIME             PDG masses [MeV]
+    FF_LAMBDA                            pole of the eta transition form factor [GeV]
+    pt, p, invariant_mass2, eta          four-vector arithmetic, elementwise (numpy or awkward)
+    m123_limits, m12_limits              Dalitz limits of a gamma mu+ mu- system
+    dalitz_boundary                      boundary of the Dalitz region, for plotting
+    phase_space_factor, dalitz_factor    reachable fraction f(M) of a Dalitz bin
 """
 
 import numpy as np
@@ -128,10 +135,11 @@ def phase_space_factor(M, m12_range, m23_range, n_m23=400):
 
     Arguments:
     ----------
-    M: array of trial masses (MeV) to evaluate the factor at. m12_range: (m12_min, m12_max) of the
-    bin (GeV^2, m12 = m^2(gamma mu+)). m23_range: (m23_min, m23_max) of the bin (GeV^2, m23 =
-    m^2(mu+ mu-)). n_m23: number of equal q^2 = m23 strips across the bin; the factor is
-        sampled at their midpoints.
+    M         : array of trial masses [MeV] to evaluate the factor at
+    m12_range : (m12_min, m12_max) of the bin [GeV^2], m12 = m^2(gamma mu+)
+    m23_range : (m23_min, m23_max) of the bin [GeV^2], m23 = m^2(mu+ mu-)
+    n_m23     : number of equal q^2 = m23 strips across the bin; the factor is sampled at their
+                midpoints
 
     Returns:
     --------
@@ -198,8 +206,7 @@ def dalitz_factor(M, m12_range, m23_range, n_m23=400):
     reach_lo12 = np.clip(lo12, bin_lo12, bin_hi12)
     reach_hi12 = np.clip(hi12, bin_lo12, bin_hi12)
 
-    # Make sure values are phsyical before evaluating the density. The density is 0 for q^2 <= 4
-    # m_mu^2
+    # The density is 0 at q^2 <= 4 m_mu^2 (below threshold)
     physical = q2 > 4.0 * m_mu2
     q2_safe = np.where(physical, q2, 1.0) # stand-in 1 below threshold, where q2_weight is 0
     q2_weight = np.where(physical, (1.0 - q2_safe / FF_LAMBDA**2)**-2 / q2_safe, 0.0)   # |F|^2 / q2
@@ -214,9 +221,10 @@ def dalitz_factor(M, m12_range, m23_range, n_m23=400):
     bin_integral = q2_weight * (base_term * (bin_hi12 - bin_lo12)
                                 + 4.0 / 3.0 * ((bin_hi12 - mid12)**3 - (bin_lo12 - mid12)**3))
 
-    # TODO: the photon pT > 500 MeV loss noted in phase_space_factor applies here too. Sum over the
-    # q2 strips (the strip width cancels in the ratio). A bin entirely below threshold has bin_total
-    # 0 and factor 0.
+    # TODO: the photon pT > 500 MeV loss noted in phase_space_factor applies here too.
+    #
+    # Sum over the q2 strips (the strip width cancels in the ratio). A bin entirely below threshold
+    # has bin_total 0 and factor 0.
     bin_total = bin_integral.sum(axis=1)
     return np.where(bin_total > 0,
                     reach_integral.sum(axis=1) / np.where(bin_total > 0, bin_total, 1.0), 0.0)

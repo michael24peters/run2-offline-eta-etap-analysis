@@ -2,9 +2,8 @@
 Scenario tests: the situations this ntuple actually produces.
 
 Each test builds the smallest tree that reproduces one real-world structure and pins down what the
-framework should say about it. These are the cases that broke earlier implementations -- stride
-grouping, the -1 sentinel, shared tracks -- so they are written as narratives rather than API
-coverage.
+framework should say about it: mis-identification, stride grouping, the -1 sentinel, shared
+tracks. They are written as narratives rather than API coverage.
 """
 
 import awkward as ak

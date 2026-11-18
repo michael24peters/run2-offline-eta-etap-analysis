@@ -16,7 +16,7 @@ Pseudo-lifetime: tau = L * m / (p * c), derived from tau = L / (beta*gamma*c).
 The input is read one chunk of selection.STEP_SIZE at a time (cut_utils.iterate_branches).
 
 Usage:
-    python plot_decay_length.py 'ntuple/lhcb/eta2mumu/20261109/mag*/*.root' --outdir OUTDIR \
+    python src/plot/plot_decay_length.py 'ntuple/lhcb/eta2mumu/20261109/mag*/*.root' --outdir OUTDIR \
         [--window 535 560] [--max-events N]
 """
 
@@ -37,7 +37,7 @@ import selection
 
 C_MM_PER_PS = 0.299_792_458   # speed of light in mm/ps
 MASS_BRANCH = 'tag_dtf_m'      # the branch defining the candidates, and the window's mass
-WINDOW      = (535.0, 560.0)   # eta -> mu mu fit window [MeV]
+WINDOW      = (535.0, 560.0)   # default DTF mass window [MeV]
 # (label, TOS lines, colour) of each selection
 SELECTIONS = [
     ('Prompt',    selection.TOS_LINES,           plot_style.COLORS['fit']),

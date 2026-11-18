@@ -1,17 +1,17 @@
 """
 plot_dalitz_bins.py
 
-Figures from one driver_dalitz_fit.py result, written with `prefix` (the results JSON's path without
+Figures from one driver_dalitz.py result, written with `prefix` (the results JSON's path without
 .json):
 
     global_fit.png                      the global DCB + Chebyshev fit, next to
                                         the results JSON (the same for every
-                                        results JSON of one events file)
+                                        results JSON of one input)
     <prefix>_signal_yield.png           n_sig per bin
     <prefix>_bkg_yield.png              n_bkg per bin
     <prefix>_per_bin_fits.pdf           one page per bin, i (m12) outer, j (m23) inner
 
-plot_dalitz_fit(result, prefix) writes all of them; driver_dalitz_fit.py calls it after the fit.
+plot_dalitz_fit(result, prefix) writes all of them; driver_dalitz.py calls it after the fit.
 
 Usage:
     python src/plot/plot_dalitz_bins.py RESULTS.json
@@ -199,7 +199,7 @@ def plot_dalitz_fit(result, prefix):
 
 if __name__ == '__main__':
     plt.switch_backend('Agg')
-    parser = argparse.ArgumentParser(description='Figures from a driver_dalitz_fit.py results JSON')
+    parser = argparse.ArgumentParser(description='Figures from a driver_dalitz.py results JSON')
     parser.add_argument('results', help='dalitz_fit_<factor>.json')
     args = parser.parse_args()
     with open(args.results) as f:

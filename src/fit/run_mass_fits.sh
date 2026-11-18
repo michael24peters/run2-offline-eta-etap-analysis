@@ -94,8 +94,7 @@ data_window() {
     esac
 }
 
-# Gaussian sigma start of each channel [MeV], near its mass resolution. From 5 MeV the MC-matched
-# eta2mumugamma Gaussian runs off to a flat shape.
+# Gaussian sigma start of each channel [MeV]
 sigma_init() {
     case $1 in
         eta2mumugamma) echo "--sigma-init 13" ;;
@@ -103,8 +102,7 @@ sigma_init() {
     esac
 }
 
-# Tail prior of the MC-matched DCB: eta2mumumumu (358 MC-matched candidates) takes the tails of the
-# eta2mumu MC-matched DCB; with free tails its n_R lets the data DCB tail absorb the background
+# Tail prior of the MC-matched DCB: eta2mumumumu takes the tails of the eta2mumu MC-matched DCB
 mc_tail_prior() {
     case $1 in
         eta2mumumumu) echo "--tail-prior out/eta2mumu/signal/$DATE/mc_matched/results_dcb.json" ;;

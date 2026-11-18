@@ -5,7 +5,7 @@ Reconstructed transverse momentum (pT) for the mu+, mu-, and gamma daughters, fr
 mu mu gamma ROOT ntuple.
 
 Usage:
-    python plot_reco_pt.py input.root [output_dir]
+    python src/plot/plot_reco_pt.py INFILE [OUTDIR]
 """
 
 import argparse

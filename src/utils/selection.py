@@ -1,9 +1,9 @@
 """
 selection.py
 
-Selection constants and per-candidate masks shared by driver_mass_fit.py, driver_dalitz.py and
-plot_cut_steps.py. The scripts choose what to call and in which order.
+Selection constants and per-candidate masks. The scripts choose what to call and in which order.
 
+    branches(...)      the branches cut_steps reads
     muon_cuts(tree)    daughter-level mask of each muon requirement
     cut_steps(...)     MC match, TOS per level, then each muon cut, one mask per step
 """

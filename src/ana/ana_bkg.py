@@ -1,10 +1,9 @@
 """
 ana_bkg.py
 
-Vectorized rewrite of bkg.py: classify eta candidates as signal or background by matching reco
-daughters to MC particles, and tabulate error categories. Uses cut_utils (awkward masks) instead of
-a per-event Python loop, and groups daughters by prt_idx_mom instead of assuming a fixed daughter
-count per candidate.
+Classify the eta candidates of an MC file as signal or background by matching their reco daughters
+to generator particles (bkg_utils.signal_daughter_mask), and write tables of the error categories,
+the error rates and the generator PIDs of mismatched daughters to OUTFILE.txt.
 
 Usage:
     python src/ana/ana_bkg.py INFILE OUTFILE [--verbose] [--pnnmu_cut X] [--mother_pid 221]
@@ -71,10 +70,8 @@ def build_masks(tree, args):
     style throughout.
 
     A daughter is correctly matched iff it has a generator match, that match's PID agrees with the
-    daughter's own reco PID, AND that match's mother is the real signal mother (found via
-    decay_mask) -- not merely "some generator particle at position i", which is what bkg.py's
-    classify_candidate got wrong for the second and later candidates in multi-candidate events. See
-    bkg_utils.signal_daughter_mask.
+    daughter's own reco PID, and that match's mother is the signal mother (found via decay_mask).
+    See bkg_utils.signal_daughter_mask.
     """
     dtr_match = bkg_utils.signal_daughter_mask(tree, args.mother_pid, args.daughter_pids)
     has_gen_match = dtr_match['has_gen_match']
@@ -95,7 +92,8 @@ def build_masks(tree, args):
     pho_pid_mismatch, other_pid_mismatch = mismatch & pho, mismatch & other
     mup_combinatoric, mum_combinatoric = combinatoric & mup, combinatoric & mum
     pho_combinatoric, other_combinatoric = combinatoric & pho, combinatoric & other
-    # OTHER_ERROR is a catch-all across all three root causes, matching bkg.py
+    # OTHER_ERROR: no generator match, or a mismatch or combinatoric error on a daughter that is
+    # neither a muon nor a photon
     other_error = no_match | other_pid_mismatch | other_combinatoric
 
     if args.pnnmu_cut is not None:
@@ -154,10 +152,8 @@ def get_analytics(tree, m):
         return int(ak.sum(ak.flatten(mask)))
 
     def mismatched_pids(mask):
-        # The generator PID a mismatched daughter actually turned out to be. Restricted to
-        # has_gen_match (folded into `mask` already), so this never falls into the -1 ->
-        # wraps-to-last-entry trap cut_utils warns about -- unlike bkg.py's plain-Python
-        # mc_pid[prt_idx_gen[j]] lookup.
+        # The generator PID of each mismatched daughter. `mask` holds has_gen_match, so no -1
+        # prt_idx_gen is followed.
         vals = ak.to_numpy(ak.flatten(m['pid_at_gen'][mask & m['eligible_dtr']]))
         return vals.astype(int).tolist()
 
@@ -292,6 +288,11 @@ def format_pid_freq_table(label, rows):
 
 
 def format_text(result, verbose, verbose_candidates):
+    """
+    Text report of get_analytics' `result`: the category legend, the counts and error rates, the
+    PID-mismatch frequency tables and, with `verbose`, the per-candidate lines of
+    `verbose_candidates`.
+    """
     W = 48
     out = '═' * W + '\n'
     out += f"{'Background analysis results':^{W}}\n"

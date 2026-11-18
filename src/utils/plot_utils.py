@@ -1,10 +1,8 @@
 """
 plot_utils.py
 
-Generic plotting helpers: font setup and param-dict unpacking.
-
-For "house style" presentation logic (stats-box text, text placement, save/report boilerplate), see
-plot_style.py.
+Plotting helpers: the custom font (apply_font) and fit-parameter unpacking (val_err). The custom
+style of the figures (stats box, labels, ticks, saving) is in plot_style.py.
 """
 
 import matplotlib.pyplot as plt
@@ -23,4 +21,5 @@ def apply_font():
     plt.rcParams['mathtext.fontset'] = 'dejavusans'
 
 def val_err(param):
+    """(value, error) of a fit-parameter dict {'value': ..., 'error': ...}, nan where missing."""
     return param.get('value', float('nan')), param.get('error', float('nan'))

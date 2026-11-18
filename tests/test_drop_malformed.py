@@ -6,8 +6,7 @@ job is to reject input. It drops an event for exactly four reasons, and derives 
 check from their name prefixes.
 
 Each of the four reasons gets its own test with only that fault present, plus tests that the reasons
-are attributed to the right counter -- a filter that drops the right events for the wrong stated
-reason is a debugging trap.
+are attributed to the right counter.
 """
 
 import cut_utils

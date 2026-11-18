@@ -5,7 +5,7 @@ Rough plot of a branch from a ROOT file, using uproot and matplotlib. Useful for
 distributions.
 
 Usage:
-    python plot_branch.py input.root branch_name [output.png] [--n-evts N]
+    python src/plot/plot_branch.py INFILE BRANCH [OUTPUT_PNG] [--n-evts N]
 """
 
 import argparse

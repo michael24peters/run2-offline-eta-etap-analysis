@@ -48,9 +48,9 @@ There is no direct candidate -> gen candidate link: go candidate -> daughter -> 
 candidate. MC generator particles are one flat collection per event, not split into tags and
 daughters like the reco side.
 
-NOTE: `mc_idx_mom` is -1 for a particle with no mother, but passing in -1 silently indexes backwards
-into the previous event, so make sure to AND with `valid(tree, 'mc_idx_mom')` to ignore invalid
-indices before traversal.
+NOTE: `mc_idx_mom` is -1 for a particle with no mother, and follow() reads -1 as the event's last
+entry, so AND with `valid(tree, 'mc_idx_mom')` before following it. reduce() leaves negative indices
+out.
 
 The typical pipeline, with TOS_LINES = {'L0': [...], 'HLT1': [...], 'HLT2': [...]} (TOS on at least
 one line at every level, see tos_mask):
@@ -474,8 +474,8 @@ def valid(tree, idx_branch):
     """
     Mask of source entries that point to something. Index branches with no mother or no matching MC
     particle get a value of `-1`. A `-1` is a valid index to numpy (it means the last entry), so it
-    is never caught as an error -- follow() reads the wrong particle, and reduce() writes into the
-    previous event. Mask it off with this instead.
+    is never caught as an error -- follow() reads the event's last entry. Mask it off with this
+    before follow(); reduce() leaves negative indices out.
 
 
     An example demonstrating the need for this function:
@@ -533,14 +533,15 @@ def reduce(tree, array, idx_branch, how='all', target_ref='tag_dtf_m'):
         tree['prt_pid'] = [[-13.0, 13.0, -13.0, 22.0], [-13.0, 13.0, 211.0, 22.0, 22.0]]
         array = (tree['prt_pid'] == 22)  = [[F, F,  F, T], [F, F,  F,  T,  T]]
         idx_branch = 'prt_idx_mom'       = [[0, 0, -1, 0], [0, 0, -1, -1, 0]]
-        reduce(tree, array, 'prt_idx_mom', how='sum', target_ref='prt_pid') = [[1, 0], [1]] == 1
+        reduce(tree, array, 'prt_idx_mom', how='sum') = [[1, 0], [1]] == 1
             = [[T, F], [T]]
 
     Example 3: Number of daughters per generator candidate
         tree['mc_pid'] = [[221.0, -13.0, 13.0], [221.0, -13.0, 13.0, 211.0, 22.0]]
         array = ak.ones_like(tree['mc_pid'], dtype=bool) = [[T, T, T], [T, T, T, T, T]]
         idx_branch = 'mc_idx_mom' = [[-1.0, 0.0, 0.0], [-1.0, 0.0, 0.0, -1.0, -1.0]]
-        reduce(tree, array, 'mc_idx_mom', how='sum', target_ref='mc_pid') = [[2], [2]]
+        reduce(tree, array, 'mc_idx_mom', how='sum', target_ref='mc_pid')
+            = [[2, 0, 0], [2, 0, 0, 0, 0]]   the eta has 2 daughters, the others none
 
     A negative index (prt_idx_mom or mc_idx_mom = -1, pointing nowhere) is left out of the
     aggregation, so reduce() needs no valid() mask, unlike follow().
@@ -720,16 +721,15 @@ def decay_mask(tree, mother_pid, daughter_pids):
     # Get the mother particles
     mothers = tree['mc_pid'] == mother_pid
 
-    # Get the daughters of those mothers, and check that each mother has the right number of
-    # daughters and the right PIDs. Get daughters
-    # Example: n_all = [[3, 0, 0, 0]] for the eta -> mu mu gamma example above.
+    # Number of daughters of each particle, e.g. n_all = [[3, 0, 0, 0]] for the eta -> mu mu gamma
+    # example above
     n_all = reduce(tree, ak.ones_like(tree['mc_pid'], dtype=bool), 'mc_idx_mom',
                    how='sum', target_ref='mc_pid')
     # Check that each mother has the correct number of daughters
     ok = mothers & (n_all == len(daughter_pids))
 
-    # Now check PIDs using a Counter, which turns [-13, 13, -13, 13] into {13: 2, -13: 2}. code ==
-    # PID want == number of each PID
+    # Number of daughters of each PID: Counter turns [-13, 13, -13, 13] into {-13: 2, 13: 2}, each
+    # PID code with the number of daughters it must have (want)
     # mc_pid                       [[221,-13,13], [221,-13,-13,13], [221,-13,13,22]]
     # decay_mask(221,[-13,13])     [[T,  F,  F ], [F,  F,  F,  F ], [F,  F,  F, F ]]
     # decay_mask(221,[-13,13,22])  [[F,  F,  F ], [F,  F,  F,  F ], [T,  F,  F, F ]]

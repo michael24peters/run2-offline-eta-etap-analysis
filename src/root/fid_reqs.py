@@ -14,7 +14,7 @@ import sys
 import awkward as ak
 import numpy as np
 
-# Ensure utils/fit_utils.py is importable
+# cut_utils and kinematics, from src/utils
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 import cut_utils
@@ -31,8 +31,7 @@ FIDUCIAL_REQS = {
 
 
 def fiducial_mask(tree):
-    '''Per-generator particle mask: True for all particles that pass the LHCb fiducial requirements.
-    '''
+    """Per generator particle mask: True for the particles that pass the fiducial requirements."""
     pid = ak.to_numpy(ak.flatten(tree['mc_pid'])).astype(int)
     px = ak.to_numpy(ak.flatten(tree['mc_px']))
     py = ak.to_numpy(ak.flatten(tree['mc_py']))
@@ -53,42 +52,36 @@ def fiducial_mask(tree):
         if p_min is not None:
             passes = passes & (p > p_min)
         ok[mask] = passes[mask]
-    # Unflatten back to per-event structure, also require momentum > 0 to avoid divison by zero and
-    # unphysical momenta, just in case.
+    # Back to per-event structure; p > 0 also fails particles with no momentum
     return ak.unflatten(ok & (p > 0), ak.num(tree['mc_pid']))
 
 
 def fiducial_masks(tree, mother_pid, daughter_pids):
-    '''Returns a dict of per-event boolean masks for the mother and daughter particles of a given
-    decay. True for all particles that pass the LHCb fiducial requirements. Every mask is the same
-    shape and can be composed with logical operators to select events with all daughters passing.
+    """
+    Per generator particle masks of the signal decay mother_pid -> daughter_pids, each shaped like
+    mc_pid; every mask but 'stray' is True at signal mothers only. They compose with & and |.
 
     Keys:
-    'signal':          Confirmed mother and daughters of the specified decay
-    'in_acceptance':   ...and every daughter passes fiducial requirements
-    'failed_muon':     ...except for at least one muon daughter that fails
-    'failed_gamma':    ...except for at least one photon daughter that fails
-    'failed_electron': ...except for at least one electron daughter that fails
-    'stray':           Generator particles with no mother that are not the signal
-                       mother/candidate; i.e., MC-matched background particles
-    '''
+    'signal':          the mother of a signal decay (cut_utils.decay_mask)
+    'in_acceptance':   ...whose daughters all pass the fiducial requirements
+    'failed_muon':     ...with at least one muon daughter failing them
+    'failed_gamma':    ...with at least one photon daughter failing them
+    'failed_electron': ...with at least one electron daughter failing them
+    'stray':           motherless generator particles other than the signal mother
+    """
     # Get the per-particle fiducial mask for the whole tree, i.e., all generator level particles in
     # the ntuple.
     ok = fiducial_mask(tree)
-    # Select only the mother and daughter particles of the given decay, i.e., ignore background,
-    # strays, etc. and isolate to only pure signal. Formatted as a per-particle mask. True for all
-    # mother and daughter particles of the signal, False for all others.
+    # The signal mothers: True at each mother_pid particle whose daughters are exactly daughter_pids.
     signal = cut_utils.decay_mask(tree, mother_pid, daughter_pids)
 
-    # Now check whether ALL daughters are in acceptance (not just signal).
+    # Per generator particle: every one of its daughters passes the fiducial requirements.
     daughters_ok = cut_utils.reduce(tree, ok, 'mc_idx_mom', how='all',
                                     target_ref='mc_pid')
 
     def fail_mask(pid):
-        '''
-        Returns every mother that has a daughter of the specified PID failing the fiducial
-        requirements.
-        '''
+        """Per generator particle: a daughter selected by the mask `pid` fails the fiducial
+        requirements."""
         return cut_utils.reduce(tree, ~ok & pid, 'mc_idx_mom', how='any',
                                 target_ref='mc_pid')
 
@@ -104,13 +97,13 @@ def fiducial_masks(tree, mother_pid, daughter_pids):
 
 
 def fiducial_candidate_mask(tree, mother_pid, daughter_pids, target_ref):
-    '''Per reco candidate mask: True where every daughter's generator match is a daughter of a
+    """Per reco candidate mask: True where every daughter's generator match is a daughter of a
     signal decay mother_pid -> daughter_pids that is in acceptance (fiducial_masks 'in_acceptance').
     A daughter with no generator match fails.
 
     target_ref : any branch whose per-event length defines the candidate collection, passed through
                  to cut_utils.reduce.
-    '''
+    """
     in_acceptance = fiducial_masks(tree, mother_pid, daughter_pids)['in_acceptance']
     # Generator particle -> its mother is an in-acceptance signal decay.
     child_of_acc = (cut_utils.valid(tree, 'mc_idx_mom')

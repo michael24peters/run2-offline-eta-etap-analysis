@@ -14,8 +14,8 @@ defaults):
 
 The cuts are cumulative, in the order of driver_mass_fit.py: [MC match], TOS per trigger level,
 each muon cut, then the random candidate, picked among the candidates that pass the cuts over the
-whole mass range. Only the figures put the fit window first; the last figure is the random
-candidates in the window. The cuts are selection.cut_steps with selection.TOS_LINES and
+whole mass range. The figures apply the fit window first, as a step of its own; the last figure
+is the random candidates in the window. The cuts are selection.cut_steps with selection.TOS_LINES and
 MUON_THRESHOLDS, or selection.TOS_LINES_4MU and MUON_THRESHOLDS_4MU for an input path with an
 eta2mumumumu segment, as in driver_mass_fit.py. The input is read, selected and histogrammed in
 chunks of selection.STEP_SIZE (cut_utils.iterate_branches), the random candidate of chunk i picked

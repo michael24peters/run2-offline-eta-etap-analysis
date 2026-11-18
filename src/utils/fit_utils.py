@@ -1,7 +1,9 @@
 """
 fit_utils.py
 
-PDFs/CDFs, iminuit cost functions, the fit driver and fit results, on flat numpy arrays.
+On flat numpy arrays: PDFs and CDFs (Gaussian, DCB, Chebyshev background, and their
+f(M)-weighted forms), iminuit cost functions, the fit runner (run_fit), fit results with chi2
+and pulls, and NormalConstraint priors from earlier fits.
 """
 
 import math

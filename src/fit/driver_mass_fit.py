@@ -1,7 +1,7 @@
 """
 driver_mass_fit.py
 
-Gaussian and DCB + Chebyshev mass fits of one ROOT file:
+Gaussian and DCB + Chebyshev mass fits of one input (a ROOT file or a quoted glob of them):
 
     read ROOT → [MC match] → select → random candidate → [fit_gauss] → [fit_dcb]
               → selection.json, [results_gauss.json, gauss_mass_fit.png],
@@ -21,26 +21,17 @@ Which fits run, and where their start values and priors come from:
 fit_gauss is one MIGRAD stage. fit_dcb is two: tails fixed at their start values, then every
 parameter not fixed floats. A prior is a term of the cost in both stages.
 
-This script owns everything about the input: which file, which branches, which selection (the
-constants and cut_steps of selection.py). fit_gauss() and fit_dcb() downstream see only a numpy
-array of masses.
+The input is read in chunks of selection.STEP_SIZE (cut_utils.iterate_branches) and selected with
+selection.cut_steps; one candidate per event is picked at random among those that pass
+(cut_utils.random_candidate_mask, seed selection.SEED + chunk index). The selection report sums the
+chunks. The fits see only the numpy array of picked masses.
 
-The input is read, selected and reduced to the picked masses in chunks of selection.STEP_SIZE
-(cut_utils.iterate_branches); the selection report sums the chunks.
-
-One candidate per event is picked at random among those that pass the cuts
-(cut_utils.random_candidate_mask, seed selection.SEED + chunk index).
-
---mc-match PID... (signal MC only) keeps the candidates whose every daughter matches eta -> PIDs
-(bkg_utils.signal_candidate_mask). It is the first cut, before TOS, pnn_mu and the candidate pick,
-so its input is the raw MC files (mag*/*.root), never a skim_eta.root (src/root/skim.py), whose
-candidate was picked with no MC match. The sample is signal only, so the Gaussian and the DCB fit
-both run with no background: n_bkg, c0 and c1 fixed at 0 (meta 'fixed_params' of results_gauss.json
-and results_dcb.json, left out of the plots). The Gaussian sigma is the start value of the DCB
-sigma, with no prior. Its results_dcb.json is the --sigma-prior and --tail-prior of the data fit.
-The PIDs are -13 13 (eta -> mu+ mu-), -13 13 22 (eta -> mu+ mu- gamma) or -13 -13 13 13
-(eta -> 4mu). Without --mc-match, MC has background like data (candidates not matched to the signal
-decay), and the fits keep their Chebyshev background floating.
+--mc-match PID... (signal MC) keeps the candidates whose every daughter matches eta -> PIDs
+(bkg_utils.signal_candidate_mask): -13 13, -13 13 22 or -13 -13 13 13. It is the first cut, before
+TOS, the muon cuts and the candidate pick, so its input is the raw MC files (mag*/*.root), never a
+skim_eta.root (src/root/skim.py), whose candidate was picked with no MC match. n_bkg, c0 and c1 are
+fixed at 0 (meta 'fixed_params' of results_gauss.json and results_dcb.json, left out of the plots).
+Its results_dcb.json is the --sigma-prior and --tail-prior of the data fit.
 
 An input path with an eta2mumumumu segment (eta -> 4mu) takes selection.TOS_LINES_4MU and
 selection.MUON_THRESHOLDS_4MU in place of selection.TOS_LINES and selection.MUON_THRESHOLDS.
@@ -52,9 +43,9 @@ NormalConstraint(sigma, MC value, MC variance * SIGMA_PRIOR_FACTOR**2), from the
 --tail-prior RESULTS_JSON floats the DCB tails under NormalConstraint(TAIL_PARAMS, MC values, MC
 covariance * TAIL_PRIOR_FACTOR**2), starting from the MC values, in data or in a --mc-match fit
 (the tails of one MC sample as the prior of another). --tail-prior-factor and --sigma-prior-factor
-set TAIL_PRIOR_FACTOR and SIGMA_PRIOR_FACTOR for one run. The defaults are x5 for eta -> mu mu and
-eta -> mu mu gamma, and x2 (TAIL_PRIOR_FACTOR_4MU, SIGMA_PRIOR_FACTOR_4MU) for an input path with an
-eta2mumumumu segment. No hard limit on n_L, n_R unless --n-max is given.
+set TAIL_PRIOR_FACTOR and SIGMA_PRIOR_FACTOR for one run; the defaults are x5, and x2
+(TAIL_PRIOR_FACTOR_4MU, SIGMA_PRIOR_FACTOR_4MU) for an input path with an eta2mumumumu segment. No
+hard limit on n_L, n_R unless --n-max is given.
 
 Usage:
     python src/fit/driver_mass_fit.py INFILE --outdir OUTDIR
@@ -84,7 +75,7 @@ from fit_dcb import TAIL_PARAMS, fit_dcb
 from fit_gauss import fit_gauss
 from plot_mass_fit import dcb_text, gauss_text, plot_fit
 
-# --- Selection ---------------------------------------------------------------
+# --- Settings ----------------------------------------------------------------
 
 MASS_BRANCH     = 'tag_dtf_m'      # the quantity being fit
 
@@ -165,7 +156,7 @@ for i, tree in enumerate(chunks):
                                                 mc_pids=args.mc_match,
                                                 muon_thresholds=muon_thresholds)
     # TODO: investigate an eta2mumugamma cut m(mu+ mu-) < --xmin, which keeps every candidate's
-    # kinematic edge m(mu+ mu- gamma) >= m(mu+ mu-) below the fit window (commit 008d0a5, removed).
+    # kinematic edge m(mu+ mu- gamma) >= m(mu+ mu-) below the fit window.
     picked = cut_utils.random_candidate_mask(steps[-1][1], selection.SEED + i)
     mass_chunks.append(cut_utils.values(tree, MASS_BRANCH, picked))  # <- awkward → numpy
     drop_report = cut_utils.add_counts(drop_report, chunk_drop_report)

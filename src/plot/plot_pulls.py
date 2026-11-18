@@ -7,7 +7,7 @@ defined as:
     pull = (y_data - y_fit) / sigma_data
 
 Usage:
-    python plot_pulls.py fit_results.json [output.png]
+    python src/plot/plot_pulls.py RESULTS_JSON [OUTPUT_PNG]
 """
 
 import argparse

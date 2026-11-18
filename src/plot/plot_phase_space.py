@@ -6,7 +6,7 @@ Figures for docs/phase-space-factor.md, explaining the Dalitz phase-space factor
 Usage:
     python src/plot/plot_phase_space.py \
         [--results out/eta2mumugamma/turbo/<date>/dalitz/dalitz_fit_flat.json] \
-        [--infile  ntuple/lhcb/eta2mumugamma/20261006/combined_files.root] \
+        [--infile  'ntuple/lhcb/eta2mumugamma/20261109/mag*/*.root'] \
         [--outdir  out/phase-space-factor]
 
 Pure kinematics (always made): f(m_eta) map and the step-by-step construction of f for one bin. With
@@ -38,7 +38,7 @@ import plot_utils
 
 MMU2 = (kinematics.M_MU / 1000.0)**2
 XMIN, XMAX = 420.0, 680.0
-M12_EDGES = np.linspace(0.0, 0.21, 15)   # the notebook's Dalitz grid
+M12_EDGES = np.linspace(0.0, 0.21, 15)   # driver_dalitz.py's Dalitz grid
 M23_EDGES = np.linspace(0.0, 0.31, 15)
 C = plot_style.COLORS
 M12_LABEL = r'$m^2_{12} = m^2(\gamma\mu^+)$ [GeV$^2$]'

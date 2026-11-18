@@ -34,7 +34,7 @@ import plot_utils
 import selection
 
 MASS_BRANCH = 'tag_dtf_m'   # the branch defining the candidates, and the window's mass
-WINDOW      = (535.0, 560.0)   # eta -> mu mu fit window [MeV]
+WINDOW      = (535.0, 560.0)   # default DTF mass window [MeV]
 # (label, TOS lines, colour) of each selection
 SELECTIONS = [
     ('Prompt',    selection.TOS_LINES,           plot_style.COLORS['fit']),

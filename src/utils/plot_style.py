@@ -1,8 +1,15 @@
 """
 plot_style.py
 
-Repeatable plot style for figures: text-box stat summaries, text placement (auto or manual), and
-summary statistics both to terminal and matplotlib.
+Shared figure style:
+
+    COLORS, CHANNEL_LABELS, DATA_YEAR          palette, decay labels, data-taking year
+    sample_label, decay_label, count_label     sample text, mass axis label, count axis label
+    build_stats_text, add_stats_box            the stats text box
+    reserve_top_margin                         headroom above the content for the box and legend
+    style_axes, add_bin_index_axes             ticks, Dalitz bin-index axes
+    format_y_axis                              LHCb-style y-tick labels
+    print_summary, save_plot                   terminal summary, figure output
 """
 
 import math
@@ -24,8 +31,8 @@ COLORS = {
     'phase_space': '#4a3aa7',
 }
 
-# LaTeX decay string for each channel, keyed by the channel segment of meta.input_file
-# ('ntuple/lhcb/<channel>/<date>/combined_files.root').
+# LaTeX decay string for each channel, keyed by the channel segment of an input path
+# ('ntuple/<lhcb|mc>/<channel>/...').
 CHANNEL_LABELS = {
     'eta2mumu':      r'\eta \to \mu^+ \mu^-',
     'eta2mumugamma': r'\eta \to \mu^+ \mu^- \gamma',
@@ -142,8 +149,7 @@ def reserve_top_margin(ax, content_max, artists, ymin=0, growth=1.15, max_iter=8
     """
     Grow ax's y-limit (from content_max upward) until none of `artists` (already placed at fixed
     axes-fraction corners, e.g. the stats box and legend) extends down past content_max in data
-    coordinates -- so the reserved headroom is sized to whatever was actually rendered, rather than
-    a hand-tuned fraction.
+    coordinates.
     """
     artists = [a for a in artists if a is not None]
     if not artists:
@@ -177,10 +183,8 @@ def style_axes(ax, minor_y=True):
         spine.set_linewidth(2.0)
 
 def add_bin_index_axes(ax, x_edges, y_edges, x_label='bin i', y_label='bin j'):
-    """Secondary top/right axes giving each Dalitz bin's (i, j) grid index, alongside the primary
-    physical-value axes on the bottom/left -- so a bin spotted on a Dalitz grid figure can be read
-    off directly, in the same (i, j) numbering used for e.g. per_bin_fits.pdf's page titles. Assumes
-    uniform bin edges, matching every Dalitz grid in this codebase (np.linspace)."""
+    """Secondary top/right axes with each Dalitz bin's (i, j) grid index, the numbering of the
+    per_bin_fits.pdf page titles. Assumes uniform bin edges (np.linspace)."""
     ax.tick_params(which='both', top=False, right=False)  # would collide with these
     nx, ny = len(x_edges) - 1, len(y_edges) - 1
     x0, dx = x_edges[0], (x_edges[-1] - x_edges[0]) / nx
@@ -220,10 +224,9 @@ def format_y_axis(ax):
     40,000,000 -> 40 x10^6). Reads ax's current y-limit, so call this after the axis range is
     final (i.e. after reserve_top_margin).
     """
-    # Candidate counts are always non-negative integers, so tick positions should be too --
-    # otherwise adjacent fractional ticks can round to the same displayed integer (e.g. a near-empty
-    # bin autoscaled to [0, 1]). nbins/steps match mpl's default AutoLocator, so normal-range plots
-    # keep the same tick choices as before; integer=True is the only real change.
+    # Integer tick positions: counts are non-negative integers, and fractional ticks can round to
+    # the same label (e.g. a near-empty bin autoscaled to [0, 1]). nbins and steps are those of
+    # matplotlib's default AutoLocator.
     ax.yaxis.set_major_locator(
         mticker.MaxNLocator(nbins='auto', steps=[1, 2, 2.5, 5, 10], integer=True))
     ymax = ax.get_ylim()[1]

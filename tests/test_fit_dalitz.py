@@ -10,7 +10,7 @@ eta peak and a flat background in mass. Two toys:
                      the eta's Dalitz region, background uniform over the
                      grid): the model of the plain DCB + Chebyshev fit
 
-A 3 x 3 grid over the same m12/m23 ranges as driver_dalitz_fit.py keeps the fits fast. Fixed RNG
+A 3 x 3 grid over the same m12/m23 ranges as driver_dalitz.py keeps the fits fast. Fixed RNG
 seeds.
 """
 

@@ -5,7 +5,7 @@ Generator-level MC transverse momentum (pT) for the eta and its mu+, mu-, gamma 
 signal eta -> mu mu gamma ROOT ntuple.
 
 Usage:
-    python plot_mc_pt.py input.root [output_dir]
+    python src/plot/plot_mc_pt.py INFILE [OUTDIR]
 """
 
 import argparse

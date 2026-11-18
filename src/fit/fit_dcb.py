@@ -3,8 +3,6 @@ fit_dcb.py
 
 Fits an asymmetric Double Crystal Ball (DCB) signal + 2nd-order Chebyshev background to a
 distribution of mass values (as an array), using iminuit ExtendedBinnedNLL.
-
-
 """
 
 import os

@@ -3,7 +3,7 @@ Unit tests for cut_utils's fitting counterpart, src/utils/fit_utils.py.
 
 Covers shared infrastructure: run_fit's optional limits, that fit_gauss()/fit_dcb() hand back the
 fitted Minuit object, the Chebyshev background (pdf, cost and result JSON), and build_prior(). All
-toy data, no ROOT files, a fixed RNG seed -- consistent with the house style in conftest.py.
+toy data, no ROOT files, a fixed RNG seed.
 """
 
 import os
