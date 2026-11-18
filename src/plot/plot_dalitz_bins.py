@@ -62,8 +62,10 @@ def plot_yield_maps(result, prefix):
             if b['valid']:
                 yields[b['i'], b['j']] = b[key]
         fig, ax = plt.subplots(figsize=(7, 6))
-        mesh = ax.pcolormesh(m12_edges, m23_edges, yields.T, cmap='Purples', shading='auto')
-        fig.colorbar(mesh, ax=ax, label=label, pad=0.13)
+        mesh = ax.pcolormesh(m12_edges, m23_edges, yields.T, cmap=plot_style.DALITZ_CMAP,
+                             shading='auto')
+        colorbar = fig.colorbar(mesh, ax=ax, label=label, pad=0.13)
+        plot_style.format_y_axis(colorbar.ax)
         ax.plot(boundary12, boundary23, color='red', lw=1, label=r'Dalitz region at $m_\eta$')
         ax.legend(loc='upper right', fontsize=8, frameon=True, fancybox=False, edgecolor='none',
                   framealpha=1)

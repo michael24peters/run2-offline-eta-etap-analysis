@@ -4,6 +4,7 @@ plot_style.py
 Shared figure style:
 
     COLORS, CHANNEL_LABELS, DATA_YEAR          palette, decay labels, data-taking year
+    DALITZ_CMAP                                colormap of the Dalitz maps
     sample_label, decay_label, count_label     sample text, mass axis label, count axis label
     build_stats_text, add_stats_box            the stats text box
     reserve_top_margin                         headroom above the content for the box and legend
@@ -30,6 +31,9 @@ COLORS = {
     'reference':   '#898781',
     'phase_space': '#4a3aa7',
 }
+
+# Colormap of the Dalitz maps: viridis up to 0.8, without its yellow end
+DALITZ_CMAP = mpl.colors.ListedColormap(mpl.colormaps['viridis'](np.linspace(0, 0.8, 256)))
 
 # LaTeX decay string for each channel, keyed by the channel segment of an input path
 # ('ntuple/<lhcb|mc>/<channel>/...').
@@ -222,7 +226,7 @@ def format_y_axis(ax):
     integers up to 99,999; above, the values divided by 10^N, N a multiple of 3 that leaves 2 to 4
     digits, with a x10^N marker above the axis (400,000 -> 400 x10^3, 4,000,000 -> 4000 x10^3,
     40,000,000 -> 40 x10^6). Reads ax's current y-limit, so call this after the axis range is
-    final (i.e. after reserve_top_margin).
+    final (i.e. after reserve_top_margin). For a vertical colorbar, pass its axes (cbar.ax).
     """
     # Integer tick positions: counts are non-negative integers, and fractional ticks can round to
     # the same label (e.g. a near-empty bin autoscaled to [0, 1]). nbins and steps are those of

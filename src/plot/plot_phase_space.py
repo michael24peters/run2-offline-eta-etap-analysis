@@ -302,7 +302,8 @@ def fig_uniformity(outdir, events, i, j, sample=''):
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(14, 6),
                                    gridspec_kw={'width_ratios': [1, 1.3]})
     h = ax0.hist2d(m12, m23, bins=20, range=[[a, b], [lo, hi]], cmap='Greys')
-    fig.colorbar(h[3], ax=ax0, label='Candidates')
+    colorbar = fig.colorbar(h[3], ax=ax0, label='Candidates')
+    plot_style.format_y_axis(colorbar.ax)
     ax0.set_xlabel(r'$m^2_{12}$ [GeV$^2$]'); ax0.set_ylabel(r'$m^2_{23}$ [GeV$^2$]')
     ax0.set_title(f'Bin ({i},{j}): where its {sel.sum()} candidates sit')
     plot_style.style_axes(ax0)

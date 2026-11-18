@@ -33,8 +33,10 @@ def plot_dalitz_hist(m12s, m23s, hist_range, output, bins=N_BINS, sample=''):
     plot_utils.apply_font()
     plt.rcParams['font.size'] = 11
     fig, ax = plt.subplots(figsize=(8, 6))
-    *_, mesh = ax.hist2d(m12s, m23s, bins=bins, cmap='Purples', range=hist_range)
-    fig.colorbar(mesh, ax=ax, label='Candidates')
+    *_, mesh = ax.hist2d(m12s, m23s, bins=bins, cmap=plot_style.DALITZ_CMAP,
+                          range=hist_range)
+    colorbar = fig.colorbar(mesh, ax=ax, label='Candidates')
+    plot_style.format_y_axis(colorbar.ax)
     boundary12, boundary23 = kinematics.dalitz_boundary(kinematics.M_ETA)
     ax.plot(boundary12, boundary23, color='red', lw=1, label=r'Dalitz region at $m_\eta$')
     ax.legend(loc='upper right', fontsize=8, frameon=True, fancybox=False, edgecolor='none',
