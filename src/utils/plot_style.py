@@ -230,12 +230,16 @@ def format_y_axis(ax):
     ax.yaxis.set_major_locator(
         mticker.MaxNLocator(nbins='auto', steps=[1, 2, 2.5, 5, 10], integer=True))
     ymax = ax.get_ylim()[1]
-    if ymax < 1000:
-        ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, pos: f'{v:.0f}'))
+    if ymax < 1e5:
+        ax.yaxis.set_major_formatter(mticker.StrMethodFormatter('{x:.0f}'))
         return
-    divisor_oom = math.floor(math.log10(ymax)) - 2
+    divisor_oom = 3 * math.floor((math.log10(ymax) - 1) / 3)
     divisor = 10 ** divisor_oom
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, pos: f'{v / divisor:.0f}'))
+
+    def scaled(value, pos):
+        return f'{value / divisor:g}'   # :g keeps a 2.5-type tick step, e.g. 2.5 x10^6
+
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(scaled))
     ax.text(0, 1.0, fr'$\times 10^{{{divisor_oom}}}$', transform=ax.transAxes,
             ha='left', va='bottom')
 

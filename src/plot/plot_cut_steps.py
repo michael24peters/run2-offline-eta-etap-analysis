@@ -86,6 +86,7 @@ def plot_pair(ax, edges, before, after, labels, sample, logy=False):
                                       max_iter=12)
     else:
         plot_style.reserve_top_margin(ax, top, [sample_box, legend])
+        plot_style.format_y_axis(ax)
 
 
 def save_pair(outdir, name, edges, before, after, labels, sample, xlabel):
