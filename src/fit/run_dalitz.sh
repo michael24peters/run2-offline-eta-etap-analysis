@@ -17,7 +17,7 @@ cd "$(dirname "$0")/../.."
 PY=.venv/bin/python
 export MPLBACKEND=Agg   # figures are only saved
 NTUPLE=20261109
-TAIL_PRIOR=out/eta2mumugamma/turbo/20261112/mc_prior/results_dcb.json
+TAIL_PRIOR=out/eta2mumugamma/turbo/20261117/mc_prior/results_dcb.json
 DATE=$(date +%Y%m%d)
 FACTORS="none flat weighted"
 while [ $# -gt 0 ]; do
