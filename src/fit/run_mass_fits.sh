@@ -78,7 +78,7 @@ daughter_pids() {
     esac
 }
 
-# Mass window of each channel, 1 MeV bins
+# Mass window of each channel, at least 100 bins, none wider than 1 MeV
 mass_window() {
     case $1 in
         eta2mumugamma) echo "--xmin 450 --xmax 650 --nbins 200" ;;
@@ -86,10 +86,11 @@ mass_window() {
     esac
 }
 
-# Data fit window of each channel, 1 MeV bins: eta2mumu 535-560 MeV, the others mass_window
+# Data fit window of each channel, at least 100 bins, none wider than 1 MeV: eta2mumu 535-560 MeV,
+# the others mass_window
 data_window() {
     case $1 in
-        eta2mumu) echo "--xmin 535 --xmax 560 --nbins 25" ;;
+        eta2mumu) echo "--xmin 535 --xmax 560 --nbins 100" ;;
         *)        mass_window $1 ;;
     esac
 }
