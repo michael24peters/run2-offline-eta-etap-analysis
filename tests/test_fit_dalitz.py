@@ -158,20 +158,20 @@ def test_baseline_bins_carry_no_factor(baseline):
         assert not b.get('n_sig_fixed_zero', False)
 
 
-def test_bins_the_eta_cannot_reach_have_n_sig_fixed_at_zero(phase_space):
+def test_n_sig_is_fixed_at_zero_only_without_a_signal_shape(phase_space):
+    """n_sig is fixed to 0 only where the signal factor is 0 over the whole window; it floats in
+    bins outside the eta's Dalitz region at m_eta that are reachable at another mass."""
     assert phase_space['dalitz']['signal_factor'] == 'phase_space_factor'
-    fixed_zero = []
+    floating_outside = []
     for b in phase_space['dalitz']['bins']:
         if not b['fitted']:
             continue
         factor_grid = bin_factor_grid(kinematics.phase_space_factor, b['m12_range'],
                                       b['m23_range'], XMIN, XMAX)
-        unreachable = np.interp(kinematics.M_ETA, *factor_grid) == 0.0
-        assert b['n_sig_fixed_zero'] == unreachable
-        if unreachable:
-            fixed_zero.append(b)
-            assert b['valid'] and b['n_sig'] == 0.0
-    assert fixed_zero, 'the toy grid has no bin the eta cannot reach'
+        assert b['n_sig_fixed_zero'] == (not np.any(factor_grid[1] > 0))
+        if np.interp(kinematics.M_ETA, *factor_grid) == 0.0 and not b['n_sig_fixed_zero']:
+            floating_outside.append(b)
+    assert floating_outside, 'the toy grid has no fitted bin outside the Dalitz region of m_eta'
 
 
 @pytest.mark.parametrize('fit_name, toy_name', [('baseline', 'independent_toy'),

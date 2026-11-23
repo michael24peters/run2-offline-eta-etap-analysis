@@ -26,7 +26,7 @@ Per-bin fit:
     n_sig, n_bkg  float, from half the bin's candidates each
     c0, c1        float; from the global fit's values without bkg_factor,
                   from fit_utils.BKG_INIT (flat) with it
-    With signal_factor 0 at m_eta (a bin the eta cannot reach), n_sig is
+    With signal_factor 0 over the whole window (no signal shape), n_sig is
     fixed to 0 and mean, sigma to the global fit's values.
 
 signal_only=True (MC-matched signal MC) fixes n_bkg to 0 and c0, c1 to fit_utils.BKG_INIT in the
@@ -75,11 +75,10 @@ def fit_bin(counts, mass_edges, xmin, xmax, seed, prior_cov, bkg_seed,
     signal_only        n_bkg fixed to 0, c0 and c1 to fit_utils.BKG_INIT
 
     Returns (fit, no_signal): the Minuit object, and whether n_sig was fixed to 0 (signal factor 0
-    at m_eta).
+    over the whole window).
     """
     n_cand = counts.sum()
-    no_signal = (signal_factor_grid is not None
-                 and bool(np.interp(kinematics.M_ETA, *signal_factor_grid) == 0.0))
+    no_signal = signal_factor_grid is not None and not np.any(signal_factor_grid[1] > 0)
 
     # Extended binned likelihood of signal + background, plus the mean/sigma prior
     cost = (fit_utils.make_dcb_cost(counts, mass_edges, xmin, xmax,
