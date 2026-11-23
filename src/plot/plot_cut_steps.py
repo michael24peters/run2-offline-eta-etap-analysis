@@ -13,18 +13,21 @@ defaults):
     mass_<NN>_<cut>_log.png   the same with a log y axis.
 
 The cuts are cumulative, in the order of driver_mass_fit.py: [MC match], TOS per trigger level,
-each muon cut, then the random candidate, picked among the candidates that pass the cuts over the
-whole mass range. The figures apply the fit window first, as a step of its own; the last figure
-is the random candidates in the window. The cuts are selection.cut_steps with selection.TOS_LINES and
-MUON_THRESHOLDS, or selection.TOS_LINES_4MU and MUON_THRESHOLDS_4MU for an input path with an
-eta2mumumumu segment, as in driver_mass_fit.py. The input is read, selected and histogrammed in
+each muon cut, each photon cut, then the random candidate, picked among the candidates that pass
+the cuts over the whole mass range. The figures apply the fit window first, as a step of its own;
+the last figure is the random candidates in the window. The cuts are selection.cut_steps with
+selection.TOS_LINES and MUON_CUTS, or selection.TOS_LINES_4MU and MUON_CUTS_4MU for an input path
+with an eta2mumumumu segment, and selection.PHOTON_CUTS, as in driver_mass_fit.py; --muon-cuts and
+--photon-cuts replace the muon and photon cut lists, each cut a string such as 'pnn_mu > 0.95' or
+'2 < eta < 4.5' (selection.parse_cut). The input is read, selected and histogrammed in
 chunks of selection.STEP_SIZE (cut_utils.iterate_branches), the random candidate of chunk i picked
 with seed selection.SEED + i, as in the drivers. Every figure carries plot_style.sample_label of
 INFILE.
 
 Usage:
     python src/plot/plot_cut_steps.py INFILE --outdir OUTDIR
-        [--mass tag_dtf_m|tag_m] [--mc-match PID [PID ...]] [--max-events N] [--pnn-mu-min X]
+        [--mass tag_dtf_m|tag_m] [--mc-match PID [PID ...]] [--max-events N]
+        [--muon-cuts CUT [CUT ...]] [--photon-cuts CUT [CUT ...]]
         [--fit-xmin 500] [--fit-xmax 600] [--fit-nbins 100]
         [--xmin 398] [--xmax 1108] [--nbins 142]
 """
@@ -45,16 +48,16 @@ import plot_style
 import plot_utils
 import selection
 
-def cut_steps(tree, mass_branch, tos_lines, muon_thresholds, seed, mc_match=None):
+def cut_steps(tree, mass_branch, tos_lines, muon_cuts, photon_cuts, seed, mc_match=None):
     """
-    selection.cut_steps with `tos_lines` and `muon_thresholds`, then the random candidate
+    selection.cut_steps with `tos_lines`, `muon_cuts` and `photon_cuts`, then the random candidate
     (`seed`).
 
     Returns [(label, mask), ...]: the per-candidate mask after each step, starting with ('all
     candidates', every candidate).
     """
     steps, _ = selection.cut_steps(tree, mass_branch, tos_lines, mc_pids=mc_match,
-                                   muon_thresholds=muon_thresholds)
+                                   muon_cuts=muon_cuts, photon_cuts=photon_cuts)
 
     keep = cut_utils.random_candidate_mask(steps[-1][1], seed)
     steps.append(('random candidate', keep))
@@ -111,9 +114,11 @@ def main():
                         help='Mass branch (default: tag_dtf_m, as driver_mass_fit.py)')
     parser.add_argument('--mc-match', nargs='+', type=int, default=None, metavar='PID',
                         help='Signal MC: first cut is the MC match to eta -> these PIDs')
-    parser.add_argument('--pnn-mu-min', type=float, default=None,
-                        help="ProbNNmu threshold in place of the channel's "
-                             "(selection.MUON_THRESHOLDS or MUON_THRESHOLDS_4MU)")
+    parser.add_argument('--muon-cuts', nargs='+', default=None, metavar='CUT',
+                        help="Muon cuts in place of the channel's (selection.MUON_CUTS or "
+                             "MUON_CUTS_4MU), e.g. 'pnn_mu > 0.95' '2 < eta < 4.5'")
+    parser.add_argument('--photon-cuts', nargs='+', default=None, metavar='CUT',
+                        help="Photon cuts in place of selection.PHOTON_CUTS, e.g. 'pt > 650'")
     parser.add_argument('--max-events', type=int, default=None,
                         help='Only read the first N events (default: all)')
     parser.add_argument('--fit-xmin', type=float, default=500.0,
@@ -129,9 +134,11 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
     is_4mu = 'eta2mumumumu' in args.infile.split('/')
     tos_lines = selection.TOS_LINES_4MU if is_4mu else selection.TOS_LINES
-    muon_thresholds = selection.MUON_THRESHOLDS_4MU if is_4mu else selection.MUON_THRESHOLDS
-    if args.pnn_mu_min is not None:
-        muon_thresholds = {**muon_thresholds, 'pnn_mu_min': args.pnn_mu_min}
+    muon_cuts = selection.MUON_CUTS_4MU if is_4mu else selection.MUON_CUTS
+    if args.muon_cuts is not None:
+        muon_cuts = args.muon_cuts
+    photon_cuts = selection.PHOTON_CUTS if args.photon_cuts is None else args.photon_cuts
+    fit_window = f'{args.fit_xmin:g} <= {args.mass} < {args.fit_xmax:g}'
 
     # --- Read, select and histogram one chunk of selection.STEP_SIZE at a time ---
     # Per step: the histogram over the fit window of its candidates in the window, and their
@@ -149,9 +156,9 @@ def main():
         tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
         tree, chunk_drop_report = cut_utils.drop_malformed(tree, tag_ref=args.mass)
         drop_report = cut_utils.add_counts(drop_report, chunk_drop_report)
-        steps = cut_steps(tree, args.mass, tos_lines, muon_thresholds,
+        steps = cut_steps(tree, args.mass, tos_lines, muon_cuts, photon_cuts,
                           selection.SEED + i, args.mc_match)
-        in_window = (tree[args.mass] >= args.fit_xmin) & (tree[args.mass] < args.fit_xmax)
+        in_window = selection.cut_mask(tree[args.mass], fit_window)
         if not labels:
             labels = [label for label, _ in steps]
             histograms = [np.zeros(args.fit_nbins) for _ in steps]

@@ -8,7 +8,7 @@ Mass of the MC candidates the mass fit sees, split by background source
     bkg_mass_log.png    the same with a log y axis
 
 The candidates are those of driver_mass_fit.py with no MC match: selection.cut_steps with
-selection.TOS_LINES and MUON_THRESHOLDS, or TOS_LINES_4MU and MUON_THRESHOLDS_4MU for an input path
+selection.TOS_LINES and MUON_CUTS, or TOS_LINES_4MU and MUON_CUTS_4MU for an input path
 with an eta2mumumumu segment, then one random candidate per event. The input is read in chunks of
 selection.STEP_SIZE, chunk i picking with seed selection.SEED + i. The count and fraction of each
 category print to stderr.
@@ -88,7 +88,7 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
     is_4mu = 'eta2mumumumu' in args.infile.split('/')
     tos_lines = selection.TOS_LINES_4MU if is_4mu else selection.TOS_LINES
-    muon_thresholds = selection.MUON_THRESHOLDS_4MU if is_4mu else selection.MUON_THRESHOLDS
+    muon_cuts = selection.MUON_CUTS_4MU if is_4mu else selection.MUON_CUTS
 
     # --- Read, select, categorise and histogram one chunk of selection.STEP_SIZE at a time ---
     edges = np.linspace(args.xmin, args.xmax, args.nbins + 1)
@@ -103,7 +103,7 @@ def main():
         tree, chunk_drop_report = cut_utils.drop_malformed(tree, tag_ref=MASS_BRANCH)
         drop_report = cut_utils.add_counts(drop_report, chunk_drop_report)
         steps, _ = selection.cut_steps(tree, MASS_BRANCH, tos_lines,
-                                       muon_thresholds=muon_thresholds)
+                                       muon_cuts=muon_cuts)
         picked = cut_utils.random_candidate_mask(steps[-1][1], selection.SEED + i)
         categories = bkg_utils.candidate_categories(tree, selection.MOTHER_PID, args.daughter_pids,
                                                     target_ref=MASS_BRANCH)

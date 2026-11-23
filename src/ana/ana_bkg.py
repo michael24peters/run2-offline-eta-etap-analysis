@@ -3,11 +3,13 @@ ana_bkg.py
 
 Classify the eta candidates of an MC file as signal or background by matching their reco daughters
 to generator particles (bkg_utils.signal_daughter_mask), and write tables of the error categories,
-the error rates and the generator PIDs of mismatched daughters to OUTFILE.txt.
+the error rates and the generator PIDs of mismatched daughters to OUTFILE.txt. --muon-cuts keeps
+only the candidates whose every muon daughter passes each cut, each a string such as
+'pnn_mu > 0.9' or '2 < eta < 4.5' (selection.parse_cut, selection.daughter_masks).
 
 Usage:
-    python src/ana/ana_bkg.py INFILE OUTFILE [--verbose] [--pnnmu_cut X] [--mother_pid 221]
-        [--daughter_pids -13 13]
+    python src/ana/ana_bkg.py INFILE OUTFILE [--verbose] [--muon-cuts CUT [CUT ...]]
+        [--mother_pid 221] [--daughter_pids -13 13]
 """
 
 import argparse
@@ -23,9 +25,9 @@ _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, '..', 'utils'))
 import bkg_utils
 import cut_utils
+import selection
 
-BRANCHES = ['tag_pid', 'prt_pid', 'prt_idx_gen', 'prt_idx_mom', 'prt_pnn_mu',
-            'mc_pid', 'mc_idx_mom']
+BRANCHES = ['tag_pid', 'prt_pid', 'prt_idx_gen', 'prt_idx_mom', 'mc_pid', 'mc_idx_mom']
 
 
 def parse_args():
@@ -35,9 +37,9 @@ def parse_args():
     parser.add_argument('-v', '--verbose', action='store_true', default=False,
                         help='Include a per-candidate, per-daughter dump of '
                              'background candidates')
-    parser.add_argument('--pnnmu_cut', type=float, default=None,
-                        help='PROBNNmu cut applied to muon daughters; a '
-                             'candidate is dropped if any muon daughter fails it')
+    parser.add_argument('--muon-cuts', nargs='+', default=[], metavar='CUT',
+                        help="Cuts every muon daughter must pass, e.g. 'pnn_mu > 0.9'; a "
+                             "candidate is dropped if any muon daughter fails one")
     parser.add_argument('--mother_pid', type=int, default=221,
                         help='Mother PID for the signal decay (default: 221, eta)')
     parser.add_argument('--daughter_pids', nargs='+', type=int, default=[-13, 13],
@@ -96,12 +98,11 @@ def build_masks(tree, args):
     # neither a muon nor a photon
     other_error = no_match | other_pid_mismatch | other_combinatoric
 
-    if args.pnnmu_cut is not None:
-        pnn_ok = (tree['prt_pnn_mu'] >= args.pnnmu_cut) | (abs(tree['prt_pid']) != 13)
-    else:
-        pnn_ok = ak.ones_like(tree['prt_pid'], dtype=bool)
+    muon_ok = ak.ones_like(tree['prt_pid'], dtype=bool)
+    for daughter_ok in selection.daughter_masks(tree, args.muon_cuts, selection.MUON_PID).values():
+        muon_ok = muon_ok & daughter_ok
     eligible = ((tree['tag_pid'] == args.mother_pid)
-               & cut_utils.reduce(tree, pnn_ok, 'prt_idx_mom', how='all',
+               & cut_utils.reduce(tree, muon_ok, 'prt_idx_mom', how='all',
                                   target_ref='tag_pid'))
     eligible_dtr = cut_utils.follow(tree, eligible, 'prt_idx_mom')
 
@@ -347,12 +348,17 @@ def main():
     os.makedirs(os.path.dirname(args.outfile) or '.', exist_ok=True)
 
     print(f'[INFO] Reading from {args.infile}.', file=sys.stderr)
-    tree, drop_report = cut_utils.drop_malformed(
-        cut_utils.read_branches(args.infile, BRANCHES), tag_ref='tag_pid')
+    branches = BRANCHES
+    if args.muon_cuts:
+        branches = BRANCHES + [b for b in selection.MUON_CUT_BRANCHES if b not in BRANCHES]
+    tree = cut_utils.read_branches(args.infile, branches)
+    if args.muon_cuts:
+        tree['prt_tight_mu'] = cut_utils.align_muons(tree, 'prt_tight_mu')   # stored for muons only
+    tree, drop_report = cut_utils.drop_malformed(tree, tag_ref='tag_pid')
     print(f"[INFO] events: read {drop_report['read']:,d}, kept {drop_report['kept']:,d} "
           f"(dropped {drop_report['read'] - drop_report['kept']:,d})", file=sys.stderr)
-    if args.pnnmu_cut is not None:
-        print(f'[INFO] Applying PROBNNmu cut: {args.pnnmu_cut}', file=sys.stderr)
+    if args.muon_cuts:
+        print(f'[INFO] Muon cuts: {args.muon_cuts}', file=sys.stderr)
 
     masks = build_masks(tree, args)
     result = get_analytics(tree, masks)

@@ -1,5 +1,6 @@
 """
-selection.cut_steps and selection.muon_cuts on a toy eta -> mu+ mu- (gamma) tree.
+selection.parse_cut and selection.cut_mask, and selection.cut_steps and selection.daughter_masks on
+a toy eta -> mu+ mu- (gamma) tree.
 
   event 0: candidate 0 passes everything; candidate 1 is not L0 TOS but is HLT1 and HLT2 TOS
   event 1: candidate 0 has a muon with ProbNNmu 0.5; candidate 1 has a photon daughter that fails
@@ -7,6 +8,8 @@ selection.cut_steps and selection.muon_cuts on a toy eta -> mu+ mu- (gamma) tree
 """
 
 import awkward as ak
+import numpy as np
+import pytest
 
 import selection
 from conftest import make_tree
@@ -36,7 +39,7 @@ def test_steps_are_cumulative_and_in_order():
     steps, _ = selection.cut_steps(toy_tree(), 'tag_dtf_m', selection.TOS_LINES)
     labels = [label for label, _ in steps]
     assert labels[:4] == ['all candidates', 'TOS up to L0', 'TOS up to HLT1', 'TOS up to HLT2']
-    assert labels[4:] == list(selection.muon_cuts(toy_tree()))
+    assert labels[4:] == selection.MUON_CUTS
     assert ak.to_list(dict(steps)['TOS up to HLT2']) == [[True, False], [True, True]]
     assert ak.to_list(dict(steps)['pnn_mu > 0.9']) == [[True, False], [False, True]]
     assert ak.to_list(steps[-1][1]) == [[True, False], [False, True]]
@@ -45,8 +48,37 @@ def test_steps_are_cumulative_and_in_order():
 def test_muon_cuts_pass_every_non_muon_daughter():
     tree = toy_tree()
     is_photon = tree['prt_pid'] == 22
-    for label, muon_ok in selection.muon_cuts(tree).items():
+    masks = selection.daughter_masks(tree, selection.MUON_CUTS, selection.MUON_PID)
+    for label, muon_ok in masks.items():
         assert ak.all(muon_ok[is_photon]), label
+
+
+def test_muon_with_no_pv_fails_the_ip_chi2_cut():
+    tree = toy_tree()
+    tree['prt_ip_chi2'] = ak.Array([[1.0, -1.0, 1.0, 1.0], [1.0] * 4 + [-1.0]])
+    masks = selection.daughter_masks(tree, ['0 <= ip_chi2 < 6'], selection.MUON_PID)
+    assert ak.to_list(masks['0 <= ip_chi2 < 6']) == [[True, False, True, True], [True] * 5]
+
+
+def test_photon_cuts_apply_to_photons_only():
+    steps, _ = selection.cut_steps(toy_tree(), 'tag_dtf_m', selection.TOS_LINES,
+                                   muon_cuts=[], photon_cuts=['pt > 2000'])
+    assert [label for label, _ in steps][-1] == 'photon pt > 2000'
+    assert ak.to_list(steps[-1][1]) == [[True, False], [True, False]]   # every photon has pT 1500
+
+
+def test_parse_cut_condition_and_range():
+    assert selection.parse_cut('pt > 1000') == [('pt', '>', 1000.0)]
+    assert selection.parse_cut('2 < eta < 4.5') == [('eta', '>', 2.0), ('eta', '<', 4.5)]
+    assert selection.parse_cut('0 <= ip_chi2 < 6') == [('ip_chi2', '>=', 0.0),
+                                                        ('ip_chi2', '<', 6.0)]
+    with pytest.raises(ValueError):
+        selection.parse_cut('pt>1000')
+
+
+def test_cut_mask_range_on_numpy():
+    masses = np.array([534.9, 535.0, 547.9, 560.0])
+    assert selection.cut_mask(masses, '535 <= dtf_m < 560').tolist() == [False, True, True, False]
 
 
 def test_line_counts_are_among_the_candidates_before_any_tos_cut():

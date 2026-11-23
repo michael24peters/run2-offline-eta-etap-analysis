@@ -27,14 +27,16 @@ selection.cut_steps; one candidate per event is picked at random among those tha
 chunks. The fits see only the numpy array of picked masses.
 
 --mc-match PID... (signal MC) keeps the candidates whose every daughter matches eta -> PIDs
-(bkg_utils.signal_candidate_mask): -13 13, -13 13 22 or -13 -13 13 13. It is the first cut, before
-TOS, the muon cuts and the candidate pick, so its input is the raw MC files (mag*/*.root), never a
-skim_eta.root (src/root/skim.py), whose candidate was picked with no MC match. n_bkg, c0 and c1 are
-fixed at 0 (meta 'fixed_params' of results_gauss.json and results_dcb.json, left out of the plots).
-Its results_dcb.json is the --sigma-prior and --tail-prior of the data fit.
+(bkg_utils.signal_candidate_mask). It is the first cut, so its input is the raw MC files 
+(mag*/*.root). n_bkg, c0 and c1 are fixed at 0.
 
-An input path with an eta2mumumumu segment (eta -> 4mu) takes selection.TOS_LINES_4MU and
-selection.MUON_THRESHOLDS_4MU in place of selection.TOS_LINES and selection.MUON_THRESHOLDS.
+Input paths:
+- eta->4mu: takes selection.TOS_LINES_4MU and selection.MUON_CUTS_4MU
+- eta->2mu: takes selection.TOS_LINES and selection.MUON_CUTS.
+- eta->mumugamma: takes selection.TOS_LINES, selection.MUON_CUTS, and selection.PHOTON_CUTS
+
+Use --muon-cuts and --photon-cuts to replace the muon and photon cut lists for one run, 
+with each cut a string such as 'pnn_mu > 0.95' or '2 < eta < 4.5'.
 
 --sigma-prior RESULTS_JSON starts the DCB sigma at the MC value and holds it under
 NormalConstraint(sigma, MC value, MC variance * SIGMA_PRIOR_FACTOR**2), from the 'fit' block of an
@@ -51,7 +53,7 @@ Usage:
     python src/fit/driver_mass_fit.py INFILE --outdir OUTDIR
         [--mc-match PID [PID ...] | --sigma-prior RESULTS_JSON] [--tail-prior RESULTS_JSON]
         [--tail-prior-factor F] [--sigma-prior-factor F] [--gauss-only]
-        [--max-events N] [--pnn-mu-min X]
+        [--max-events N] [--muon-cuts CUT [CUT ...]] [--photon-cuts CUT [CUT ...]]
         [--xmin 500] [--xmax 600] [--nbins 100] [--mean-init 548] [--sigma-init 5]
         [--alphaL-init 1.5] [--nL-init 2] [--alphaR-init 1.5] [--nR-init 2] [--n-max N]
 """
@@ -106,9 +108,11 @@ parser.add_argument('--sigma-prior', default=None,
                          'prior of the DCB sigma; no Gaussian is fit')
 parser.add_argument('--gauss-only', action='store_true',
                     help='Fit the Gaussian only, no DCB')
-parser.add_argument('--pnn-mu-min', type=float, default=None,
-                    help="ProbNNmu threshold in place of the channel's "
-                         "(selection.MUON_THRESHOLDS or MUON_THRESHOLDS_4MU)")
+parser.add_argument('--muon-cuts', nargs='+', default=None, metavar='CUT',
+                    help="Muon cuts in place of the channel's (selection.MUON_CUTS or "
+                         "MUON_CUTS_4MU), e.g. 'pnn_mu > 0.95' '2 < eta < 4.5'")
+parser.add_argument('--photon-cuts', nargs='+', default=None, metavar='CUT',
+                    help="Photon cuts in place of selection.PHOTON_CUTS, e.g. 'pt > 650'")
 parser.add_argument('--max-events', type=int, default=None,
                     help='Only read the first N events (default: all)')
 parser.add_argument('--xmin', type=float, default=500.0, help='Lower mass bound [MeV]')
@@ -131,9 +135,10 @@ if args.gauss_only and (args.sigma_prior or args.tail_prior):
 os.makedirs(args.outdir, exist_ok=True)
 is_4mu = 'eta2mumumumu' in args.infile.split('/')
 tos_lines = selection.TOS_LINES_4MU if is_4mu else selection.TOS_LINES
-muon_thresholds = selection.MUON_THRESHOLDS_4MU if is_4mu else selection.MUON_THRESHOLDS
-if args.pnn_mu_min is not None:
-    muon_thresholds = {**muon_thresholds, 'pnn_mu_min': args.pnn_mu_min}
+muon_cuts = selection.MUON_CUTS_4MU if is_4mu else selection.MUON_CUTS
+if args.muon_cuts is not None:
+    muon_cuts = args.muon_cuts
+photon_cuts = selection.PHOTON_CUTS if args.photon_cuts is None else args.photon_cuts
 if args.tail_prior_factor is None:
     args.tail_prior_factor = TAIL_PRIOR_FACTOR_4MU if is_4mu else TAIL_PRIOR_FACTOR
 if args.sigma_prior_factor is None:
@@ -154,9 +159,7 @@ for i, tree in enumerate(chunks):
     tree, chunk_drop_report = cut_utils.drop_malformed(tree, tag_ref=MASS_BRANCH)
     steps, chunk_triggers = selection.cut_steps(tree, MASS_BRANCH, tos_lines,
                                                 mc_pids=args.mc_match,
-                                                muon_thresholds=muon_thresholds)
-    # TODO: investigate an eta2mumugamma cut m(mu+ mu-) < --xmin, which keeps every candidate's
-    # kinematic edge m(mu+ mu- gamma) >= m(mu+ mu-) below the fit window.
+                                                muon_cuts=muon_cuts, photon_cuts=photon_cuts)
     picked = cut_utils.random_candidate_mask(steps[-1][1], selection.SEED + i)
     mass_chunks.append(cut_utils.values(tree, MASS_BRANCH, picked))  # <- awkward → numpy
     drop_report = cut_utils.add_counts(drop_report, chunk_drop_report)
@@ -186,12 +189,8 @@ selection_json = {
         'mass_branch': MASS_BRANCH,
         'selection': {
             'tos': tos_lines,
-            'mu_pt_min': muon_thresholds['pt_min'],
-            'mu_p_min': muon_thresholds['p_min'],
-            'mu_eta_range': selection.MU_ETA_RANGE,
-            'pnn_mu_min': muon_thresholds['pnn_mu_min'],
-            'mu_ghost_max': selection.MU_GHOST_MAX,
-            'mu_ip_chi2_max': selection.MU_IP_CHI2_MAX,
+            'muon_cuts': muon_cuts,
+            'photon_cuts': photon_cuts,
             'mc_match': args.mc_match,
             'random_candidate': {'seed': selection.SEED, 'step_size': selection.STEP_SIZE},
             'max_events': args.max_events,
