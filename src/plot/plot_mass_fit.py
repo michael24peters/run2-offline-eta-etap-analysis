@@ -102,7 +102,8 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
 
     The stats box starts with plot_style.sample_label of meta['input_file'] (with η′ in place of η
     when the fit window meta['xmin']–meta['xmax'] holds the η′ mass), all of it in the legend's
-    font size, and the points are labelled 'MC' for an input path with an 'mc' segment
+    font size. The dashed PDG Mass line is at the η′ mass when the fit window holds it, at the η
+    mass otherwise. The points are labelled 'MC' for an input path with an 'mc' segment
     ('Data' otherwise). Parameters named in meta['fixed_params'] (e.g. n_bkg, c0, c1 of an
     MC-matched DCB fit) are left out of the stats box, and with n_bkg among them the background is
     not drawn.
@@ -178,8 +179,9 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
                          color=plot_style.COLORS['background'], alpha=0.35,
                          linewidth=0.8, edgecolor=plot_style.COLORS['background'])
     ax.plot(x, fit, label='Total fit', color=plot_style.COLORS['fit'], linewidth=1.8)
-    ax.axvline(x=547.86, color=plot_style.COLORS['reference'],
-               linestyle='--', label='PDG Mass')
+    eta_prime = meta.get('xmin', math.inf) <= kinematics.M_ETA_PRIME <= meta.get('xmax', -math.inf)
+    ax.axvline(x=kinematics.M_ETA_PRIME if eta_prime else 547.86,
+               color=plot_style.COLORS['reference'], linestyle='--', label='PDG Mass')
 
     # Ticks and grid
     plot_style.style_axes(ax)
@@ -198,7 +200,7 @@ def build_fit_figure(data, build_text, x_lim=None, title=None):
     chi2_per_ndof = data['fit']['chi2_per_ndof']
     plot_text, term_text = build_text(params, chi2_per_ndof)
     sample = plot_style.sample_label(input_file)
-    if meta.get('xmin', math.inf) <= kinematics.M_ETA_PRIME <= meta.get('xmax', -math.inf):
+    if eta_prime:
         sample = sample.replace(r'\eta', r"\eta'", 1)
     stats_box = plot_style.add_stats_box(ax, plot_text, sample=sample,
                                          fontsize=legend.get_texts()[0].get_fontsize())

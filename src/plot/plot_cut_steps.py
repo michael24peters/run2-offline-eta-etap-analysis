@@ -22,7 +22,8 @@ with an eta2mumumumu segment, and selection.PHOTON_CUTS, as in driver_mass_fit.p
 '2 < eta < 4.5' (selection.parse_cut). The input is read, selected and histogrammed in
 chunks of selection.STEP_SIZE (cut_utils.iterate_branches), the random candidate of chunk i picked
 with seed selection.SEED + i, as in the drivers. Every figure carries plot_style.sample_label of
-INFILE.
+INFILE and a dashed line at the η mass, both with η′ in place of η when the fit window holds the η′
+mass.
 
 Usage:
     python src/plot/plot_cut_steps.py INFILE --outdir OUTDIR
@@ -92,12 +93,12 @@ def plot_pair(ax, edges, before, after, labels, sample, logy=False):
         plot_style.format_y_axis(ax)
 
 
-def save_pair(outdir, name, edges, before, after, labels, sample, xlabel):
-    """plot_pair with the eta mass marked, saved as outdir/name.png and outdir/name_log.png."""
+def save_pair(outdir, name, edges, before, after, labels, sample, xlabel, pdg_mass):
+    """plot_pair with `pdg_mass` marked, saved as outdir/name.png and outdir/name_log.png."""
     for logy, suffix in ((False, ''), (True, '_log')):
         fig, ax = plt.subplots()
         plot_pair(ax, edges, before, after, labels, sample, logy=logy)
-        ax.axvline(kinematics.M_ETA, color=plot_style.COLORS['reference'], linestyle='--')
+        ax.axvline(pdg_mass, color=plot_style.COLORS['reference'], linestyle='--')
         ax.set_xlabel(xlabel)
         ax.set_ylabel(plot_style.count_label('Candidates', edges, 'MeV'))
         plot_style.save_plot(fig, os.path.join(outdir, f'{name}{suffix}.png'))
@@ -184,17 +185,22 @@ def main():
     plot_utils.apply_font()
     xlabel = 'DTF candidate mass [MeV]' if args.mass == 'tag_dtf_m' else f'{args.mass} [MeV]'
     sample = plot_style.sample_label(args.infile)
+    pdg_mass = kinematics.M_ETA
+    if args.fit_xmin <= kinematics.M_ETA_PRIME <= args.fit_xmax:
+        pdg_mass = kinematics.M_ETA_PRIME
+        sample = sample.replace(r'\eta', r"\eta'", 1)
     window = f'fit window {args.fit_xmin:g}–{args.fit_xmax:g} MeV'
 
     # --- Mass: every candidate vs those in the fit window, full range ---
     save_pair(args.outdir, 'mass_01_fit_window', edges, (full_all, n_all),
-              (full_window, totals[0]), (labels[0], f'+ {window}'), sample, xlabel)
+              (full_window, totals[0]), (labels[0], f'+ {window}'), sample, xlabel, pdg_mass)
 
     # --- Mass in the fit window: step i-1 vs step i ---
     for i in range(1, len(labels)):
         save_pair(args.outdir, f'mass_{i + 1:02d}_{slug(labels[i])}', window_edges,
                   (histograms[i - 1], totals[i - 1]), (histograms[i], totals[i]),
-                  (window if i == 1 else 'previous cuts', f'+ {labels[i]}'), sample, xlabel)
+                  (window if i == 1 else 'previous cuts', f'+ {labels[i]}'), sample, xlabel,
+                  pdg_mass)
 
 
 if __name__ == '__main__':
